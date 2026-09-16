@@ -262,6 +262,11 @@ tagged-value encoding instead of the plain projection.** That encoding is
 predicator-ex's `conformance/README.md`'s, unchanged, and per ADR-0001 offering
 it here does not promote it.
 
+**That request is the `./tagged` subpath's, and it is not available at the main
+entry point.** `tagged` is accepted by the entry point that subpath exports and
+by no other; the main entry point accepts no such option and emits this encoding
+at no result. The option is tabulated with the other evaluation options below.
+
 ### Host functions
 
 **A host supplies functions as `{ functions: Record<string, (args: Value[]) =>
@@ -288,6 +293,7 @@ passes none behaves as the table's defaults say.
 | `random` | `() => number` | the host's `Math.random` |
 | `onUnbound` | `"undefined" \| "error"` | `"undefined"` |
 | `protectedRoots` | `readonly string[]` | empty |
+| `tagged` | `boolean` | `false` |
 
 **`loopBudget` bounds the back edges a single evaluation may take, and
 exhaustion is an `EvaluationError` with reason `"loop_budget_exceeded"`.**
@@ -318,6 +324,14 @@ otherwise.
 **`protectedRoots` names context roots a store may not write**, and a store
 whose path's root segment is protected returns an `EvaluationError` with reason
 `"protected_root"` instead of writing.
+
+**`tagged` is accepted by the `./tagged` subpath's entry point and by no
+other.** Under `false` a result is the plain projection tabulated above; under
+`true` it is the corpus's tagged-value encoding. The main entry point accepts no
+`tagged` option at all, so an evaluation requested there is always the plain
+projection - which is what ADR-0001 fixes when it places the codec on the
+subpath and states that the main entry point neither emits nor requires the
+encoding.
 
 ### What this record delegates
 
@@ -354,6 +368,7 @@ export interface EvaluateOptions {
   readonly random?: () => number;
   readonly onUnbound?: "undefined" | "error";
   readonly protectedRoots?: readonly string[];
+  /** Accepted by the `./tagged` subpath's entry point only. */
   readonly tagged?: boolean;
 }
 ```
@@ -363,6 +378,11 @@ implementing change's to write; what is decided here is that each is a distinct
 nominal type, that `Float` carries `valueOf()` and `toJSON()` and no other
 public method, that `Undefined` is a singleton compared by `===` and never JS
 `undefined`, and that the union has these eleven arms and no twelfth.
+
+`EvaluateOptions` is one type serving both entry points rather than two, so the
+`tagged` member appears here beside options the main entry point does accept.
+The member's comment is the boundary, and the rule it abbreviates is the one
+stated in the projection and evaluation-options sections above.
 
 ## Worked example
 
@@ -450,3 +470,32 @@ instruction list under different options may differ, and that is intended: the
 instruction list is the artifact, the options are the host's policy, and
 neither is inferable from the other. A host that wants a fully deterministic
 evaluation passes `now` and `random`.
+
+## Note: which entry point accepts the `tagged` option (2026-09-16)
+
+Recorded for `pts-51b`, which asked which entry point accepts the `tagged`
+option, and answered by a ruling taken the same day.
+
+What was under-specified. This record stated that an evaluation requested with
+`{ tagged: true }` returns the corpus's tagged-value encoding, and placed
+`tagged` on the `EvaluateOptions` type, without naming the entry point that
+accepts that type. ADR-0001 rules that the main entry point neither emits nor
+requires that encoding, and places the codec on the `./tagged` subpath. The two
+records were satisfiable together, under the reading that the subpath's entry
+point takes the option and the main one does not - but neither said so, and the
+first change to define the options object would have chosen by implication
+rather than by decision. The same gap had a second half: `tagged` sat on the
+options type while being absent from the table this record's evaluation-options
+section tabulates the options in.
+
+What was ruled. The option is accepted by the `./tagged` subpath's entry point
+only, and the main entry point neither accepts it nor emits the corpus encoding.
+ADR-0001 is not amended and the main entry point's surface does not widen. The
+sentences added above state that where this record defines the options object,
+and `tagged` now appears in the options table beside the rest.
+
+This note records where an already-accepted decision renders rather than
+changing what this record decides, so it carries no Status line and this record
+stays at proposed. The reachable surface is pinned by a negative test - that the
+main entry point does not accept the option - written with the evaluator entry
+point rather than here.
