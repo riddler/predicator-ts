@@ -34,9 +34,13 @@ to make a red build green, and a ratchet that can shrink is not a ratchet.
 
 The corpus at predicator-ex tag `v9.4.1` is nine tiers and 250 cases at ISA
 version 6; 203 of those cases carry a `source` and are therefore members of the
-compiler surface's case set as well as the evaluator's. Those numbers are
-observations of one tag, not commitments, and nothing below is written in terms
-of them.
+compiler surface's case set as well as the evaluator's. Five of them carry the
+`retired` feature tag, which marks a case whose opcodes an ISA version at or
+below the corpus's has retired: the corpus keeps the case so that a sibling
+claiming an earlier version can still verify it, and predicator-ex's
+`conformance/README.md` rules that a runner targeting the current version
+filters it out. Those numbers are observations of one tag, not commitments, and
+nothing below is written in terms of them.
 
 One question adjacent to the runner is deliberately not settled here. A JSON
 number does not say whether it was written as an integer or as a float, and the
@@ -61,8 +65,7 @@ case and owns no schema.
 carries exactly `repo`, `tag`, `sha`, `corpus_hash` and `isa_version`: the
 upstream repository, the tag the copy was taken at, the commit that tag
 resolves to, and the `corpus_hash` and `isa_version` read from the copied
-manifest. A tag is what is recorded, never a branch, because a branch does not
-identify bytes.
+manifest. A tag is what is recorded, never a branch.
 
 **A refresh is a deliberate, reviewed change, never a silent update.** The
 vendoring script is run by a person, its diff is reviewed like any other, and
@@ -76,16 +79,14 @@ manifest, and equals the `corpus_hash` in `SOURCE.json`. A mismatch is a hard
 failure naming the file that moved; it is never repaired by rewriting the hash.
 
 **The hash check runs in the full gate and in continuous integration**, on
-every change, not only on a change that touches `conformance/`. A corpus edited
-by accident is caught by the next build rather than by the next release.
+every change, not only on a change that touches `conformance/`.
 
 **The runner decodes with a float-preserving scanner, and with predicator-ex's
 tagged-value table.** Decoding records, for every JSON number, whether it was
-written in integer or in floating-point form, because a stock JSON parser
-collapses the two and the corpus depends on the distinction; and a `$type`
-object decodes per predicator-ex's `conformance/README.md`, which is where that
-encoding is specified. Which values the numeric distinction ranges over, and
-how any two values compare, is ADR-0002's decision and not this one.
+written in integer or in floating-point form; a `$type` object decodes per
+predicator-ex's `conformance/README.md`. Which values the numeric distinction
+ranges over, and how any two values compare, is ADR-0002's decision and not
+this one.
 
 **The runner runs every case in the tiers it claims, on one surface.** Tiers
 are cumulative: running tier N means running the case files for tiers 1 through
@@ -93,12 +94,25 @@ N. The evaluator surface's case set is every case; the compiler surface's is
 every case whose `source` is not null, and a null-`source` case is absent from
 that set rather than skipped by it.
 
+**The ISA version this package claims scopes what the runner runs.** A case
+tagged `retired`, whose opcodes the claimed version no longer carries, is
+filtered out before the run rather than attempted and reported, exactly as
+predicator-ex's `conformance/README.md` rules for a runner targeting the
+current version. It is absent from that run's case set in the same sense a
+null-`source` case is absent from the compiler surface's, so the never-skip
+rule below does not reach it. A package claiming a version at which the opcode
+is still live runs the case normally, and that is what makes an earlier-version
+claim verifiable.
+
+**A retired case stays a member of the evaluator surface's case set for the
+registry's membership check.** An entry recorded for it, under a version that
+ran it, remains legal and is never dropped; the filter above scopes a run, not
+the registry.
+
 **A case result is `pass` or `fail`, and there is no third value.** Anything the
 package has not implemented is a `fail` carrying a reason that names the gap.
 The runner emits no skip, no pending, no not-applicable and no count of cases it
-declined to run, and it never shortens its case set to avoid a failure. This is
-the property that makes a conformance claim mean anything, and it is the one
-rule here that is never relaxed for convenience.
+declined to run, and it never shortens its case set to avoid a failure.
 
 **A run writes one report per surface, conforming to
 `conformance/schema/report.json`.** The report carries the surface, the tier
@@ -124,33 +138,44 @@ rule 2, unchanged**, and the check re-encodes the parsed registry and compares
 bytes against the file. A hand edit, a formatter, or an editor that reindents on
 save fails that comparison.
 
-**The gate's registry check has three parts.** The pin: the registry's
+**The gate's registry check has five parts**, predicator-ex's
+`conformance/RATCHET.md` check step, unchanged. The pin: the registry's
 `corpus_hash` equals the vendored manifest's. Membership: every entry's
 `(case_id, surface)` pair is in that surface's case set in the vendored corpus,
-and every entry's `tier` equals the corpus's tier for that case. Currency:
-every entry still passes in a run made now. Each part is a hard failure naming
-what it caught.
+and every entry's `tier` equals the corpus's tier for that case. Encoding: the
+re-encode byte-comparison above. Currency: every entry still passes in a run
+made now. Completeness: the claim rule below. Each part is a hard failure
+naming what it caught.
 
-**A claim is written only when every case in tiers 1 through N on that surface
-has an entry.** Entries above a claimed tier are legal and remain
-currency-checked, and a registry with entries and no claims is valid: it says
-what the package passes without asserting a tier.
+**A claim is written only when every case the claimed ISA version runs, in
+tiers 1 through N on that surface, has an entry.** Entries above a claimed tier
+are legal and remain currency-checked, and a registry with entries and no
+claims is valid: it says what the package passes without asserting a tier.
 
 **Where this record and predicator-ex's `conformance/README.md` or
 `conformance/RATCHET.md` disagree, those documents win** and the divergence is
-a defect here. This record restates their rules so that this repository's gate
-is self-contained, and restating is not amending.
+a defect here. Restating their rules is not amending them, and a reading of
+them this record has to choose between is raised in predicator-ex rather than
+settled here for good.
 
 ## Consequences
 
-A conformance claim in this repository is reproducible by a stranger. The tag,
-the commit and the hash in `SOURCE.json` identify the corpus exactly; the
+A conformance claim in this repository is reproducible by a stranger. A tag and
+a commit identify bytes and a branch does not, which is why `SOURCE.json`
+records the first two. The tag, the commit and the hash in `SOURCE.json`
+identify the corpus exactly; the
 registry names the cases and surfaces; the runner regenerates the evidence. The
 cost is that upgrading the corpus is never incidental: a new upstream tag is a
 reviewed change that may turn the registry's currency check red, and turning it
 green again is a fix in `src/` rather than an edit to the record of what passes.
 
-Never-skip makes early states look worse than a skip-based harness would. A
+Running the hash check on every change rather than on a change that touches
+`conformance/` costs a few seconds and buys the difference between catching an
+accidental corpus edit at the next build and catching it at the next release.
+
+Never-skip is the property that makes a conformance claim mean anything, and it
+is the one rule here that is never relaxed for convenience. It makes early
+states look worse than a skip-based harness would. A
 package that implements one tier and claims one tier is green and honest; a
 package that runs a tier it has not implemented sees a wall of failures, each
 naming its gap. That is the intended reading, and it is affordable only because
@@ -165,6 +190,16 @@ The float-preserving scanner is a cost the apparatus pays for the value
 domain's benefit. A stock parser would be shorter and would quietly decide a
 class of cases wrongly, so the decoder is written here and tested against the
 corpus rather than borrowed.
+
+The ISA-version filter and the completeness check meet at a seam worth naming.
+Predicator-ex's `conformance/README.md` rules that a runner at the current
+version filters a retired case out, while its `conformance/RATCHET.md` keeps
+that case a member of the evaluator surface's case set and reads completeness
+over that set. Read together and unscoped, a tier claim covering a retired case
+would be unreachable by a package implementing the current version. The scoping
+above is the reading this repository takes; if predicator-ex intends the other
+one, that is a question to raise there and a change to make here, not a local
+reinterpretation to keep quiet.
 
 Vendoring rather than depending keeps the zero-runtime-dependency rule intact
 and keeps the corpus readable in this repository's own history, at the price of
@@ -191,7 +226,7 @@ The gate then reads, in order: the hash rule over the vendored tier files, which
 must reproduce the manifest's `corpus_hash` and `SOURCE.json`'s; the registry's
 pin against that same hash; each entry's membership and tier against the
 vendored corpus; a re-encode of the registry compared byte for byte against the
-file on disk; a fresh run of each surface present, in which every entry must
-pass; and, for each claim, that tiers 1 through N on that surface are entered
-completely. Ratcheting a case in runs the runner first and adds the entry
+file on disk; a fresh run of each surface present, over the cases the claimed
+ISA version runs, in which every entry must pass; and, for each claim, that
+tiers 1 through N on that surface are entered completely. Ratcheting a case in runs the runner first and adds the entry
 second, and adds nothing the run did not observe passing.
