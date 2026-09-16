@@ -295,6 +295,10 @@ passes none behaves as the table's defaults say.
 | `protectedRoots` | `readonly string[]` | empty |
 | `tagged` | `boolean` | `false` |
 
+The table above tabulates both entry points' options together. Which of the two
+options types each row belongs to is stated in the amendment at the foot of
+this record.
+
 **`loopBudget` bounds the back edges a single evaluation may take, and
 exhaustion is an `EvaluationError` with reason `"loop_budget_exceeded"`.**
 `10000` is this package's default, which predicator-ex's `docs/isa.md`
@@ -361,6 +365,8 @@ export type Value =
 export declare const Undefined: unique symbol;
 export declare function float(n: number): Float;
 
+// Superseded by the amendment at the foot of this record, which splits this
+// interface into a main-entry-point type and a subpath type that extends it.
 export interface EvaluateOptions {
   readonly functions?: Record<string, (args: Value[]) => Value>;
   readonly loopBudget?: number;
@@ -378,6 +384,9 @@ implementing change's to write; what is decided here is that each is a distinct
 nominal type, that `Float` carries `valueOf()` and `toJSON()` and no other
 public method, that `Undefined` is a singleton compared by `===` and never JS
 `undefined`, and that the union has these eleven arms and no twelfth.
+
+The paragraph below describes this record's shape before the options type was
+split in two, and is superseded by the amendment at the foot of this record.
 
 `EvaluateOptions` is one type serving both entry points rather than two, so the
 `tagged` member appears here beside options the main entry point does accept.
@@ -502,3 +511,73 @@ changing what this record decides, so it carries no Status line and this record
 stays at proposed. The reachable surface is pinned by a negative test - that the
 main entry point does not accept the option - written with the evaluator entry
 point rather than here.
+
+That negative test is expressible as this note words it - non-acceptance rather
+than non-honoring - only because the amendment below splits the options type.
+Before that split the main entry point's options type admitted the option, so
+no test could have pinned more than that the option is not honored there.
+
+## Amendment: two options types, and `tagged` on the subpath's only (2026-09-16)
+
+Status: proposed (2026-09-16)
+
+What this amends. The Typespecs section above declares one `EvaluateOptions`
+interface serving both entry points, carrying `tagged` as an optional member
+under a doc comment restricting it to the `./tagged` subpath's entry point, and
+the paragraph after that block states the same thing in prose. Both passages,
+and the doc comment they rest on, are superseded by this amendment.
+
+Why the comment was not enough. This record already rules that `tagged` is
+accepted by the `./tagged` subpath's entry point and by no other. Under one
+shared options type that boundary is documentary rather than structural: the
+main entry point's signature still admits the option this record forbids it, so
+a test there can prove the option is not honored but not that it is not
+accepted. The note above promises a test pinning non-acceptance, and under one
+shared type no test could deliver one.
+
+**There are two options types, and the main entry point's does not carry
+`tagged`.** `EvaluateOptions` is the main entry point's, and it declares every
+evaluation option this record tabulates except `tagged`.
+
+**The `./tagged` subpath's options type is `TaggedEvaluateOptions`, and it
+extends `EvaluateOptions` with the `tagged` member.** The subpath's entry point
+takes that type and the main entry point takes `EvaluateOptions`, so every
+option other than `tagged` means the same thing at both entry points and is
+stated once.
+
+**`TaggedEvaluateOptions` is exported from the `./tagged` subpath and from no
+other entry point.** This amendment adds no name to the main entry point's
+surface.
+
+**The split is a type-level boundary and adds no runtime check.** Requesting
+`tagged` at the main entry point is refused by the compiler wherever the
+options object is written as a literal, which is the form a host writes and the
+form the promised negative test pins. Nothing about evaluation changes, no
+opcode is added, and the wire format is untouched.
+
+The typespec, superseding the `EvaluateOptions` block above:
+
+```typescript
+export interface EvaluateOptions {
+  readonly functions?: Record<string, (args: Value[]) => Value>;
+  readonly loopBudget?: number;
+  readonly now?: () => PDateTime;
+  readonly random?: () => number;
+  readonly onUnbound?: "undefined" | "error";
+  readonly protectedRoots?: readonly string[];
+}
+
+// The `./tagged` subpath's entry point takes this type. The main entry
+// point's takes EvaluateOptions, which has no `tagged` member.
+export interface TaggedEvaluateOptions extends EvaluateOptions {
+  readonly tagged?: boolean;
+}
+```
+
+Consequences. A host evaluating through the main entry point that wants the
+corpus encoding changes its import rather than its options object, which is the
+boundary ADR-0001 draws. A host calling both entry points passes one options
+object to both, because `TaggedEvaluateOptions` extends `EvaluateOptions` and
+the smaller type lost nothing in the split. Which requests typecheck and which
+do not is a type-level test's enumeration, written where the types are first
+defined, and not this record's.
