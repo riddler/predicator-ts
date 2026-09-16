@@ -1,0 +1,12 @@
+# pnpm 12 reads its settings from this file rather than from a `pnpm` key in
+# package.json. This repo is a single package, not a workspace; the file exists
+# only to carry the setting below.
+#
+# tsup builds through esbuild, whose install script resolves the platform
+# binary. pnpm refuses to run any dependency's build script unless it is named
+# here, and fails the install outright rather than silently skipping it, so
+# without this entry there would be no esbuild for the gate's build stage to
+# call. Every other dependency's scripts stay blocked, which is the point of
+# the allowlist.
+allowBuilds:
+  esbuild: true

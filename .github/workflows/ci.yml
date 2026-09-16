@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Full quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # No service containers. Every function in this package is pure over a
+    # decoded value, so the suite needs nothing but a JavaScript runtime; a
+    # database or a browser here would be a sign that something moved in that
+    # should not have.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Single source of truth for the toolchain: a version duplicated into
+      # this file drifts the first time mise.toml moves. mise itself is not
+      # used to provision CI - the setup actions are faster and cached.
+      - name: Read the toolchain out of mise.toml
+        id: toolchain
+        run: |
+          set -euo pipefail
+          node="$(sed -n 's/^node *= *"\(.*\)".*$/\1/p' mise.toml | head -1)"
+          pnpm="$(sed -n 's/^pnpm *= *"\(.*\)".*$/\1/p' mise.toml | head -1)"
+          test -n "$node" || { echo "no node version in mise.toml" >&2; exit 1; }
+          test -n "$pnpm" || { echo "no pnpm version in mise.toml" >&2; exit 1; }
+          echo "node=$node" >> "$GITHUB_OUTPUT"
+          echo "pnpm=$pnpm" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ steps.toolchain.outputs.pnpm }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.toolchain.outputs.node }}
+
+      # The pnpm store is the whole dependency cache. The key is derived from
+      # pnpm-lock.yaml, which is the whole pin: every dependency here is a
+      # public npm package, so nothing authenticates to anything and the
+      # default GITHUB_TOKEN with the read-only `contents` permission above is
+      # all this job needs.
+      - name: Resolve the pnpm store path
+        id: store
+        run: |
+          set -euo pipefail
+          echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-${{ runner.os }}-node${{ steps.toolchain.outputs.node }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-node${{ steps.toolchain.outputs.node }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The gate is the whole job: typecheck, lint, the suite with coverage
+      # against the manifest's floor, the corpus check, and the build.
+      #
+      # Same reasoning as the toolchain step, applied to the gate itself: the
+      # command is read out of .claude/wurk.json rather than written here, so
+      # the gate CI runs and the gate an agent must have green before
+      # committing are one definition with one place to change it. It is read
+      # and executed inside the step rather than interpolated into `run:`, so
+      # a repository file never reaches the shell as expression text.
+      - name: Full quality gate
+        run: |
+          set -euo pipefail
+          mapfile -t cmd < <(jq -er '.gate.full[]' .claude/wurk.json)
+          test "${#cmd[@]}" -gt 0 || { echo "gate.full is empty" >&2; exit 1; }
+          echo "gate command (.claude/wurk.json gate.full): ${cmd[*]}"
+          "${cmd[@]}"

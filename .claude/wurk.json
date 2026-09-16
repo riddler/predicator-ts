@@ -1,0 +1,100 @@
+{
+  "wurk": 1,
+
+  "beads": {
+    "prefix": "pts",
+    "sync": "dolthub",
+    "topology": "beads",
+    "areas": {
+      "labels": [
+        "area:values",
+        "area:evaluator",
+        "area:functions",
+        "area:casts",
+        "area:conformance",
+        "area:api",
+        "area:docs",
+        "area:build"
+      ],
+      "lands_alone": ["area:build"],
+      "always_batchable": ["upstream"]
+    }
+  },
+
+  "forge": {
+    "kind": "github",
+    "labels": {}
+  },
+
+  "gate": {
+    "full": ["pnpm", "run", "gate"],
+    "loop": ["pnpm", "run", "gate:loop"],
+    "build_paths": [
+      "src/",
+      "test/",
+      "scripts/",
+      "package.json",
+      "pnpm-lock.yaml",
+      "tsconfig.json",
+      "tsconfig.build.json",
+      "tsup.config.ts",
+      "vitest.config.ts",
+      "biome.json"
+    ],
+    "also_gated_paths": ["conformance/", "README.md"],
+    "moving_files": ["biome.json", "vitest.config.ts"],
+    "sabotage": {
+      "test_roots": ["test/"],
+      "test_pattern": "\\b(test|it)\\(",
+      "exempt_prefixes": []
+    },
+    "project_level_skips": [],
+    "not_applicable_skips": []
+  },
+
+  "parallelism": {
+    "model": "worktree-per-issue",
+    "worktrees_dir": "../predicator-ts-worktrees",
+    "warm_clone": ["node_modules"],
+    "warm": [["pnpm", "install", "--frozen-lockfile"]],
+    "repair_when": "pnpm-lock.yaml",
+    "repair": [["pnpm", "install", "--frozen-lockfile"]],
+    "post_branch": []
+  },
+
+  "tmux": {
+    "session": "predicator-ts",
+    "model": "opus"
+  },
+
+  "models": {
+    "direction": "fable"
+  },
+
+  "artifacts": {
+    "plans": "docs/plans",
+    "research": "docs/research",
+    "filename": "YYMMDD-[id-]kebab"
+  },
+
+  "commits": {
+    "style": "s-form",
+    "subject_under": 50,
+    "body_line_max": 72,
+    "total_lines_max": 40,
+    "trailer": {
+      "key": "Refs"
+    }
+  },
+
+  "changelog": {
+    "mode": "fragments",
+    "dir": "changelog.d"
+  },
+
+  "release": {
+    "kind": "npm",
+    "version_file": "package.json",
+    "readme_pin": true
+  }
+}
