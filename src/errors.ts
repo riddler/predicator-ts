@@ -16,9 +16,6 @@
  * handles.
  */
 
-/** Which of the three error types an error is. */
-export type ErrorType = "EvaluationError" | "TypeMismatchError" | "UndefinedVariableError";
-
 /**
  * The reason an error carries.
  *
