@@ -194,10 +194,13 @@ before committing.
   runtime, in a browser, and on React Native's engine. A Node built-in or a
   `window`/`document` reference under `src/` breaks two of the three. The Node
   half covers the built-in **globals** as well as the imports - `process.env`
-  and `Buffer.from` break a constrained engine exactly as an import does - and
-  the import half covers every specifier form: `node:fs`, bare `fs`, and the
-  subpaths such as `fs/promises`. Test code and `scripts/` may use all of it
-  freely.
+  and `Buffer.from` break a constrained engine exactly as an import does, and
+  they are refused where they are used as globals rather than as a member of
+  something else. The import half covers all four shapes a specifier takes -
+  `import x from "fs"`, a side-effect `import "fs"` that binds nothing,
+  `require("fs")` and a dynamic `import("fs")` - across `node:fs`, bare `fs`,
+  and subpaths such as `fs/promises`. Test code and `scripts/` may use all of
+  it freely.
 - **Nothing locale-sensitive under `src/`.** Locale data is absent, stubbed or
   version-dependent across JavaScript engines, so anything that consults it
   would decide differently on two runtimes running the same instruction list.
@@ -214,10 +217,23 @@ before committing.
   of the full gate (`pnpm run neutrality`), so a reviewer runs the stage rather
   than retyping a pattern from memory.
   Every rule is anchored to syntax - a property access, an import specifier, a
-  call's open parenthesis, a type position - never to a bare word. That is what
+  call's open parenthesis, a type position - **with exactly two exceptions**:
+  `__dirname` and `__filename` match as bare words, because they have no
+  property or call form to anchor to and do not occur in English. That is what
   lets *evaluator*, *documentation*, `Intl` and `bigint` appear freely in prose
   and in identifiers, and it means a doc comment in shipped source can state
-  these rules without tripping them.
+  every one of these rules without tripping the check - provided it describes
+  those two rather than spelling them.
+  **That last sentence is a test, not an assurance.** Three revisions of this
+  check each shipped a claim about the patterns that was not true of the
+  patterns, because a claim about a regular expression is exactly as hard to
+  verify as the regular expression. So each rule now carries, beside its
+  pattern, the sentence that documents it and a line that violates it, and
+  `test/engine-neutrality.test.ts` asserts that the sentence leaves the whole
+  check quiet and that the violation fires that rule. It also keeps a
+  regression corpus of the prose and the evaluator identifiers this check has
+  wrongly fired on before. Add a rule and you add both strings, or the suite
+  goes red.
   **What it cannot see**, because it reads text and does not follow values: a
   reference captured into a variable and called later through that variable, a
   constructor reached by computed member access (`host[key](source)`), a
