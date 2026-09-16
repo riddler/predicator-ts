@@ -29,6 +29,17 @@ function normalized(input: unknown): Value {
   return result.value;
 }
 
+/**
+ * An array carrying a genuine hole at index 1, built by assignment because a
+ * sparse array literal is a lint error here.
+ */
+function arrayWithHole(): unknown[] {
+  const out: unknown[] = [];
+  out[0] = 1;
+  out[2] = 3;
+  return out;
+}
+
 describe("Float", () => {
   // Sabotage: returning a constant from valueOf() turns this red.
   it("unwraps to the number it was built from", () => {
@@ -53,6 +64,26 @@ describe("Float", () => {
     expect(isFloat(1)).toBe(false);
     expect(isInteger(float(1))).toBe(false);
     expect(isInteger(1)).toBe(true);
+  });
+});
+
+describe("the float brand's invariant", () => {
+  // Sabotage: dropping the isFinite guard from Float's constructor turns this
+  // red - and turns the decoder's non-finite refusal into a silent success.
+  it("refuses to wrap a non-finite number, at the constructor", () => {
+    expect(() => float(Number.NaN)).toThrow(TypeError);
+    expect(() => float(Number.POSITIVE_INFINITY)).toThrow(TypeError);
+    expect(() => float(Number.NEGATIVE_INFINITY)).toThrow(TypeError);
+    expect(() => new Float(Number.NaN)).toThrow(TypeError);
+    expect(float(0).valueOf()).toBe(0);
+  });
+
+  // Sabotage: any entrance that builds a float without testing finiteness
+  // first turns this red, because the constructor throws where that entrance
+  // owes a refusal.
+  it("leaves every boundary answering a refusal rather than throwing", () => {
+    expect(() => fromHost(Number.POSITIVE_INFINITY)).not.toThrow();
+    expect(refusalOf(Number.POSITIVE_INFINITY)).toBe("non_finite_number");
   });
 });
 
@@ -196,10 +227,8 @@ describe("fromHost", () => {
     expect(refusalOf(Number.NEGATIVE_INFINITY)).toBe("non_finite_number");
   });
 
-  // Sabotage: passing a Float through without checking finiteness turns this
-  // red - float() is total, so the guard has to be at the boundary.
-  it("refuses a non-finite number that arrived already branded", () => {
-    expect(refusalOf(float(Number.NaN))).toBe("non_finite_number");
+  // Sabotage: dropping the isFinite guard on the host Date arm turns this red.
+  it("refuses a host Date that names no instant", () => {
     expect(refusalOf(new Date(Number.NaN))).toBe("non_finite_number");
   });
 
@@ -226,6 +255,16 @@ describe("fromHost", () => {
     expect(refusalOf(new Map())).toBe("unsupported_host_value");
     expect(refusalOf(new Set())).toBe("unsupported_host_value");
     expect(refusalOf(new Money())).toBe("unsupported_host_value");
+  });
+
+  // Sabotage: using map instead of Array.from in the array arm turns this red -
+  // map skips a hole and the hole survives into the normalized list.
+  it("normalizes an array hole to the absence", () => {
+    const holed = normalized(arrayWithHole()) as Value[];
+    expect(holed.length).toBe(3);
+    expect(0 in holed && 1 in holed && 2 in holed).toBe(true);
+    expect(holed[1]).toBe(Undefined);
+    expect(normalized([undefined])).toEqual([Undefined]);
   });
 
   // Sabotage: normalizing only the top level turns this red.
@@ -340,6 +379,15 @@ describe("toHost", () => {
     });
     const scores = projected.scores as HostValue[];
     expect(scores[0]).not.toBeInstanceOf(Float);
+  });
+
+  // Sabotage: using map instead of Array.from in the array arm turns this red -
+  // the hole would survive into the array handed back to the host.
+  it("projects an array hole as the absence projects", () => {
+    const projected = toHost(arrayWithHole() as Value[]) as HostValue[];
+    expect(projected.length).toBe(3);
+    expect(1 in projected).toBe(true);
+    expect(projected[1]).toBe(undefined);
   });
 
   // Sabotage: a plain assignment in place of defineProperty turns this red.

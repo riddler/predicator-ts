@@ -23,14 +23,18 @@
 import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "./values.js";
 
 /** Why a text could not be decoded. */
-export type DecodeReason = "malformed_json" | "integer_out_of_range" | "invalid_tagged_value";
+export type DecodeReason =
+  | "malformed_json"
+  | "integer_out_of_range"
+  | "non_finite_number"
+  | "invalid_tagged_value";
 
 /** Why a value could not be encoded. */
 export type EncodeReason =
   | "reserved_map_key"
   | "integer_out_of_range"
   | "non_finite_number"
-  | "unsupported_value";
+  | "unsupported_host_value";
 
 /** The result of decoding one text. `offset` is where in the text it went wrong. */
 export type DecodeResult =
@@ -102,10 +106,18 @@ function setKey<T>(target: { [key: string]: T }, key: string, value: T): void {
   });
 }
 
-/** Answers whether a decoded value is a plain map rather than a value class. */
-function isPlainMap(value: Value | undefined): value is { [key: string]: Value } {
-  if (value === null || typeof value !== "object") return false;
-  return Object.getPrototypeOf(value) === Object.prototype;
+/**
+ * Answers whether a value is a plain map rather than a value class, a host
+ * type or a class instance this package did not define.
+ *
+ * A map this package built carries `Object.prototype`, and a host may hand
+ * over one built with no prototype at all; the normalizer's object arm admits
+ * exactly those two and refuses everything else, and so does this.
+ */
+function isPlainMap(value: unknown): value is { [key: string]: Value } {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value) as unknown;
+  return proto === null || proto === Object.prototype;
 }
 
 function isDurationKey(key: string): key is DurationKey {
@@ -202,7 +214,14 @@ class Scanner {
     const literal = match[0];
     const magnitude = Number(literal);
     this.pos += literal.length;
-    if (match[1] !== undefined || match[2] !== undefined) return new Float(magnitude);
+    if (match[1] !== undefined || match[2] !== undefined) {
+      // An over-large exponent reads as an infinity, which the domain has no
+      // member for. Refusing here keeps the float constructor's invariant and
+      // keeps a decode from producing a value that no encode or normalization
+      // would take back.
+      if (!Number.isFinite(magnitude)) this.fail("non_finite_number");
+      return new Float(magnitude);
+    }
     if (!Number.isSafeInteger(magnitude)) this.fail("integer_out_of_range");
     return magnitude;
   }
@@ -413,7 +432,21 @@ export function encodeTagged(value: Value): EncodeResult {
   }
 }
 
-function encodeValue(value: Value): string {
+/**
+ * Writes one value.
+ *
+ * It is an exit, so it emits only what the domain contains: a value with no
+ * member here is refused rather than written as whatever the language's own
+ * serializer would make of it. That matters most for the types the normalizer
+ * accepts and converts - a host `Date` above all - because one reaching this
+ * far means normalization was skipped, and writing its fields would put a
+ * shape in the text that no decode reads back as the same value.
+ *
+ * The parameter admits the language's absence so that an array hole, which is
+ * read as `undefined` however it is visited, is refused by name here rather
+ * than written as nothing between two commas.
+ */
+function encodeValue(value: Value | undefined): string {
   if (value === Undefined) return '{"$type":"undefined"}';
   if (value === null) return "null";
   if (value instanceof Float) return encodeFloat(value);
@@ -422,7 +455,10 @@ function encodeValue(value: Value): string {
     return `{"$type":"datetime","value":"${formatDateTime(value)}"}`;
   }
   if (value instanceof Duration) return encodeDuration(value);
-  if (Array.isArray(value)) return `[${value.map(encodeValue).join(",")}]`;
+  // Array.from rather than map: map leaves a hole in the mapped array, which
+  // join then writes as nothing between two commas - text this module's own
+  // decoder rejects as malformed.
+  if (Array.isArray(value)) return `[${Array.from(value, encodeValue).join(",")}]`;
   switch (typeof value) {
     case "string":
       return JSON.stringify(value);
@@ -433,7 +469,7 @@ function encodeValue(value: Value): string {
     case "object":
       return encodeMap(value);
     default:
-      throw new EncodeSignal("unsupported_value");
+      throw new EncodeSignal("unsupported_host_value");
   }
 }
 
@@ -449,13 +485,13 @@ function encodeInteger(value: number): string {
  * appended when the spelling carries neither a point nor an exponent.
  */
 function encodeFloat(value: Float): string {
-  const magnitude = value.valueOf();
-  if (!Number.isFinite(magnitude)) throw new EncodeSignal("non_finite_number");
-  const spelling = String(magnitude);
+  // No finiteness check: a Float wraps a finite number by construction.
+  const spelling = String(value.valueOf());
   return EXPONENT_OR_POINT.test(spelling) ? spelling : `${spelling}.0`;
 }
 
-function encodeMap(value: { [key: string]: Value }): string {
+function encodeMap(value: object): string {
+  if (!isPlainMap(value)) throw new EncodeSignal("unsupported_host_value");
   if (Object.hasOwn(value, "$type")) throw new EncodeSignal("reserved_map_key");
   const members = Object.entries(value).map(
     ([key, member]) => `${JSON.stringify(key)}:${encodeValue(member)}`,
