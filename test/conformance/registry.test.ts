@@ -176,15 +176,24 @@ if (nullSourceCase === undefined || sourceBearingCase === undefined) {
 
 describe("the registry this package ships", () => {
   // Sabotage: hand-adding a compiler entry for a case with no source turns
-  // this test, membership and currency red. It was run against the shipped
-  // file and reverted. Note what it did not turn red: the entry was written
-  // in the required encoding, so the re-encode still matched. That is the
-  // division of labour between the checks, not a gap in either.
-  it("is the empty, pinned registry the ratchet starts from", () => {
-    expect(registry.entries).toEqual([]);
-    expect(registry.claims).toEqual([]);
+  // membership and currency red. It was run against the shipped file and
+  // reverted. Note what it did not turn red: the entry was written in the
+  // required encoding, so the re-encode still matched. That is the division of
+  // labour between the checks, not a gap in either.
+  it("names this package, the corpus it was written against, and its claims", () => {
     expect(registry.implementation).toBe("predicator-ts");
     expect(registry.isa_version).toBe(manifest.isa_version);
+    expect(registry.entries.length).toBeGreaterThan(0);
+    for (const claim of registry.claims) expect(claim.surface).toBe("evaluator");
+  });
+
+  // A claim is completeness rather than ambition, so the surfaces a claim
+  // names and the surfaces the entries cover are the same set. Stated as that
+  // property rather than as the tiers claimed today, which move as tiers land.
+  it("claims only surfaces its entries cover", () => {
+    const claimed = new Set(registry.claims.map((claim) => claim.surface));
+    const entered = new Set(registry.entries.map((entry) => entry.surface));
+    for (const surface of claimed) expect(entered.has(surface)).toBe(true);
   });
 
   it("passes the pin", () => {

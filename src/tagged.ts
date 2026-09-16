@@ -13,6 +13,11 @@
  * integer or in floating-point form, and that is a distinction that has
  * already been destroyed by the time a parsed number is in hand.
  *
+ * This subpath also carries the one evaluation that speaks the encoding. The
+ * main entry point neither emits nor requires it, so the request for it is a
+ * member of this subpath's options type and of no other - a request for it at
+ * the main entry point is refused by the compiler rather than at run time.
+ *
  * The encoding is the corpus's apparatus, specified by predicator-ex's
  * `conformance/README.md`. Offering a codec for it here does not promote it:
  * it stays the corpus's, it is revised when the corpus is regenerated, and it
@@ -20,7 +25,10 @@
  * nor requires it.
  */
 
-import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "./values.js";
+import { EvaluationError } from "./errors.js";
+import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
+import type { Program } from "./instructions.js";
+import { Duration, Float, PDate, PDateTime, toHost, Undefined, type Value } from "./values.js";
 
 /** Why a text could not be decoded. */
 export type DecodeReason =
@@ -535,4 +543,54 @@ function formatDateTime(value: PDateTime): string {
   const time = `${hours}:${pad(instant.getUTCMinutes(), 2)}:${pad(instant.getUTCSeconds(), 2)}`;
   const fraction = value.microsecond === 0 ? "" : `.${pad(value.microsecond, 6)}`;
   return `${date}T${time}${fraction}Z`;
+}
+
+/**
+ * The options the evaluation on this subpath takes.
+ *
+ * It extends the main entry point's options with the one request that entry
+ * point does not accept, so every other option means the same thing at both
+ * and is stated once. A host calling both passes one options object to both,
+ * because the smaller type lost nothing in the split.
+ */
+export interface TaggedEvaluateOptions extends EvaluateOptions {
+  /**
+   * Whether the result comes back as the corpus's tagged-value encoding
+   * instead of the plain projection.
+   */
+  readonly tagged?: boolean;
+}
+
+/**
+ * Runs a compiled instruction list and answers its result, optionally as the
+ * corpus's tagged-value encoding.
+ *
+ * This is the only entry point that accepts that request, and it is why this
+ * subpath has an evaluation of its own rather than an option on the main one.
+ * The name follows the two already here: what distinguishes everything on this
+ * subpath is the encoding it speaks, and a host that imports both entry points
+ * into one module needs two names rather than an alias at every call site.
+ *
+ * Under the default the result is the plain projection, exactly as the main
+ * entry point answers it. Requested with the encoding, the result is the text
+ * of that encoding - so an absence comes back as its tag rather than as the
+ * language's own absence, which is a distinct thing from the null a null
+ * result encodes to. A value the encoding cannot carry is a failure, not a
+ * throw: a map carrying the reserved key is the one an evaluation can
+ * genuinely reach, since that key is ambiguous with the tag namespace.
+ */
+export function evaluateTagged(
+  instructions: Program,
+  context?: unknown,
+  options?: TaggedEvaluateOptions,
+): EvaluateResult {
+  const outcome = evaluateToValue(instructions, context, options);
+  if (!outcome.ok) return outcome;
+  if (options?.tagged !== true) return { ok: true, value: toHost(outcome.value) };
+  const encoded = encodeTagged(outcome.value);
+  if (encoded.ok) return { ok: true, value: encoded.text };
+  return {
+    ok: false,
+    error: new EvaluationError(encoded.reason, "the result is outside the tagged encoding"),
+  };
 }

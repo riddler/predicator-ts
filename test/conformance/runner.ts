@@ -18,9 +18,15 @@
  * the claimed version retired - is not reported either way, and that is
  * absence rather than a skip.
  *
- * The evaluator itself is not implemented yet, so every case this runner
- * attempts is a fail whose reason says so. That is the honest report, and it
- * is what the never-skip rule is for.
+ * WHAT RUNNING A CASE MEANS. The case is decoded, its instruction list is run
+ * through the package's own published entry point against its context, and
+ * what comes back is compared with what the case expects. The comparison is
+ * made in the value domain rather than over text: the run asks for the
+ * corpus's own encoding and reads it back with the corpus's own decoder, so an
+ * integral float stays a float and a map whose keys were written in another
+ * order still matches. An expectation the run does not meet is a fail carrying
+ * the difference, and an opcode this build does not implement reaches the same
+ * arm as any other failure rather than a third value.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -28,9 +34,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CaseMetadata, Surface } from "../../scripts/lib/corpus.mjs";
 import { loadCases, loadManifest, runnableCases } from "../../scripts/lib/corpus.mjs";
+import type { PredicatorError } from "../../src/errors.js";
 import { isaVersion } from "../../src/index.js";
-import { decodeTagged } from "../../src/tagged.js";
-import type { Value } from "../../src/values.js";
+import type { Instruction, Program } from "../../src/instructions.js";
+import { decodeTagged, encodeTagged, evaluateTagged } from "../../src/tagged.js";
+import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "../../src/values.js";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -115,14 +123,156 @@ export function decodeCase(item: CaseMetadata): DecodedCase {
 }
 
 /**
+ * Whether two decoded values are the same value.
+ *
+ * It is not a deep structural comparison of the host objects: an integer and
+ * an integral float are different values here and read identically once
+ * unwrapped, a date and a datetime at the same instant are different values,
+ * and a map is the same map whatever order its keys were written in. Each of
+ * those is a way a naive comparison would report a pass this package has not
+ * earned, so the comparison walks the domain itself.
+ */
+export function sameValue(left: Value, right: Value): boolean {
+  if (left === Undefined || right === Undefined) return left === right;
+  if (left === null || right === null) return left === right;
+  if (left instanceof Float || right instanceof Float) {
+    return left instanceof Float && right instanceof Float && left.valueOf() === right.valueOf();
+  }
+  if (left instanceof PDate || right instanceof PDate) {
+    if (!(left instanceof PDate && right instanceof PDate)) return false;
+    return left.year === right.year && left.month === right.month && left.day === right.day;
+  }
+  if (left instanceof PDateTime || right instanceof PDateTime) {
+    if (!(left instanceof PDateTime && right instanceof PDateTime)) return false;
+    return left.epochSeconds === right.epochSeconds && left.microsecond === right.microsecond;
+  }
+  if (left instanceof Duration || right instanceof Duration) {
+    if (!(left instanceof Duration && right instanceof Duration)) return false;
+    return DURATION_KEYS.every((unit) => left[unit] === right[unit]);
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!(Array.isArray(left) && Array.isArray(right))) return false;
+    if (left.length !== right.length) return false;
+    return left.every((item, at) => sameValue(item, right[at] ?? Undefined));
+  }
+  if (isMap(left) && isMap(right)) {
+    const keys = Object.keys(left);
+    if (keys.length !== Object.keys(right).length) return false;
+    return keys.every(
+      (key) =>
+        Object.hasOwn(right, key) && sameValue(left[key] ?? Undefined, right[key] ?? Undefined),
+    );
+  }
+  return left === right;
+}
+
+const DURATION_KEYS = [
+  "years",
+  "months",
+  "weeks",
+  "days",
+  "hours",
+  "minutes",
+  "seconds",
+  "milliseconds",
+] as const;
+
+function describe(value: Value): string {
+  const encoded = encodeTagged(value);
+  return encoded.ok ? encoded.text : `a value the encoding refused: ${encoded.reason}`;
+}
+
+/**
+ * Reads an instruction list out of a decoded case.
+ *
+ * A case whose instructions are not a list of lists is an invariant violation
+ * in vendored data the hash rule has already pinned, so it throws rather than
+ * becoming a failing case result that would read as this package's bug.
+ */
+function programOf(decoded: DecodedCase): Program {
+  const instructions = decoded.instructions;
+  if (!Array.isArray(instructions)) {
+    throw new Error(`corpus case ${decoded.id} carries no instruction list`);
+  }
+  return instructions.map((instruction) => {
+    if (!Array.isArray(instruction)) {
+      throw new Error(`corpus case ${decoded.id} carries an instruction that is not a list`);
+    }
+    return instruction as Instruction;
+  });
+}
+
+/**
+ * Compares an error against the shape a case expects.
+ *
+ * A case pins the error's type and its reason, which are the two the reference
+ * calls normative; the message is each sibling's own idiom and is not compared.
+ * An expectation carrying anything else is vendored data this runner does not
+ * understand, and it says so rather than passing the case by ignoring it.
+ */
+function errorMatches(expected: Value, actual: PredicatorError, where: string): boolean {
+  if (!isMap(expected)) throw new Error(`${where} expects an error that is not an object`);
+  for (const key of Object.keys(expected)) {
+    if (key !== "type" && key !== "reason") {
+      throw new Error(`${where} expects an error carrying ${key}, which this runner cannot read`);
+    }
+  }
+  return expected.type === actual.type && expected.reason === actual.reason;
+}
+
+/** Runs one decoded case and answers what to write down about it. */
+export function runCase(decoded: DecodedCase): CaseResult {
+  const where = `corpus case ${decoded.id}`;
+  const outcome = evaluateTagged(programOf(decoded), decoded.context, { tagged: true });
+  if (decoded.expectation.kind === "error") {
+    if (outcome.ok) {
+      return { id: decoded.id, result: "fail", reason: "expected an error and got a result" };
+    }
+    if (errorMatches(decoded.expectation.value, outcome.error, where)) {
+      return { id: decoded.id, result: "pass" };
+    }
+    return {
+      id: decoded.id,
+      result: "fail",
+      reason: `expected ${describe(decoded.expectation.value)} and got ${outcome.error.type} ${outcome.error.reason}`,
+    };
+  }
+  if (!outcome.ok) {
+    return {
+      id: decoded.id,
+      result: "fail",
+      reason: `expected a result and got ${outcome.error.type} ${outcome.error.reason}`,
+    };
+  }
+  // The encoding is asked for so that the value comes back through the
+  // corpus's own codec rather than through the plain projection, which would
+  // have dropped the distinction between an integer and an integral float
+  // before anything could compare them.
+  const text = outcome.value;
+  if (typeof text !== "string") {
+    throw new Error(`${where} answered something other than the encoding's text`);
+  }
+  const answered = decodeTagged(text);
+  if (!answered.ok) {
+    throw new Error(`${where} answered text the corpus decoder refused: ${answered.reason}`);
+  }
+  if (sameValue(answered.value, decoded.expectation.value)) {
+    return { id: decoded.id, result: "pass" };
+  }
+  return {
+    id: decoded.id,
+    result: "fail",
+    reason: `expected ${describe(decoded.expectation.value)} and got ${describe(answered.value)}`,
+  };
+}
+
+/**
  * Runs the evaluator surface over tiers 1 through `tier` and answers the
  * report.
  *
- * The evaluator is not implemented, so every attempted case fails with a
- * reason naming that gap. Each case is still decoded, because the decoder is
- * implemented and a case it refuses is a different problem that has to be
- * visible as itself rather than buried under the same reason as everything
- * else.
+ * Each case is decoded first, because the decoder is implemented and a case it
+ * refuses is a different problem that has to be visible as itself rather than
+ * buried under the same reason as everything else.
  */
 export function runEvaluator(tier: number): Report {
   const manifest = loadManifest();
@@ -134,10 +284,7 @@ export function runEvaluator(tier: number): Report {
     corpus_hash: manifest.corpus_hash,
     tier,
     surface: "evaluator",
-    results: attempted.map((item) => {
-      decodeCase(item);
-      return { id: item.id, result: "fail" as const, reason: "evaluator not implemented" };
-    }),
+    results: attempted.map((item) => runCase(decodeCase(item))),
   };
 }
 
