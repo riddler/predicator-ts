@@ -216,35 +216,51 @@ before committing.
   live. It reads every TypeScript file under `src/` and runs as its own stage
   of the full gate (`pnpm run neutrality`), so a reviewer runs the stage rather
   than retyping a pattern from memory.
-  Every rule is anchored to syntax - a property access, an import specifier, a
-  call's open parenthesis, a type position - **with exactly two exceptions**:
-  `__dirname` and `__filename` match as bare words, because they have no
-  property or call form to anchor to and do not occur in English. That is what
-  lets *evaluator*, *documentation* and `Intl` appear freely in prose and in
-  identifiers.
-  So a doc comment in shipped source can state every one of these rules without
-  tripping the check, **subject to two conditions, not one**. It has to describe
-  `__dirname` and `__filename` rather than spelling them. And it must not put a
-  colon, a pipe, an angle bracket or an ampersand directly before the word
-  `bigint`: the type-position arm cannot tell a type annotation from ordinary
-  punctuation, so `Rule 9: bigint never` fires, and so does a table row that
-  puts the word after a pipe. Write "a bigint" or "the bigint type" and it reads
-  clean. `bigint` is the one forbidden name that is not free in prose, and that
-  is a property of the rule rather than an oversight: a type annotation is the
-  thing being refused, and in flat text it is spelled the same way.
-  **That last sentence is a test, not an assurance.** Three revisions of this
-  check each shipped a claim about the patterns that was not true of the
+  **One property governs all of it, and it is worth learning instead of a
+  list.** Every rule matches a forbidden name together with the punctuation
+  that turns that name into a use of the thing - an opening parenthesis after a
+  dynamic-evaluation name, a dot or parenthesis after a capitalised
+  constructor, a dotted member or an opening bracket after a global, the type
+  punctuation around a type name, a quoted specifier after an import keyword.
+  The scanner reads text and does not parse it, so **it cannot tell that
+  punctuation in a comment from the same punctuation in code.** Therefore:
+  > a forbidden name is quiet in prose exactly when its anchor is absent, and
+  > fires in prose exactly when its anchor is present.
+
+  `eval` reads clean and `eval (` does not. `BigInt` reads clean and `BigInt.`
+  does not. `Intl` reads clean and `Intl.DateTimeFormat` does not. A name with
+  no anchor at all - Node's two module-path globals are the only ones - fires
+  on every mention, which is why this paragraph describes them rather than
+  spelling them.
+  That is a rule, not a census, and it is the form this paragraph has to keep.
+  Enumerating the cases is what went wrong repeatedly here: a count over a live
+  pattern is false as soon as a pattern moves, while the property above stays
+  true when a rule is added, widened or narrowed. If you add a rule you do not
+  update this paragraph - you inherit it. The same goes for counting anything
+  else live: this section deliberately gives no number of rules, of revisions
+  or of fixtures, because each would be one more thing to falsify.
+  Two corollaries, both consequences of the property rather than additions to
+  it. A word that merely *contains* a forbidden name - *evaluator*,
+  *documentation* - is never matched at all, since a longer word supplies no
+  anchor. And the full stop that ends an English sentence is the same character
+  as a member access, so **a forbidden name should never be the last word of a
+  sentence**: there it can supply its own anchor. Put a word after it - "no
+  BigInt value is constructed" rather than "this module never calls BigInt."
+  Whether a given rule is fooled by a trailing stop depends on that rule, which
+  is exactly why the advice is stated as always-do rather than as a list of the
+  rules that care.
+  **And it is a tested rule, not an assurance.** Revision after revision of
+  this check shipped a claim about the patterns that was not true of the
   patterns, because a claim about a regular expression is exactly as hard to
   verify as the regular expression. So each rule now carries, beside its
   pattern, the sentence that documents it and a line that violates it, and
   `test/engine-neutrality.test.ts` asserts that the sentence leaves the whole
   check quiet and that the violation fires that rule. It also keeps a
   regression corpus of the prose and the evaluator identifiers this check has
-  wrongly fired on before, and - for each condition stated above - fixtures on
-  **both** sides of its boundary: prose that must stay quiet, and prose that
-  must fire. Add a rule and you add both strings, or the suite goes red; widen
-  a condition above and you add its fixture, or the sentence is just a claim
-  again.
+  wrongly fired on before, and fixtures on **both** sides of the anchor
+  property: names written bare, which must stay quiet, and the same names
+  written next to their anchors, which must fire. Add a rule and you add both
+  strings, or the suite goes red.
   What the suite does **not** check is whether a documenting sentence is
   *accurate*. It checks that the sentence is quiet. One that scans clean and
   says nothing true about its rule will pass, so accuracy is still a human

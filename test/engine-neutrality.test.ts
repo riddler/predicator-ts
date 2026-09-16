@@ -95,9 +95,9 @@ describe("a doc comment may state the rules without tripping them", () => {
   });
 });
 
-// Prose that this check has actually fired on, in the three revisions it took
-// to get here. Each line is a regression fixture: it is ordinary English or an
-// ordinary evaluator identifier, and none of it may fire again.
+// Prose that this check has actually fired on at some point in its history.
+// Each line is a regression fixture: it is ordinary English or an ordinary
+// evaluator identifier, and none of it may fire again.
 const prosePreviouslyTripping: readonly string[] = [
   // The unanchored DOM rule matched across a sentence break.
   "// The evaluator documentation says a window. Documentation of an evaluator.",
@@ -110,20 +110,45 @@ const prosePreviouslyTripping: readonly string[] = [
   // The forbidden numeric type named in prose, in the positions that are safe.
   "// The bigint type is never used here, and a bigint would be a conformance",
   "// break wearing a precision argument.",
+  // The anchor property, safe side: a forbidden name with no anchor after it
+  // is quiet, whatever the name is.
+  "// Neither eval nor Function is reachable here, BigInt is not part of the",
+  "// value space, and Intl is never consulted for an ordering decision.",
+  // The same name as the trap above, written with a word after it instead of
+  // a full stop. This pair is the corollary, stated as two fixtures.
+  "// No BigInt value is ever constructed here.",
 ];
 
-// The other half of the same condition. The type-position arm cannot tell a
-// type annotation from ordinary punctuation, so the word above is only safe
-// where no colon, pipe, angle bracket or ampersand sits in front of it. These
-// lines all read as English and all fire, which is why the proviso in the
-// script header and in CLAUDE.md has to name this and not only the two
-// bare-word exceptions. They are fixtures so that widening the proviso again
-// cannot be done without exercising the boundary it claims.
-const proseHittingTheTypePositionArm: readonly string[] = [
+// The other side of the same property. A forbidden name fires in prose as
+// soon as its anchor is present, because this scanner reads text and cannot
+// tell a comment's punctuation from code's. Each line below is ordinary
+// English that happens to put a name next to its anchor, and each one fires.
+//
+// These are not a list of the cases - the cases are whatever the patterns
+// currently say. They are a sample of the FAMILY, wide enough that a rewrite
+// of the anchoring paragraph which quietly re-narrows the property to one
+// rule, or to one kind of punctuation, goes red here.
+const proseCarryingAnAnchor: readonly string[] = [
+  // A type name reached by the type punctuation around it.
   "// Rule 9: bigint never.",
   "// | bigint | never allowed |",
   "// The rule is simple: bigint is out.",
   "// Forbidden: bigint, and every literal base of it.",
+  // A dynamic-evaluation name reached by a following parenthesis, even with a
+  // space between, and even mid-sentence.
+  "// Never write eval (like this) in shipped source.",
+  "// Calling Function (or any alias of it) is refused.",
+  // A capitalised constructor reached by a dot or a parenthesis.
+  "// BigInt.asIntN is unavailable on a constrained engine.",
+  "// Converting with BigInt(value) is refused outright.",
+  // A namespace reached by a dotted member.
+  "// Intl.DateTimeFormat is absent on some engines.",
+  // A global reached by a dotted member.
+  "// Reading process.env here would break the browser build.",
+  // A name that ends a sentence, where the full stop is its own anchor. This
+  // is the trap the corollary in the script header warns about, and the first
+  // draft of that very paragraph fell into it.
+  "// The value space contains no BigInt.",
 ];
 
 // Identifiers an evaluator legitimately carries. The check omits `location`,
@@ -161,17 +186,16 @@ describe("prose and plausible identifiers do not fire the check", () => {
     },
   );
 
-  // Sabotage: dropping the `[:<|&]\s*bigint\b` alternative from the
-  // `bigint-type` rule in scripts/engine-neutrality.mjs turns every one of
-  // these red. They pin the SECOND half of the quiet-prose proviso: the word
-  // is safe in prose only where nothing type-like precedes it, and a proviso
-  // that forgets to say so is false however carefully it is worded.
-  it.each(proseHittingTheTypePositionArm.map((line, i) => [i, line] as const))(
-    "type-like punctuation before the forbidden numeric type still fires (%i)",
+  // Sabotage: dropping any one anchor alternative in
+  // scripts/engine-neutrality.mjs - the `[:<|&]` arm of `bigint-type`, the
+  // `\s*` before the parenthesis in `dynamic-code-eval`, the `\bBigInt\s*\.`
+  // arm - turns the matching lines below red. Together they pin the anchor
+  // property itself rather than any one rule's wording.
+  it.each(proseCarryingAnAnchor.map((line, i) => [i, line] as const))(
+    "a name next to its anchor fires even in prose (%i)",
     (_i, line) => {
-      const { status, output } = scanLine(root, line);
-      expect(status, "this line must fire; the proviso depends on it").toBe(1);
-      expect(output).toContain("bigint-type");
+      const { status } = scanLine(root, line);
+      expect(status, "this line must fire; the anchor property depends on it").toBe(1);
     },
   );
 });
