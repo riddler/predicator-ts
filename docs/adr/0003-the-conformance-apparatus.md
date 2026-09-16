@@ -1,0 +1,197 @@
+# ADR-0003: The conformance apparatus
+
+Status: proposed (2026-09-16)
+
+## Context
+
+ADR-0001 fixes what this package is: a conformant sibling whose correctness is
+defined by artifacts it does not own, the instruction set and the conformance
+corpus that predicator-ex publishes. It reserves this number for the apparatus
+that makes that claim checkable, and delegates the whole of it here. Without
+the apparatus, "conformant" is a word in a README.
+
+Predicator-ex already specifies most of what is needed, and specifies it as a
+contract for siblings rather than as a description of itself. Its
+`conformance/README.md` is the corpus contract: the two surfaces a sibling
+implements, the tagged-value encoding, the tier structure and its cumulative
+reading, and the never-skip rule. Its `conformance/RATCHET.md` is the registry
+contract: the fields, the ordering and encoding, the verify-then-add growth
+rule, and the checks a consumer runs. Its `conformance/schema/` carries the
+machine-readable half, `case.json`, `corpus.json`, `manifest.json`,
+`registry.json` and `report.json`. Neither repository ships a runner; the
+runner is the sibling's, and writing one is what this record governs.
+
+What is left to decide here is therefore not what conformance means but how
+this repository holds itself to it, and there are three places a conformance
+claim usually rots. The first is the corpus copy: a vendored spec that drifts,
+or that a build refreshes silently, stops being evidence of anything, because
+nobody can say afterwards which corpus a green run was green against. The
+second is the report: a runner that can emit a third outcome beside pass and
+fail will emit it, and a skipped case reads as a pass in every summary a human
+actually looks at, so a percentage climbs while the gap stays. The third is the
+record of what passes: a file a person can edit is a file that will be edited
+to make a red build green, and a ratchet that can shrink is not a ratchet.
+
+The corpus at predicator-ex tag `v9.4.1` is nine tiers and 250 cases at ISA
+version 6; 203 of those cases carry a `source` and are therefore members of the
+compiler surface's case set as well as the evaluator's. Those numbers are
+observations of one tag, not commitments, and nothing below is written in terms
+of them.
+
+One question adjacent to the runner is deliberately not settled here. A JSON
+number does not say whether it was written as an integer or as a float, and the
+corpus relies on the distinction surviving decode. That is a property of the
+value domain, so the apparatus below requires a decoder that preserves it and
+leaves what the distinction ranges over, and how two numbers compare, to
+ADR-0002.
+
+The apparatus ships as vendored data and as scripts under `scripts/`, not as
+package exports, so this record has no public signature to state; the shapes it
+does fix are JSON documents, and the worked example below shows them.
+
+## Decision
+
+**The corpus is vendored, byte for byte, from predicator-ex at a named tag.**
+`conformance/manifest.json`, `conformance/corpus/tier-N.json` and
+`conformance/schema/*.json` are copies of that tag's files with no edit of any
+kind, not a reformat and not a trailing-newline fix. This repository authors no
+case and owns no schema.
+
+**The vendoring source is recorded in `conformance/SOURCE.json`**, which
+carries exactly `repo`, `tag`, `sha`, `corpus_hash` and `isa_version`: the
+upstream repository, the tag the copy was taken at, the commit that tag
+resolves to, and the `corpus_hash` and `isa_version` read from the copied
+manifest. A tag is what is recorded, never a branch, because a branch does not
+identify bytes.
+
+**A refresh is a deliberate, reviewed change, never a silent update.** The
+vendoring script is run by a person, its diff is reviewed like any other, and
+`SOURCE.json` is rewritten in the same change. No build step, test, or gate
+stage fetches from predicator-ex, and nothing here updates the corpus as a side
+effect of anything else.
+
+**The hash rule pins the copy.** The sha256 of the tier files' bytes,
+concatenated in ascending tier order, equals the `corpus_hash` in the vendored
+manifest, and equals the `corpus_hash` in `SOURCE.json`. A mismatch is a hard
+failure naming the file that moved; it is never repaired by rewriting the hash.
+
+**The hash check runs in the full gate and in continuous integration**, on
+every change, not only on a change that touches `conformance/`. A corpus edited
+by accident is caught by the next build rather than by the next release.
+
+**The runner decodes with a float-preserving scanner, and with predicator-ex's
+tagged-value table.** Decoding records, for every JSON number, whether it was
+written in integer or in floating-point form, because a stock JSON parser
+collapses the two and the corpus depends on the distinction; and a `$type`
+object decodes per predicator-ex's `conformance/README.md`, which is where that
+encoding is specified. Which values the numeric distinction ranges over, and
+how any two values compare, is ADR-0002's decision and not this one.
+
+**The runner runs every case in the tiers it claims, on one surface.** Tiers
+are cumulative: running tier N means running the case files for tiers 1 through
+N. The evaluator surface's case set is every case; the compiler surface's is
+every case whose `source` is not null, and a null-`source` case is absent from
+that set rather than skipped by it.
+
+**A case result is `pass` or `fail`, and there is no third value.** Anything the
+package has not implemented is a `fail` carrying a reason that names the gap.
+The runner emits no skip, no pending, no not-applicable and no count of cases it
+declined to run, and it never shortens its case set to avoid a failure. This is
+the property that makes a conformance claim mean anything, and it is the one
+rule here that is never relaxed for convenience.
+
+**A run writes one report per surface, conforming to
+`conformance/schema/report.json`.** The report carries the surface, the tier
+run, the `isa_version` the package implements, the `corpus_hash` it ran
+against, and one result per case attempted.
+
+**Reports are build artifacts and are never committed.** They are written under
+an ignored directory and regenerated by running the runner. Nothing reads a
+report from the repository, and no check trusts one it did not just produce.
+
+**`conformance/registry.json` is written only by the ratchet script, from an
+observed run, and is never hand-edited.** The script's only input is a report.
+It takes the entries whose result is `pass`, unions them with the entries
+already recorded, and writes the file with `corpus_hash` and `isa_version`
+taken from the vendored manifest. There is no command that adds a case by id.
+
+**The ratchet refuses to write when an existing entry did not pass.** That is a
+regression: the script exits non-zero naming every such case and surface, and
+it never removes an entry to get past one.
+
+**The registry's on-disk encoding is predicator-ex's `conformance/RATCHET.md`
+rule 2, unchanged**, and the check re-encodes the parsed registry and compares
+bytes against the file. A hand edit, a formatter, or an editor that reindents on
+save fails that comparison.
+
+**The gate's registry check has three parts.** The pin: the registry's
+`corpus_hash` equals the vendored manifest's. Membership: every entry's
+`(case_id, surface)` pair is in that surface's case set in the vendored corpus,
+and every entry's `tier` equals the corpus's tier for that case. Currency:
+every entry still passes in a run made now. Each part is a hard failure naming
+what it caught.
+
+**A claim is written only when every case in tiers 1 through N on that surface
+has an entry.** Entries above a claimed tier are legal and remain
+currency-checked, and a registry with entries and no claims is valid: it says
+what the package passes without asserting a tier.
+
+**Where this record and predicator-ex's `conformance/README.md` or
+`conformance/RATCHET.md` disagree, those documents win** and the divergence is
+a defect here. This record restates their rules so that this repository's gate
+is self-contained, and restating is not amending.
+
+## Consequences
+
+A conformance claim in this repository is reproducible by a stranger. The tag,
+the commit and the hash in `SOURCE.json` identify the corpus exactly; the
+registry names the cases and surfaces; the runner regenerates the evidence. The
+cost is that upgrading the corpus is never incidental: a new upstream tag is a
+reviewed change that may turn the registry's currency check red, and turning it
+green again is a fix in `src/` rather than an edit to the record of what passes.
+
+Never-skip makes early states look worse than a skip-based harness would. A
+package that implements one tier and claims one tier is green and honest; a
+package that runs a tier it has not implemented sees a wall of failures, each
+naming its gap. That is the intended reading, and it is affordable only because
+tiers are cumulative and a lower tier is a complete target on its own.
+
+Because the registry can only grow, a case that passes today constrains every
+later change. That is the point, and it is a real constraint: a refactor that
+loses a case cannot be landed by dropping the entry, only by fixing the code or
+by raising the disagreement in predicator-ex.
+
+The float-preserving scanner is a cost the apparatus pays for the value
+domain's benefit. A stock parser would be shorter and would quietly decide a
+class of cases wrongly, so the decoder is written here and tested against the
+corpus rather than borrowed.
+
+Vendoring rather than depending keeps the zero-runtime-dependency rule intact
+and keeps the corpus readable in this repository's own history, at the price of
+a copy that a person must refresh. A copy nobody refreshes goes stale silently,
+which is why `SOURCE.json` records the tag it was taken at in a file a reader
+sees before the corpus itself.
+
+## Worked example
+
+`conformance/SOURCE.json` after a vendoring, with the values that tag actually
+carries:
+
+```json
+{
+  "repo": "riddler/predicator-ex",
+  "tag": "v9.4.1",
+  "sha": "0854969a29087440e2920e951cc4fe6f342e9018",
+  "corpus_hash": "sha256:548f54cacdcb700df0c47d67f86a944b5dbe6b0c6f96ef0c4c6fbb95b0494892",
+  "isa_version": 6
+}
+```
+
+The gate then reads, in order: the hash rule over the vendored tier files, which
+must reproduce the manifest's `corpus_hash` and `SOURCE.json`'s; the registry's
+pin against that same hash; each entry's membership and tier against the
+vendored corpus; a re-encode of the registry compared byte for byte against the
+file on disk; a fresh run of each surface present, in which every entry must
+pass; and, for each claim, that tiers 1 through N on that surface are entered
+completely. Ratcheting a case in runs the runner first and adds the entry
+second, and adds nothing the run did not observe passing.
