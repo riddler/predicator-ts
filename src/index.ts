@@ -13,7 +13,7 @@ import type { Program } from "./instructions.js";
 import { toHost } from "./values.js";
 
 export type { UnboundPolicy } from "./context.js";
-export type { ErrorType, PredicatorError, Reason } from "./errors.js";
+export type { PredicatorError, Reason } from "./errors.js";
 export { EvaluationError, TypeMismatchError, UndefinedVariableError } from "./errors.js";
 export type { EvaluateOptions, EvaluateResult, HostFunction } from "./evaluator.js";
 export type { Instruction, Program } from "./instructions.js";
