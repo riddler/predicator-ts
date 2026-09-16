@@ -624,6 +624,76 @@ describe("arithmetic", () => {
     expect(outcome.error.reason).toBe("divide");
   });
 
+  // Computing an arithmetic result is one of the three places the value-domain
+  // record names where an integer can leave the safe range, and it rules that
+  // each of them refuses rather than rounds. This change is the first code that
+  // can reach that third place, so the rule is implemented and pinned here.
+  // The refusal is an evaluation error rather than a type mismatch: nothing was
+  // wrong with the operands, and the number that came out is simply not a
+  // member of the domain.
+  //
+  // Sabotage: dropping the safe-range test from the numeric-result helper turns
+  // both assertions red, answering ok with a number the host boundary would
+  // have refused. It was run and reverted.
+  it("refuses an integer result that leaves the safe range", () => {
+    const biggest = Number.MAX_SAFE_INTEGER;
+    for (const program of [
+      [["lit", biggest], ["lit", biggest], ["add"]],
+      [["lit", biggest], ["lit", biggest], ["multiply"]],
+    ]) {
+      const outcome = evaluateToValue(program);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.type).toBe("EvaluationError");
+      expect(outcome.error.reason).toBe("integer_out_of_range");
+    }
+  });
+
+  // The record rules the integer case in so many words and says nothing about
+  // a float result that is not finite. This is the same boundary treated the
+  // same way, with the other reason the value domain already declares: the
+  // domain has no member for an infinity, and the alternative is the float
+  // constructor raising out of a published entry point, where errors are
+  // values and a throw is reserved for a violated internal invariant.
+  //
+  // Sabotage: dropping the finiteness test from the numeric-result helper
+  // turns every assertion red - and not by failing an expectation, but by the
+  // throw this exists to prevent escaping the call. It was run and reverted.
+  it("refuses a float result that is not finite rather than raising", () => {
+    const huge = float(1e308);
+    for (const program of [
+      [["lit", huge], ["lit", huge], ["add"]],
+      [["lit", huge], ["lit", huge], ["multiply"]],
+      [["lit", huge], ["lit", float(1e-308)], ["divide"]],
+    ]) {
+      const outcome = evaluateToValue(program);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.type).toBe("EvaluationError");
+      expect(outcome.error.reason).toBe("non_finite_number");
+    }
+  });
+
+  // The refusal is the result's, never the operands'. A pair that is simply
+  // the wrong type still answers a type mismatch, and a legal pair whose
+  // answer fits stays an ordinary value, so the new check is not standing in
+  // front of either of them.
+  it("keeps the ordinary answers either side of that refusal", () => {
+    const biggest = Number.MAX_SAFE_INTEGER;
+    expect(evaluateToValue([["lit", biggest], ["lit", 0], ["add"]])).toEqual({
+      ok: true,
+      value: biggest,
+    });
+    expect(evaluateToValue([["lit", biggest], ["lit", 1], ["divide"]])).toEqual({
+      ok: true,
+      value: biggest,
+    });
+    expect(evaluateToValue([["lit", biggest], ["lit", 2], ["modulo"]])).toEqual({
+      ok: true,
+      value: biggest % 2,
+    });
+  });
+
   it("never concatenates at subtract, and takes numbers only at multiply", () => {
     const strings = evaluateToValue([["lit", "ab"], ["lit", "a"], ["subtract"]]);
     expect(strings.ok).toBe(false);

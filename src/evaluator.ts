@@ -63,6 +63,7 @@ import {
   type HostValue,
   PDate,
   PDateTime,
+  type RefusalReason,
   Undefined,
   type Value,
 } from "./values.js";
@@ -426,14 +427,19 @@ export function compareValues(operator: ComparisonOperator, left: Value, right: 
 // ---------------------------------------------------------------------------
 
 /**
- * What an arithmetic rule answered: a value, or the statement that this pair
- * of operands has no rule.
+ * What an arithmetic rule answered: a value, the statement that this pair of
+ * operands has no rule, or a refusal of the result itself.
  *
- * The refusal carries nothing. Which operation asked, and which type it wanted,
- * are the caller's to name - a rule knows the pair it was handed and not the
- * opcode that handed it over.
+ * The no-rule answer carries nothing, because which operation asked and which
+ * type it wanted are the caller's to name - a rule knows the pair it was
+ * handed and not the opcode that handed it over. A refusal is the other case:
+ * the rule applied and the number it produced is outside the domain, so it
+ * carries the value boundary's own reason for that and the caller reports it
+ * as an evaluation error rather than as a type mismatch.
  */
-type Arithmetic = { readonly ok: true; readonly value: Value } | { readonly ok: false };
+type Arithmetic =
+  | { readonly ok: true; readonly value: Value }
+  | { readonly ok: false; readonly refusal?: RefusalReason };
 
 const NO_RULE: Arithmetic = { ok: false };
 
@@ -450,9 +456,39 @@ function isFloating(left: Value, right: Value): boolean {
   return left instanceof Float || right instanceof Float;
 }
 
-/** A numeric result, a float exactly when one of the operands was a float. */
+/**
+ * A numeric result, a float exactly when one of the operands was a float, and
+ * a refusal when the number that came out is not a member of the domain.
+ *
+ * Computing an arithmetic result is one of the three places `docs/adr/0002`
+ * names where an integer outside the safe range can arise, and it rules that
+ * each of them refuses rather than rounds, carrying the reason the value
+ * boundary already uses. That record rules the integer case in those words and
+ * says nothing about a float result that is not finite; the float case is the
+ * same boundary and is treated the same way here, with the boundary's other
+ * existing reason, because the domain has no member for an infinity any more
+ * than it has one for an oversized integer - and because the alternative is
+ * the float constructor raising out of a published entry point, where errors
+ * are values.
+ *
+ * Every arithmetic opcode routes its number through here, so the rule lives in
+ * one place rather than at each of them. Some of what routes through cannot
+ * reach the refusal: the integer-quotient path, because a quotient of two
+ * integers is no larger than its dividend, and the remainder path, because a
+ * remainder is smaller than its divisor. That is a statement about those two
+ * paths and NOT about the opcodes they sit in - the divide opcode as a whole
+ * can reach the refusal, by its float path, where a quotient overflows to an
+ * infinity, and a test below asserts exactly that. Both paths route through
+ * here anyway, because a reader checking a path against the record should not
+ * have to redo that argument path by path.
+ */
 function numericResult(magnitude: number, floating: boolean): Arithmetic {
-  return { ok: true, value: floating ? new Float(magnitude) : magnitude };
+  if (floating) {
+    if (!Number.isFinite(magnitude)) return { ok: false, refusal: "non_finite_number" };
+    return { ok: true, value: new Float(magnitude) };
+  }
+  if (!Number.isSafeInteger(magnitude)) return { ok: false, refusal: "integer_out_of_range" };
+  return { ok: true, value: magnitude };
 }
 
 /**
@@ -582,11 +618,20 @@ function readMember(target: Value, name: string): Value {
 /**
  * Whether a value may index a map at all.
  *
- * The reference writes this as one clause over its atom type; the members of
- * that clause this domain also has are the two booleans and the absence, and a
- * string and an integer index a map as well. Everything else - a float, a
- * list, a map, a date, an instant, a duration, the null value - is a key this
- * opcode refuses rather than a key it misses on.
+ * Section 5 of the reference's instruction-set document tells a sibling with
+ * no atom type to admit a string, an integer, a boolean and its own absence,
+ * and that written instruction is what this implements. The reference itself
+ * reaches the same clause through a single test for its host language's atom
+ * type, and ITS null value is one of those atoms, so the reference admits a
+ * null key and answers an ordinary miss on it where this refuses it. That is a
+ * deliberate divergence in favour of the written instruction over the behaviour
+ * the host language happens to give the reference, not a consequence of the
+ * domains differing. No conformance case pins either answer, so the question is
+ * open and unpinned here.
+ *
+ * Everything outside that set - a float, a list, a map, a date, an instant, a
+ * duration, the null value - is a key this opcode refuses rather than one it
+ * misses on.
  */
 function isMapKey(key: Value): boolean {
   if (key === Undefined) return true;
@@ -867,10 +912,43 @@ class Machine {
     const right = this.stack.pop() as Value;
     const left = this.stack.pop() as Value;
     const rule = ARITHMETIC[operation];
-    const answered = rule.apply(left, right);
-    if (!answered.ok) return binaryTypeMismatch(operation, rule.wanted, left, right, at);
-    this.stack.push(answered.value);
-    return { ok: true, next: at + 1 };
+    return this.settle(rule.apply(left, right), operation, rule.wanted, left, right, at);
+  }
+
+  /**
+   * Turns an arithmetic answer into a step, which is where the three shapes
+   * an answer can have become the three things an opcode can do.
+   *
+   * A value is pushed. A result the domain has no member for is an evaluation
+   * error carrying the value boundary's reason, because nothing was wrong with
+   * the operands - the operation was legal and its answer is not representable.
+   * A pair with no rule is the type mismatch, and it goes through the binary
+   * helper so that an absence an unbound load put on the stack is still
+   * rewritten into that unbound root.
+   */
+  private settle(
+    answered: Arithmetic,
+    operation: string,
+    wanted: string,
+    left: Value,
+    right: Value,
+    at: number,
+  ): Step {
+    if (answered.ok) {
+      this.stack.push(answered.value);
+      return { ok: true, next: at + 1 };
+    }
+    if (answered.refusal !== undefined) {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          answered.refusal,
+          `${operation} answered a value outside the domain`,
+          at,
+        ),
+      };
+    }
+    return binaryTypeMismatch(operation, wanted, left, right, at);
   }
 
   /**
@@ -895,12 +973,11 @@ class Machine {
     if (!isNumeric(left) || !isNumeric(right)) {
       return binaryTypeMismatch("divide", "number", left, right, at);
     }
-    if (isIntegral(left) && isIntegral(right)) {
-      this.stack.push(Math.trunc(left / right));
-      return { ok: true, next: at + 1 };
-    }
-    this.stack.push(new Float(numberOf(left) / numberOf(right)));
-    return { ok: true, next: at + 1 };
+    const floating = !isIntegral(left) || !isIntegral(right);
+    const quotient = floating
+      ? numberOf(left) / numberOf(right)
+      : Math.trunc(numberOf(left) / numberOf(right));
+    return this.settle(numericResult(quotient, floating), "divide", "number", left, right, at);
   }
 
   /**
@@ -926,8 +1003,7 @@ class Machine {
     if (!isIntegral(left) || !isIntegral(right)) {
       return binaryTypeMismatch("modulo", "number", left, right, at);
     }
-    this.stack.push(left % right);
-    return { ok: true, next: at + 1 };
+    return this.settle(numericResult(left % right, false), "modulo", "number", left, right, at);
   }
 
   /**
@@ -979,9 +1055,15 @@ class Machine {
    * the target is dispatched on before the key is judged.
    *
    * Only a string can index a map here. The wider key types are accepted
-   * rather than refused, and they miss, because this domain's maps carry
-   * string keys only - the reference's do too, and its own lookup of an
-   * integer key against a string-keyed map is the same miss.
+   * rather than refused, and they always miss, because a map in THIS domain
+   * carries string keys and nothing else. That is not parity: the reference's
+   * maps can carry a boolean key, its own normalization preserves one for
+   * exactly that reason, and section 5 records that a map may legitimately be
+   * keyed that way - so a lookup this build must answer as a miss is one the
+   * reference can answer with a value. `docs/adr/0002` records that gap as a
+   * divergence and bounds it: no case in a language-neutral corpus can express
+   * a boolean-keyed hit, because JSON object keys are strings and the tagged
+   * encoding has no boolean-keyed map form.
    */
   private bracketAccess(at: number): Step {
     if (this.stack.length < 2) return insufficientOperands("bracket_access", at);
