@@ -3,7 +3,7 @@
 // state every rule without tripping the check, and that every rule actually
 // catches what it says it catches.
 //
-// Those claims were written carefully three times and were wrong three times.
+// Those claims were written carefully, and kept turning out to be wrong.
 // A sentence describing a pattern is exactly as hard to verify as the pattern,
 // so this suite stops describing and starts executing. Each rule carries the
 // sentence that documents it and a line that violates it, right beside the
