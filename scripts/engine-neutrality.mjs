@@ -3,7 +3,7 @@
 //
 // `src/` has to run unchanged on a server runtime, in a browser, and on React
 // Native's JavaScript engine. Most of the rules below protect that; the
-// `bigint` rule protects conformance instead. They are stated as prose in
+// `bigint` rules protect conformance instead. They are stated as prose in
 // CLAUDE.md, which is where the reasoning belongs. This file is what makes
 // them mechanical, so the author, the gate, CI and a reviewer all run the same
 // check instead of each retyping a pattern from memory.
@@ -19,17 +19,35 @@
 // of it. Biome's builtin-import rule is a WARNING and does not fail the lint
 // stage, so it is not a backstop for anything here.
 //
-// EVERY rule is anchored to syntax rather than to a bare word. This file scans
-// source text without parsing it, so a rule written as a bare word would fire
-// on prose: the previous ad hoc form of this check matched the word
-// "evaluator" on its `eval` arm and "documentation" on its `document` arm,
-// which is precisely what made it unusable in a package whose central module
-// is an evaluator. Requiring the surrounding syntax - a property access, an
-// import specifier, a call's open parenthesis, a type position - is what lets
-// the words appear freely in comments and identifiers while the constructs
-// themselves cannot. A doc comment in shipped source is expected to be able to
-// state these rules without tripping them; that is a property worth keeping
-// and there is a test of it in the sabotage notes on this change.
+// ---------------------------------------------------------------------------
+// EVERY RULE CARRIES THE SENTENCE THAT DOCUMENTS IT, AND THAT SENTENCE IS A
+// TEST FIXTURE. Read this before adding a rule.
+//
+// This check has now been revised three times, and each revision introduced a
+// fresh instance of the same defect: a sentence describing the patterns that
+// was not true of the patterns. A claim about a regular expression turns out
+// to be exactly as hard to verify as the regular expression, so stating it
+// carefully is not enough - it has to be executed.
+//
+// So each rule below carries two strings beside its pattern. `documentedBy` is
+// the sentence a doc comment in shipped source would use to state that rule;
+// `violation` is a line that genuinely breaks it. `test/engine-neutrality.
+// test.ts` reads this table through `--rules` and asserts, for every rule,
+// that the documenting sentence passes the WHOLE check as a comment and that
+// the violation fires that exact rule. A rule added without a true
+// `documentedBy`, or with a `violation` the pattern does not catch, fails the
+// suite. The sentence that states the property is the fixture that proves it.
+//
+// ANCHORING, stated precisely because the imprecise version was wrong twice.
+// Every rule is anchored to syntax - a property access, an import specifier, a
+// call's open parenthesis, a type position - WITH EXACTLY TWO EXCEPTIONS:
+// `__dirname` and `__filename` are matched as bare words. They have no
+// property to reach through and no call form, and they are Node-only
+// identifiers that do not occur in English, so a bare match is safe for
+// everything except a comment that spells them. A doc comment can state every
+// rule in this file without tripping the check, provided it refers to those
+// two by description rather than by name - and the suite proves precisely
+// that, no more.
 //
 // WHAT THIS STAGE CANNOT SEE, stated plainly rather than papered over. A text
 // scanner reads the written form, so it catches a construct that is written
@@ -37,19 +55,20 @@
 // value: a reference captured into a variable and called later through that
 // variable, a constructor reached through a computed member access
 // (`host[key](source)`), a function pulled out of a data structure, or
-// anything arriving from a caller is invisible to it. The written aliases
-// below - assigning `eval` or `Function` to a name, the `(0, eval)` indirect
-// call, reaching either through `globalThis`, and calling `.constructor()` -
-// ARE caught, because those are the shapes a developer actually writes. The
-// rest is what code review and the ISA contract are for, and no sentence here
-// or in CLAUDE.md may claim otherwise.
+// anything arriving from a caller is invisible to it. A `require` whose
+// argument is not a literal is invisible for the same reason. The written
+// aliases below - assigning `eval` or `Function` to a name, the `(0, eval)`
+// indirect call, reaching either through `globalThis`, and calling
+// `.constructor()` - ARE caught, because those are the shapes a developer
+// actually writes. The rest is what code review and the ISA contract are for,
+// and no sentence here or in CLAUDE.md may claim otherwise.
+// ---------------------------------------------------------------------------
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const sourceRoot = join(repoRoot, "src");
 const sourceExtensions = [".ts", ".tsx", ".mts", ".cts"];
 
 // Node built-ins are importable as `node:fs` and as a bare `fs`. The bare
@@ -100,8 +119,12 @@ const bareNodeBuiltins = [
   "zlib",
 ];
 
-// A specifier reaches source as `from "x"`, `require("x")` or `import("x")`.
-const specifierPrefix = String.raw`(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(\s*)`;
+// A specifier reaches source in four shapes, not three. The fourth - a
+// SIDE-EFFECT import, `import "node:fs";` with no binding and no keyword after
+// it - was missed by the version of this rule that claimed to cover every
+// specifier form. `\bimport\s*` matching right up to the quote is what catches
+// it; the parenthesised alternative beside it is the dynamic form.
+const specifierPrefix = String.raw`(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s*)`;
 const bareNodeAlternation = bareNodeBuiltins.join("|");
 // Several builtins ship subpaths - the promises-flavoured ones especially -
 // and a pattern that demands the closing quote right after the module name
@@ -142,32 +165,62 @@ const nodeGlobalAlternation = nodeGlobals.join("|");
 // to retire.
 const usedAsGlobal = (alternation) => String.raw`\b(?:${alternation})(?:\.\w|\[)`;
 
+// The same thing, but refusing a MEMBER of that name. `process` and `global`
+// are ordinary words an evaluator uses: a scope object carries a global frame,
+// an environment record carries a process field. The lookbehind is what tells
+// `process.env` (a global) from `env.process.id` (a member), and it applies
+// the principle already stated above for `location`, `Node` and `Element` -
+// leave out what is plausible in a compiler - to the names added later.
+//
+// The DOM arm above deliberately keeps the older shape. The same lookbehind is
+// the fix for its member-name false positives, and that is tracked separately
+// rather than folded in here.
+const usedAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})(?:\.\w|\[)`;
+
 const rules = [
   {
     id: "dom-global",
     pattern: new RegExp(usedAsGlobal(domAlternation), "g"),
     why: "shipped source may not touch a DOM global; it has to run where there is no DOM",
+    documentedBy:
+      "This module touches no browser global: no window object, no document object, and nothing else the DOM defines.",
+    violation: "const a = window.innerWidth;",
   },
   {
     id: "node-global",
-    pattern: new RegExp(usedAsGlobal(nodeGlobalAlternation), "g"),
+    pattern: new RegExp(usedAsBareGlobal(nodeGlobalAlternation), "g"),
     why: "shipped source may not touch a Node global; it has to run where there is no Node",
+    documentedBy:
+      "This module touches no Node global, so it never reads the process environment and never builds a Buffer.",
+    violation: "const a = process.env.HOME;",
   },
   {
     id: "node-global-bare",
-    // These four have no property to reach through, so they need their own arm.
-    pattern: /\b__dirname\b|\b__filename\b|\bmodule\.exports\b|\brequire\s*\(/g,
+    // `require` is anchored to its string literal: without that anchor an
+    // ordinary English sentence containing "require (" fired the check, which
+    // is the very defect this stage exists to retire. `__dirname` and
+    // `__filename` are the two documented bare-word exceptions; see the header.
+    pattern: /\b__dirname\b|\b__filename\b|\bmodule\.exports\b|\brequire\s*\(\s*["'`]/g,
     why: "shipped source may not touch a Node global; it has to run where there is no Node",
+    documentedBy:
+      "This module uses no CommonJS-only global: it asks for no module path, exports through no CommonJS object, and calls no synchronous loader.",
+    violation: "const a = __dirname;",
   },
   {
     id: "node-builtin-import",
     pattern: new RegExp(`${specifierPrefix}["']node:`, "g"),
     why: "shipped source may not import a Node built-in; it has to run where there is no Node",
+    documentedBy:
+      "This module imports no prefixed Node built-in, under any specifier spelling, whether or not it binds a name.",
+    violation: 'import "node:fs";',
   },
   {
     id: "node-builtin-import-bare",
     pattern: new RegExp(`${specifierPrefix}["'](?:${bareNodeAlternation})${subpath}["']`, "g"),
     why: "shipped source may not import a Node built-in; it has to run where there is no Node",
+    documentedBy:
+      "This module names no bare Node built-in specifier and no subpath of one, in any of the four import shapes.",
+    violation: 'import "fs/promises";',
   },
   {
     id: "dynamic-code-eval",
@@ -175,11 +228,15 @@ const rules = [
     // be followed by its own open parenthesis.
     pattern: /\beval\s*\(/g,
     why: "authoring a condition is not authoring code, and dynamic code is unavailable on a locked-down engine",
+    documentedBy: "This module never evaluates a string as code.",
+    violation: 'const a = eval("1");',
   },
   {
     id: "dynamic-code-function",
     pattern: /\b(?:new\s+)?Function\s*\(/g,
     why: "authoring a condition is not authoring code, and dynamic code is unavailable on a locked-down engine",
+    documentedBy: "This module never constructs a function from source text.",
+    violation: 'const a = new Function("return 1");',
   },
   {
     id: "dynamic-code-alias",
@@ -191,20 +248,28 @@ const rules = [
     pattern:
       /=\s*(?:eval|Function)\b(?!\s*\()|\(\s*0\s*,\s*eval\s*\)|\bglobalThis\s*(?:\.\s*(?:eval|Function)\b|\[\s*["'](?:eval|Function)["']\s*\])|\.\s*constructor\s*\(/g,
     why: "aliasing eval or the Function constructor is the same dynamic code by another name",
+    documentedBy:
+      "This module never aliases the dynamic code entry points, reaches them through the global object, or gets at them by way of a constructor property.",
+    violation: "const F = Function;",
   },
   {
     id: "bigint-literal",
     // Every base, not just decimal: 1n, 0x1fn, 0b1010n, 0o17n.
     pattern: /\b(?:\d[\d_]*|0[xX][\da-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+)n\b/g,
     why: "the value space is the one the ISA and the corpus define; a numeric tower the siblings lack is a conformance break",
+    documentedBy: "This module writes no arbitrary-precision integer literal, in any numeric base.",
+    violation: "const a = 0x1fn;",
   },
   {
     id: "bigint-type",
     // Anchored to a type position or a call, so that a doc comment saying this
-    // module never produces a bigint reads clean while `x: bigint` does not.
+    // module never produces one of these reads clean while `x: bigint` does not.
     pattern:
       /[:<|&]\s*bigint\b|\bas\s+bigint\b|\bbigint\s*\[\s*\]|\bBigInt\s*\(|\bBigInt\s*\.|[:<|&]\s*BigInt\b|\bas\s+BigInt\b|=\s*BigInt\b(?!\s*\()/g,
     why: "the value space is the one the ISA and the corpus define; a numeric tower the siblings lack is a conformance break",
+    documentedBy:
+      "This module declares no arbitrary-precision integer type and calls no arbitrary-precision integer constructor.",
+    violation: "const a = BigInt(2);",
   },
   {
     id: "locale-sensitive",
@@ -214,8 +279,30 @@ const rules = [
     // predicate evaluator, and `localeCompare` typechecks and lints clean.
     pattern: /\bIntl\s*(?:\.\w|\[)|\.\s*localeCompare\s*\(|\.\s*toLocale[A-Za-z]*\s*\(/g,
     why: "locale data is absent, stubbed or version-dependent across engines, so this would decide differently on two runtimes running the same instruction list",
+    documentedBy:
+      "This module consults no locale data: it compares strings by code unit, and leaves rendering for a human to the host.",
+    violation: 'const a = "x".localeCompare("y");',
   },
 ];
+
+// `--rules` hands the table to the suite, so the documenting sentences live
+// exactly once - here, beside the pattern they describe.
+const args = process.argv.slice(2);
+if (args.includes("--rules")) {
+  console.log(
+    JSON.stringify(
+      rules.map(({ id, documentedBy, violation }) => ({ id, documentedBy, violation })),
+      null,
+      2,
+    ),
+  );
+  process.exit(0);
+}
+
+// The root is an argument so the suite can point the real check at a fixture
+// directory, absolute or relative. With no argument it is `src/`, which is
+// what the gate runs.
+const sourceRoot = args[0] ? resolve(repoRoot, args[0]) : join(repoRoot, "src");
 
 function sourceFiles(dir) {
   const found = [];
@@ -250,7 +337,13 @@ function findingsIn(file) {
   return found;
 }
 
-const files = sourceFiles(sourceRoot);
+let files;
+try {
+  files = sourceFiles(sourceRoot);
+} catch {
+  console.error(`engine-neutrality: cannot read ${relative(repoRoot, sourceRoot)}/`);
+  process.exit(1);
+}
 
 // A check that silently scanned nothing would report the same success as a
 // clean tree. It is not allowed to.
