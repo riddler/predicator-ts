@@ -2,7 +2,7 @@
 
 | # | Decision | Status |
 |---|---|---|
-| | | |
+| [0001](0001-a-conformant-sibling.md) | A conformant sibling, not a second reference implementation | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), plus the typespecs and worked-example sections this family's
