@@ -220,10 +220,18 @@ before committing.
   call's open parenthesis, a type position - **with exactly two exceptions**:
   `__dirname` and `__filename` match as bare words, because they have no
   property or call form to anchor to and do not occur in English. That is what
-  lets *evaluator*, *documentation*, `Intl` and `bigint` appear freely in prose
-  and in identifiers, and it means a doc comment in shipped source can state
-  every one of these rules without tripping the check - provided it describes
-  those two rather than spelling them.
+  lets *evaluator*, *documentation* and `Intl` appear freely in prose and in
+  identifiers.
+  So a doc comment in shipped source can state every one of these rules without
+  tripping the check, **subject to two conditions, not one**. It has to describe
+  `__dirname` and `__filename` rather than spelling them. And it must not put a
+  colon, a pipe, an angle bracket or an ampersand directly before the word
+  `bigint`: the type-position arm cannot tell a type annotation from ordinary
+  punctuation, so `Rule 9: bigint never` fires, and so does a table row that
+  puts the word after a pipe. Write "a bigint" or "the bigint type" and it reads
+  clean. `bigint` is the one forbidden name that is not free in prose, and that
+  is a property of the rule rather than an oversight: a type annotation is the
+  thing being refused, and in flat text it is spelled the same way.
   **That last sentence is a test, not an assurance.** Three revisions of this
   check each shipped a claim about the patterns that was not true of the
   patterns, because a claim about a regular expression is exactly as hard to
@@ -232,8 +240,15 @@ before committing.
   `test/engine-neutrality.test.ts` asserts that the sentence leaves the whole
   check quiet and that the violation fires that rule. It also keeps a
   regression corpus of the prose and the evaluator identifiers this check has
-  wrongly fired on before. Add a rule and you add both strings, or the suite
-  goes red.
+  wrongly fired on before, and - for each condition stated above - fixtures on
+  **both** sides of its boundary: prose that must stay quiet, and prose that
+  must fire. Add a rule and you add both strings, or the suite goes red; widen
+  a condition above and you add its fixture, or the sentence is just a claim
+  again.
+  What the suite does **not** check is whether a documenting sentence is
+  *accurate*. It checks that the sentence is quiet. One that scans clean and
+  says nothing true about its rule will pass, so accuracy is still a human
+  read.
   **What it cannot see**, because it reads text and does not follow values: a
   reference captured into a variable and called later through that variable, a
   constructor reached by computed member access (`host[key](source)`), a

@@ -34,20 +34,37 @@
 // `violation` is a line that genuinely breaks it. `test/engine-neutrality.
 // test.ts` reads this table through `--rules` and asserts, for every rule,
 // that the documenting sentence passes the WHOLE check as a comment and that
-// the violation fires that exact rule. A rule added without a true
+// the violation fires that exact rule. A rule added without a CLEAN
 // `documentedBy`, or with a `violation` the pattern does not catch, fails the
 // suite. The sentence that states the property is the fixture that proves it.
+// Note what that does not do: the suite checks the sentence is quiet, never
+// that it is ACCURATE. A sentence that scans clean and says nothing true about
+// its rule passes. Accuracy is still read by a human, so write it as though
+// nothing will check it, because nothing will.
 //
-// ANCHORING, stated precisely because the imprecise version was wrong twice.
-// Every rule is anchored to syntax - a property access, an import specifier, a
+// ANCHORING, and the exact conditions under which prose stays quiet. Every
+// rule is anchored to syntax - a property access, an import specifier, a
 // call's open parenthesis, a type position - WITH EXACTLY TWO EXCEPTIONS:
 // `__dirname` and `__filename` are matched as bare words. They have no
 // property to reach through and no call form, and they are Node-only
 // identifiers that do not occur in English, so a bare match is safe for
-// everything except a comment that spells them. A doc comment can state every
-// rule in this file without tripping the check, provided it refers to those
-// two by description rather than by name - and the suite proves precisely
-// that, no more.
+// everything except a comment that spells them.
+//
+// A doc comment can therefore state every rule in this file without tripping
+// the check, subject to TWO conditions rather than one:
+//
+//   1. it refers to those two globals by description rather than by name; and
+//   2. it does not put a colon, a pipe, an angle bracket or an ampersand
+//      directly before the word `bigint`. The type-position arm cannot tell a
+//      type annotation from ordinary punctuation, so `Rule 9: bigint never`
+//      fires, and so does a table row that puts the word after a pipe. Write
+//      "a bigint" or "the bigint type" and it reads clean.
+//
+// Both conditions have fixtures in the suite, on BOTH sides of the boundary -
+// prose that must stay quiet and prose that must fire. A sentence here stating
+// a condition under which the check is quiet is not finished until it has one;
+// that is the rule this paragraph was rewritten to obey, having twice been an
+// unchecked claim.
 //
 // WHAT THIS STAGE CANNOT SEE, stated plainly rather than papered over. A text
 // scanner reads the written form, so it catches a construct that is written

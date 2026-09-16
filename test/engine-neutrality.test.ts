@@ -71,7 +71,7 @@ describe("a doc comment may state the rules without tripping them", () => {
   // Sabotage: rewording any `documentedBy` sentence in
   // scripts/engine-neutrality.mjs so that it names a construct directly - for
   // instance spelling the module-path global rather than describing it - turns
-  // that rule's case red. The prose-regression block above is what pins the
+  // that rule's case red. The prose-regression block below is what pins the
   // patterns; this block pins the sentences.
   it.each(rules.map((rule) => [rule.id, rule.documentedBy] as const))(
     "%s: its documenting sentence is clean as a comment",
@@ -107,6 +107,23 @@ const prosePreviouslyTripping: readonly string[] = [
   "// This module never reaches for Intl, and never produces a bigint. It does",
   "// not use eval or the Function constructor, touches no window or document,",
   "// imports no node builtin, and calls no process or Buffer global.",
+  // The forbidden numeric type named in prose, in the positions that are safe.
+  "// The bigint type is never used here, and a bigint would be a conformance",
+  "// break wearing a precision argument.",
+];
+
+// The other half of the same condition. The type-position arm cannot tell a
+// type annotation from ordinary punctuation, so the word above is only safe
+// where no colon, pipe, angle bracket or ampersand sits in front of it. These
+// lines all read as English and all fire, which is why the proviso in the
+// script header and in CLAUDE.md has to name this and not only the two
+// bare-word exceptions. They are fixtures so that widening the proviso again
+// cannot be done without exercising the boundary it claims.
+const proseHittingTheTypePositionArm: readonly string[] = [
+  "// Rule 9: bigint never.",
+  "// | bigint | never allowed |",
+  "// The rule is simple: bigint is out.",
+  "// Forbidden: bigint, and every literal base of it.",
 ];
 
 // Identifiers an evaluator legitimately carries. The check omits `location`,
@@ -141,6 +158,20 @@ describe("prose and plausible identifiers do not fire the check", () => {
       const { status, output } = scanLine(root, line);
       expect(output).toContain("clean");
       expect(status).toBe(0);
+    },
+  );
+
+  // Sabotage: dropping the `[:<|&]\s*bigint\b` alternative from the
+  // `bigint-type` rule in scripts/engine-neutrality.mjs turns every one of
+  // these red. They pin the SECOND half of the quiet-prose proviso: the word
+  // is safe in prose only where nothing type-like precedes it, and a proviso
+  // that forgets to say so is false however carefully it is worded.
+  it.each(proseHittingTheTypePositionArm.map((line, i) => [i, line] as const))(
+    "type-like punctuation before the forbidden numeric type still fires (%i)",
+    (_i, line) => {
+      const { status, output } = scanLine(root, line);
+      expect(status, "this line must fire; the proviso depends on it").toBe(1);
+      expect(output).toContain("bigint-type");
     },
   );
 });
