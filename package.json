@@ -42,13 +42,14 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "gate": "pnpm run typecheck && pnpm run lint && vitest run --coverage && pnpm run corpus:check && pnpm run build",
+    "gate": "pnpm run typecheck && pnpm run lint && pnpm run neutrality && vitest run --coverage && pnpm run corpus:check && pnpm run build",
     "gate:loop": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
     "build": "tsup",
+    "neutrality": "node scripts/engine-neutrality.mjs",
     "corpus:check": "node scripts/corpus-check.mjs",
     "corpus:refresh": "node scripts/corpus-refresh.mjs",
     "ratchet": "node scripts/ratchet.mjs"

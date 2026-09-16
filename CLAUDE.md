@@ -137,7 +137,7 @@ question to raise rather than a guess to encode.
 
 ```bash
 pnpm run gate:loop   # inner loop: typecheck, lint, the suite
-pnpm run gate        # full gate: + coverage floor, corpus check, build
+pnpm run gate        # full gate: + engine neutrality, coverage floor, corpus check, build
 pnpm run test        # just the suite
 pnpm run format      # rewrite formatting (the gate only checks it)
 ```
@@ -159,6 +159,12 @@ before committing.
   threshold in `vitest.config.ts`, not by disabling a Biome rule, not by
   `it.skip` on a failing test, not by narrowing `include`. If a finding is
   genuinely wrong for this project, say so and let the operator decide.
+- The engine-neutrality stage (`pnpm run neutrality`, `scripts/engine-neutrality.mjs`)
+  is part of the full gate and not of the inner loop. It is the mechanical form
+  of the four `src/` rules under Conventions below, and it is deliberately
+  redundant with `tsc` and Biome where those already refuse something: a stage
+  that states the whole rule survives a tsconfig or lint-config change that
+  quietly drops half of it.
 - A change touching no TypeScript code has no gate to run and may commit on
   review of the diff alone - the authority table above says the same. The
   exception is any path the manifest lists under `gate.also_gated_paths`:
@@ -187,6 +193,14 @@ before committing.
 - **`bigint` never.** The value space is the one the ISA and the corpus define;
   a numeric tower this package invents and its siblings do not is a conformance
   break wearing a precision argument.
+- **The four rules above are enforced, not merely stated.**
+  `scripts/engine-neutrality.mjs` checks every file under `src/` for exactly
+  them, runs as its own stage of the full gate (`pnpm run neutrality`), and is
+  the one place the patterns live - a reviewer runs the stage rather than
+  retyping a pattern. Each rule is anchored to syntax, so the words
+  *evaluator*, *documentation* and the like may appear freely in prose and
+  identifiers while the constructs themselves cannot. A finding is a hard stop:
+  it is answered by changing the code, never by narrowing the rule.
 - **Sabotage every new test that asserts `src/` behavior**: break the code it
   covers, confirm the test goes red, revert, and note the mutation in one line
   above the test.
