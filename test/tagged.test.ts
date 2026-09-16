@@ -4,8 +4,10 @@ import {
   Duration,
   Float,
   float,
+  fromHost,
   PDate,
   PDateTime,
+  toHost,
   Undefined,
   type Value,
   zeroDuration,
@@ -357,8 +359,7 @@ describe("encodeTagged", () => {
     expect(encodeRefusal(Number.MAX_SAFE_INTEGER + 2)).toBe("integer_out_of_range");
     expect(encodeRefusal(Number.NaN)).toBe("non_finite_number");
     expect(encodeRefusal(Number.POSITIVE_INFINITY)).toBe("non_finite_number");
-    expect(encodeRefusal(float(Number.NaN))).toBe("non_finite_number");
-    expect(encodeRefusal(Symbol("other") as unknown as Value)).toBe("unsupported_value");
+    expect(encodeRefusal(Symbol("other") as unknown as Value)).toBe("unsupported_host_value");
     expect(encodeRefusal(new Duration({ days: Number.NaN }))).toBe("non_finite_number");
   });
 });
@@ -395,5 +396,126 @@ describe("the round trip", () => {
     expect({ ...(back.settledOn as PDate) }).toEqual({ ...settledOn });
     expect({ ...(back.authorizedAt as PDateTime) }).toEqual({ ...authorizedAt });
     expect(encoded(back)).toBe(text);
+  });
+});
+
+describe("every entrance enforces the domain, and every exit emits only the domain", () => {
+  // Sabotage: dropping the decoder's finiteness check turns this red - an
+  // over-large exponent decodes to an infinity wrapped in the brand, which the
+  // domain has no member for.
+  it("refuses a literal whose magnitude is not finite", () => {
+    expect(decodeRefusal("1e999")).toBe("non_finite_number");
+    expect(decodeRefusal("-1e999")).toBe("non_finite_number");
+    expect(decodeRefusal("1e308")).toBe(null);
+    expect(decodeRefusal('[["lit",1e999]]')).toBe("non_finite_number");
+  });
+
+  // Sabotage: any decoded value the encoder or the normalizer will not take
+  // back turns this red. This is the property the three refusals above exist
+  // for: what comes out of one entrance goes into every other.
+  it("hands back only values its own exits and entrances accept", () => {
+    const texts = [
+      "1",
+      "1.0",
+      "1e308",
+      '"pro"',
+      "true",
+      "null",
+      "[]",
+      "[1,1.0,null]",
+      "{}",
+      '{"variant":"b"}',
+      '{"$type":"undefined"}',
+      '{"$type":"date","value":"2026-08-06"}',
+      '{"$type":"datetime","value":"2026-08-09T10:30:00.500000Z"}',
+      '{"$type":"duration","value":{"days":3}}',
+    ];
+    for (const text of texts) {
+      const value = decoded(text);
+      const again = encodeTagged(value);
+      expect(again.ok, `${text} re-encodes`).toBe(true);
+      if (!again.ok) continue;
+      expect(decodeTagged(again.text).ok, `${text} re-decodes`).toBe(true);
+      expect(fromHost(value).ok, `${text} re-injects`).toBe(true);
+    }
+  });
+
+  // Sabotage: none - this pins a loss the record states rather than a guard.
+  // It is here because the property above reaches for it: re-injection holds
+  // for the decoded value itself, and NOT for its plain projection, because
+  // the projection drops the brand and a large float read back as a plain
+  // number is an integral number outside the safe range, which the domain
+  // refuses rather than rounds. A host that wants such a value back writes
+  // float(n), which is the record's own answer.
+  it("does not close through the plain projection for a large float", () => {
+    const large = decoded("1e308");
+    expect(fromHost(large).ok).toBe(true);
+    const projected = toHost(large);
+    expect(projected).toBe(1e308);
+    const reinjected = fromHost(projected);
+    expect(reinjected.ok).toBe(false);
+    if (reinjected.ok) return;
+    expect(reinjected.reason).toBe("integer_out_of_range");
+    expect(fromHost(float(1e308)).ok).toBe(true);
+  });
+
+  // Sabotage: using map instead of Array.from in the encoder's array arm turns
+  // this red - a hole is written as nothing between two commas, which is not
+  // JSON and which this module's own decoder rejects.
+  it("refuses an array hole rather than writing text it cannot read", () => {
+    // A genuine hole at index 0, built by assignment because a sparse array
+    // literal is a lint error here.
+    const holed: unknown[] = [];
+    holed[1] = 1;
+    expect(holed.length).toBe(2);
+    expect(encodeRefusal(holed as Value)).toBe("unsupported_host_value");
+    expect(encodeRefusal([1, undefined] as unknown as Value)).toBe("unsupported_host_value");
+    expect(encodeRefusal({ variant: undefined } as unknown as Value)).toBe(
+      "unsupported_host_value",
+    );
+  });
+
+  // Sabotage: dropping the plain-map guard from the encoder's object arm turns
+  // this red - a host Date encodes to an empty object, a class instance to its
+  // own fields, and neither reads back as the value that was written.
+  it("refuses a host type where the normalizer refuses or converts it", () => {
+    class Money {
+      readonly cents = 1;
+    }
+    const foreign: ReadonlyArray<readonly [string, unknown]> = [
+      ["a host Date", new Date(0)],
+      ["a Map", new Map()],
+      ["a Set", new Set()],
+      ["a class instance", new Money()],
+      ["a regular expression", /a/],
+    ];
+    for (const [label, value] of foreign) {
+      expect(encodeRefusal(value as Value), label).toBe("unsupported_host_value");
+    }
+  });
+
+  // Sabotage: narrowing the encoder's plain-map test to Object.prototype alone
+  // turns this red - the normalizer admits a null-prototype object as a map, so
+  // the encoder has to write one.
+  it("writes a map the normalizer admitted", () => {
+    const bare = Object.create(null) as { [key: string]: Value };
+    bare.variant = "b";
+    expect(encoded(bare)).toBe('{"variant":"b"}');
+    const normalizedBare = fromHost(bare);
+    expect(normalizedBare.ok).toBe(true);
+    if (normalizedBare.ok) expect(encoded(normalizedBare.value)).toBe('{"variant":"b"}');
+  });
+
+  // Sabotage: spelling the unsupported-value reason differently in the two
+  // modules turns this red. The acceptance compares reason strings exactly, so
+  // one concept carries one spelling.
+  it("spells the unsupported-value reason the same on both sides", () => {
+    const fromCodec = encodeTagged(new Date(0) as unknown as Value);
+    const fromNormalizer = fromHost(new Map());
+    expect(fromCodec.ok).toBe(false);
+    expect(fromNormalizer.ok).toBe(false);
+    if (fromCodec.ok || fromNormalizer.ok) return;
+    expect(fromCodec.reason).toBe(fromNormalizer.reason);
+    expect(fromCodec.reason).toBe("unsupported_host_value");
   });
 });

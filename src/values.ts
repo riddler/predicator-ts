@@ -24,11 +24,22 @@
  * and a float and an integer are told apart by `instanceof Float` and by
  * nothing else - never by `Number.isInteger` on an unwrapped number, which
  * answers the same thing for both.
+ *
+ * A `Float` never wraps a non-finite number. The domain has no member for
+ * `NaN` or an infinity, and the normalizer is not the only way into the
+ * domain - a decoder reads values too - so the guard lives here, where every
+ * entrance has to pass it, rather than being repeated at each one. A boundary
+ * that can be handed a non-finite number tests for it and answers a refusal
+ * before it builds a float; reaching the constructor with one is a bug in this
+ * package, and it is loud.
  */
 export class Float {
   private readonly n: number;
 
   constructor(value: number) {
+    if (!Number.isFinite(value)) {
+      throw new TypeError("a float wraps a finite number; the domain has no non-finite member");
+    }
     this.n = value;
     Object.freeze(this);
   }
@@ -48,6 +59,12 @@ export class Float {
  * This is a TypeScript function offered at the host boundary. It is not a
  * predicator builtin: it is not callable from expression source, it adds no
  * opcode, and it compiles to nothing.
+ *
+ * Finite is the whole of its domain, so a non-finite argument is a caller's
+ * mistake rather than an outcome, and it throws instead of answering a value
+ * that the rest of this package would then have to refuse everywhere. A host
+ * holding a number it has not checked passes it to `fromHost`, which answers a
+ * refusal rather than throwing.
  */
 export function float(n: number): Float {
   return new Float(n);
@@ -276,10 +293,7 @@ function normalize(value: unknown): Value {
   if (value === undefined) return Undefined;
   if (value === Undefined) return Undefined;
 
-  if (value instanceof Float) {
-    if (!Number.isFinite(value.valueOf())) throw new RefusalSignal("non_finite_number");
-    return value;
-  }
+  if (value instanceof Float) return value;
   if (value instanceof PDate || value instanceof PDateTime || value instanceof Duration) {
     return value;
   }
@@ -289,7 +303,11 @@ function normalize(value: unknown): Value {
     return dateTimeFromEpochMillis(millis);
   }
   if (Array.isArray(value)) {
-    return value.map(normalize);
+    // Array.from rather than map: map skips a hole, leaving the hole in the
+    // normalized list, and a hole is not a member of the domain. Array.from
+    // visits it as the language's absence, which normalizes to this
+    // domain's absence like any other.
+    return Array.from(value, normalize);
   }
   if (typeof value === "object") {
     if (value === null) return null;
@@ -376,7 +394,9 @@ export function toHost(value: Value): HostValue {
   if (value instanceof PDate || value instanceof PDateTime || value instanceof Duration) {
     return value;
   }
-  if (Array.isArray(value)) return value.map(toHost);
+  // Array.from rather than map, so that a hole projects as the absence does
+  // rather than surviving into the value handed back to the host.
+  if (Array.isArray(value)) return Array.from(value, toHost);
   if (typeof value === "object") {
     const out: { [key: string]: HostValue } = {};
     for (const [key, member] of Object.entries(value)) {
