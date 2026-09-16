@@ -23,11 +23,13 @@
 // EVERY RULE CARRIES THE SENTENCE THAT DOCUMENTS IT, AND THAT SENTENCE IS A
 // TEST FIXTURE. Read this before adding a rule.
 //
-// This check has now been revised three times, and each revision introduced a
-// fresh instance of the same defect: a sentence describing the patterns that
-// was not true of the patterns. A claim about a regular expression turns out
-// to be exactly as hard to verify as the regular expression, so stating it
-// carefully is not enough - it has to be executed.
+// This check has been revised repeatedly, and revision after revision
+// introduced a fresh instance of the same defect: a sentence describing the
+// patterns that was not true of the patterns. A claim about a regular
+// expression turns out to be exactly as hard to verify as the regular
+// expression, so stating it carefully is not enough - it has to be executed.
+// (Note that this paragraph gives no count of the revisions. A count in prose
+// beside a live thing is the defect itself, in miniature.)
 //
 // So each rule below carries two strings beside its pattern. `documentedBy` is
 // the sentence a doc comment in shipped source would use to state that rule;
@@ -42,29 +44,44 @@
 // its rule passes. Accuracy is still read by a human, so write it as though
 // nothing will check it, because nothing will.
 //
-// ANCHORING, and the exact conditions under which prose stays quiet. Every
-// rule is anchored to syntax - a property access, an import specifier, a
-// call's open parenthesis, a type position - WITH EXACTLY TWO EXCEPTIONS:
-// `__dirname` and `__filename` are matched as bare words. They have no
-// property to reach through and no call form, and they are Node-only
-// identifiers that do not occur in English, so a bare match is safe for
-// everything except a comment that spells them.
+// ANCHORING. One property governs every rule here, and it is the thing to
+// learn rather than a list of cases.
 //
-// A doc comment can therefore state every rule in this file without tripping
-// the check, subject to TWO conditions rather than one:
+// Each pattern matches a forbidden NAME together with the PUNCTUATION that
+// turns that name into a use of the thing: an opening parenthesis after a
+// dynamic-evaluation name, a dot or parenthesis after a capitalised
+// constructor, a dotted member or an opening bracket after a global, the type
+// punctuation around a type name, a quoted specifier after an import keyword.
+// This file reads text and does not parse it, so it CANNOT TELL THAT
+// PUNCTUATION IN A COMMENT FROM THE SAME PUNCTUATION IN CODE. Therefore:
 //
-//   1. it refers to those two globals by description rather than by name; and
-//   2. it does not put a colon, a pipe, an angle bracket or an ampersand
-//      directly before the word `bigint`. The type-position arm cannot tell a
-//      type annotation from ordinary punctuation, so `Rule 9: bigint never`
-//      fires, and so does a table row that puts the word after a pipe. Write
-//      "a bigint" or "the bigint type" and it reads clean.
+//     A forbidden name is quiet in prose exactly when its anchor is absent,
+//     and fires in prose exactly when its anchor is present.
 //
-// Both conditions have fixtures in the suite, on BOTH sides of the boundary -
-// prose that must stay quiet and prose that must fire. A sentence here stating
-// a condition under which the check is quiet is not finished until it has one;
-// that is the rule this paragraph was rewritten to obey, having twice been an
-// unchecked claim.
+// `eval` reads clean and `eval (` does not. `BigInt` reads clean and `BigInt.`
+// does not. `Intl` reads clean and `Intl.DateTimeFormat` does not. A name with
+// no anchor at all - the two module-path globals in the bare rule below are
+// the only ones - fires on every mention, which is why this comment describes
+// them rather than spelling them.
+//
+// THAT IS A RULE, NOT A CENSUS, AND IT HAS TO STAY ONE. Every previous version
+// of this paragraph tried to enumerate the cases where prose trips the check,
+// and every one of them was falsified by the next reading, because a count
+// over a live pattern is wrong the moment a pattern moves. The property above
+// survives a rule being added, widened or narrowed. If you add a rule you do
+// not update this paragraph; you inherit it, and you add the two fixtures the
+// suite wants.
+//
+// Two corollaries, both consequences of the property and not additions to it.
+// First, a word that merely CONTAINS a forbidden name - "evaluator",
+// "documentation" - is never matched at all, because a longer word supplies no
+// anchor. Second, the full stop ending an English sentence is the same
+// character as a member access, so A FORBIDDEN NAME SHOULD NEVER BE THE LAST
+// WORD OF A SENTENCE - there it supplies its own anchor. Put a word after it.
+// Whether a particular rule is fooled by a trailing stop depends on whether
+// that rule demands a word character after the dot, which is why this is
+// stated as an always-do and not as a list of the rules that care. This
+// paragraph's own first draft tripped exactly here.
 //
 // WHAT THIS STAGE CANNOT SEE, stated plainly rather than papered over. A text
 // scanner reads the written form, so it catches a construct that is written
