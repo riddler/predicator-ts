@@ -415,6 +415,8 @@ which is the one documented loss - and a result of `nickname` is JavaScript
 `undefined`. Requested with `{ tagged: true }`, the second is
 `{"$type": "undefined"}` instead, which is a distinct thing from the `null`
 a `null` result encodes to.
+That second request is made through `./tagged`; the host in this example, which
+imports from the main entry point, has the plain projection and nothing else.
 
 ## Consequences
 
@@ -492,7 +494,8 @@ What was ruled. The option is accepted by the `./tagged` subpath's entry point
 only, and the main entry point neither accepts it nor emits the corpus encoding.
 ADR-0001 is not amended and the main entry point's surface does not widen. The
 sentences added above state that where this record defines the options object,
-and `tagged` now appears in the options table beside the rest.
+and `tagged` now appears in the options table beside the rest. The worked
+example's second request is named as the subpath's for the same reason.
 
 This note records where an already-accepted decision renders rather than
 changing what this record decides, so it carries no Status line and this record
