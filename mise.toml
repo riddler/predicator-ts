@@ -1,0 +1,17 @@
+# mise config for predicator-ts: toolchain only.
+#
+#   mise install        provision the toolchain below
+#
+# The two keys below are the single source of truth for the toolchain. CI
+# reads them out of this file with sed rather than duplicating a version into
+# the workflow, so a bump here is a bump everywhere.
+#
+# Node 24 is the active LTS line; `engines.node` in package.json admits >=20
+# because the published package has to run on a consumer's older runtime,
+# while the toolchain that builds and gates it is pinned to one version.
+# pnpm is pinned here and again in package.json's `packageManager`, which is
+# what corepack reads; the two are kept equal on purpose.
+
+[tools]
+node = "24.21.0"
+pnpm = "12.4.2"

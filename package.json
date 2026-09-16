@@ -1,0 +1,65 @@
+{
+  "name": "@riddler/predicator",
+  "version": "0.0.0",
+  "description": "A conformant TypeScript sibling of the Predicator reference implementation: the expression language, its instruction set architecture, and the shared conformance corpus.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@12.4.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riddler/predicator-ts.git"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./tagged": {
+      "import": {
+        "types": "./dist/tagged.d.ts",
+        "default": "./dist/tagged.js"
+      },
+      "require": {
+        "types": "./dist/tagged.d.cts",
+        "default": "./dist/tagged.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "gate": "pnpm run typecheck && pnpm run lint && vitest run --coverage && pnpm run corpus:check && pnpm run build",
+    "gate:loop": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "build": "tsup",
+    "corpus:check": "node scripts/corpus-check.mjs",
+    "corpus:refresh": "node scripts/corpus-refresh.mjs",
+    "ratchet": "node scripts/ratchet.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.13",
+    "@types/node": "24.13.4",
+    "@vitest/coverage-v8": "5.0.1",
+    "tsup": "8.5.1",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  }
+}
