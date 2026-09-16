@@ -185,7 +185,7 @@ function numberOf(value: Value): number {
   return value instanceof Float ? value.valueOf() : (value as number);
 }
 
-function isNumeric(value: Value): boolean {
+function isNumeric(value: Value): value is number | Float {
   return typeof value === "number" || value instanceof Float;
 }
 
@@ -422,6 +422,178 @@ export function compareValues(operator: ComparisonOperator, left: Value, right: 
 }
 
 // ---------------------------------------------------------------------------
+// Arithmetic
+// ---------------------------------------------------------------------------
+
+/**
+ * What an arithmetic rule answered: a value, or the statement that this pair
+ * of operands has no rule.
+ *
+ * The refusal carries nothing. Which operation asked, and which type it wanted,
+ * are the caller's to name - a rule knows the pair it was handed and not the
+ * opcode that handed it over.
+ */
+type Arithmetic = { readonly ok: true; readonly value: Value } | { readonly ok: false };
+
+const NO_RULE: Arithmetic = { ok: false };
+
+const SECONDS_PER_DAY = 86400;
+const MICROS_PER_SECOND = 1000000;
+
+/** Whether a value is the integer member of the domain rather than the float. */
+function isIntegral(value: Value): value is number {
+  return typeof value === "number";
+}
+
+/** Whether either operand is a float, which is what makes a result one. */
+function isFloating(left: Value, right: Value): boolean {
+  return left instanceof Float || right instanceof Float;
+}
+
+/** A numeric result, a float exactly when one of the operands was a float. */
+function numericResult(magnitude: number, floating: boolean): Arithmetic {
+  return { ok: true, value: floating ? new Float(magnitude) : magnitude };
+}
+
+/**
+ * Writes a number as the text a concatenation splices in.
+ *
+ * An integer is its digits. A float keeps its point, so that the text still
+ * says which member of the domain the number was: a trailing `.0` is appended
+ * when the spelling carries neither a point nor an exponent, which is the same
+ * rule the corpus encoding writes a float by.
+ */
+function numberText(value: number | Float): string {
+  if (!(value instanceof Float)) return String(value);
+  const spelling = String(value.valueOf());
+  return POINT_OR_EXPONENT.test(spelling) ? spelling : `${spelling}.0`;
+}
+
+const POINT_OR_EXPONENT = /[.eE]/;
+
+/**
+ * `add`, the widest of the five.
+ *
+ * Numbers add. A string and a string, a string and a number, and a number and
+ * a string all concatenate, with the number written as text. Two lists join.
+ * A date or an instant with a duration is date arithmetic, which this build
+ * does not do yet and which therefore falls to the type check with everything
+ * else rather than answering a wrong value.
+ */
+function applyAdd(left: Value, right: Value): Arithmetic {
+  if (isNumeric(left) && isNumeric(right)) {
+    return numericResult(numberOf(left) + numberOf(right), isFloating(left, right));
+  }
+  if (typeof left === "string" && typeof right === "string") {
+    return { ok: true, value: left + right };
+  }
+  if (typeof left === "string" && isNumeric(right)) {
+    return { ok: true, value: left + numberText(right) };
+  }
+  if (isNumeric(left) && typeof right === "string") {
+    return { ok: true, value: numberText(left) + right };
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return { ok: true, value: [...left, ...right] };
+  }
+  return NO_RULE;
+}
+
+/**
+ * `subtract`, which is deliberately narrower than `add`: it never concatenates
+ * a string and never joins a list.
+ *
+ * Two dates answer a duration in whole days and two instants a duration in
+ * whole seconds. A mixed pair is the instant rule with the date read at
+ * midnight UTC, which is the same coercion a comparison makes. Neither result
+ * is normalized across units and neither is a calendar rule: a duration here
+ * carries the one part it was measured in.
+ */
+function applySubtract(left: Value, right: Value): Arithmetic {
+  if (isNumeric(left) && isNumeric(right)) {
+    return numericResult(numberOf(left) - numberOf(right), isFloating(left, right));
+  }
+  if (left instanceof PDate && right instanceof PDate) {
+    const days = (instantOf(left).seconds - instantOf(right).seconds) / SECONDS_PER_DAY;
+    return { ok: true, value: new Duration({ days }) };
+  }
+  if (isChronological(left) && isChronological(right)) {
+    const after = instantOf(left);
+    const before = instantOf(right);
+    const elapsed =
+      after.seconds - before.seconds + (after.micros - before.micros) / MICROS_PER_SECOND;
+    return { ok: true, value: new Duration({ seconds: Math.trunc(elapsed) }) };
+  }
+  return NO_RULE;
+}
+
+/** `multiply`, which takes numbers and nothing else. */
+function applyMultiply(left: Value, right: Value): Arithmetic {
+  if (!isNumeric(left) || !isNumeric(right)) return NO_RULE;
+  return numericResult(numberOf(left) * numberOf(right), isFloating(left, right));
+}
+
+/** The three arithmetic opcodes whose whole answer is one rule over the pair. */
+type SimpleArithmetic = "add" | "subtract" | "multiply";
+
+/**
+ * The rule each of those three applies, and the type its refusal names.
+ *
+ * The wanted type is the reference's own wording for the opcode, and it is
+ * what a reader sees in the message. It is not what the corpus compares: a
+ * case pins the error's type and its reason, and the reason is the operation.
+ */
+const ARITHMETIC: Record<
+  SimpleArithmetic,
+  { readonly apply: (left: Value, right: Value) => Arithmetic; readonly wanted: string }
+> = {
+  add: { apply: applyAdd, wanted: "number or string" },
+  subtract: { apply: applySubtract, wanted: "number or date" },
+  multiply: { apply: applyMultiply, wanted: "number" },
+};
+
+/** Whether a value is zero, in either numeric member of the domain. */
+function isZero(value: Value): boolean {
+  if (value instanceof Float) return value.valueOf() === 0;
+  return isIntegral(value) && value === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Indexing
+// ---------------------------------------------------------------------------
+
+/**
+ * Reads one named member of a value, which never fails.
+ *
+ * A map answers the member it holds under that name, and the absence when it
+ * holds none. Anything else answers the absence too: a name is never a list
+ * index, and a target that is neither map nor list - the null value included -
+ * has no member to read. Membership is asked with `hasOwn` rather than by
+ * reading and testing, so a name every object inherits is a miss here rather
+ * than a function pulled off the prototype.
+ */
+function readMember(target: Value, name: string): Value {
+  if (!isPlainMap(target)) return Undefined;
+  if (!Object.hasOwn(target, name)) return Undefined;
+  const member = target[name];
+  return member === undefined ? Undefined : member;
+}
+
+/**
+ * Whether a value may index a map at all.
+ *
+ * The reference writes this as one clause over its atom type; the members of
+ * that clause this domain also has are the two booleans and the absence, and a
+ * string and an integer index a map as well. Everything else - a float, a
+ * list, a map, a date, an instant, a duration, the null value - is a key this
+ * opcode refuses rather than a key it misses on.
+ */
+function isMapKey(key: Value): boolean {
+  if (key === Undefined) return true;
+  return typeof key === "string" || isIntegral(key) || typeof key === "boolean";
+}
+
+// ---------------------------------------------------------------------------
 // The machine
 // ---------------------------------------------------------------------------
 
@@ -464,6 +636,26 @@ function typeMismatch(operation: string, wanted: string, got: Value, at: number)
     ok: false,
     error: new TypeMismatchError(operation, `${operation} expects a ${wanted}`, at),
     rejectedUndefined: got === Undefined,
+  };
+}
+
+/**
+ * The same refusal over a pair, where either operand may be the absence that
+ * an unbound load put there. Routing a binary opcode's refusal through here is
+ * what lets the machine rewrite it into an unbound-variable error, and an
+ * opcode that built its own error instead would silently opt out of that rule.
+ */
+function binaryTypeMismatch(
+  operation: string,
+  wanted: string,
+  left: Value,
+  right: Value,
+  at: number,
+): Step {
+  return {
+    ok: false,
+    error: new TypeMismatchError(operation, `${operation} expects a ${wanted}`, at),
+    rejectedUndefined: left === Undefined || right === Undefined,
   };
 }
 
@@ -574,6 +766,23 @@ class Machine {
         return this.conditionalJump(opcode, instruction[1] as number, at, false);
       case "jump_if_true_or_pop":
         return this.conditionalJump(opcode, instruction[1] as number, at, true);
+      case "add":
+      case "subtract":
+      case "multiply":
+        return this.arithmetic(opcode, at);
+      case "divide":
+        return this.divide(at);
+      case "modulo":
+        return this.modulo(at);
+      case "in":
+      case "contains":
+        return this.membership(opcode, at);
+      case "access":
+        return this.access(instruction[1] as string, at);
+      case "bracket_access":
+        return this.bracketAccess(at);
+      case "make_list":
+        return this.makeList(instruction[1] as number, at);
       case "call":
         return this.call(instruction[1] as string, instruction[2] as number, at);
       default:
@@ -644,6 +853,168 @@ class Machine {
     if (!falsy && !truthy) return typeMismatch(opcode, "boolean", top, at);
     if (truthy === jumpOnTrue) return { ok: true, next: at + offset };
     this.stack.pop();
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * The three arithmetic opcodes whose answer is one rule over the popped
+   * pair. Stack depth is checked first, so a hand-built list that promises
+   * two operands and pushed one answers insufficient operands rather than a
+   * type mismatch over whatever happened to be underneath.
+   */
+  private arithmetic(operation: SimpleArithmetic, at: number): Step {
+    if (this.stack.length < 2) return insufficientOperands(operation, at);
+    const right = this.stack.pop() as Value;
+    const left = this.stack.pop() as Value;
+    const rule = ARITHMETIC[operation];
+    const answered = rule.apply(left, right);
+    if (!answered.ok) return binaryTypeMismatch(operation, rule.wanted, left, right, at);
+    this.stack.push(answered.value);
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `divide`, whose zero check runs BEFORE its type check.
+   *
+   * A right operand of zero - the integer zero or the float zero alike - is
+   * division by zero whatever the left operand is, so a wrongly typed left
+   * operand beside a zero right one reports the zero. Two integers divide
+   * truncating toward zero; a float on either side makes it float division,
+   * and the result is a float even when it lands on a whole number.
+   */
+  private divide(at: number): Step {
+    if (this.stack.length < 2) return insufficientOperands("divide", at);
+    const right = this.stack.pop() as Value;
+    const left = this.stack.pop() as Value;
+    if (isZero(right)) {
+      return {
+        ok: false,
+        error: new EvaluationError("division_by_zero", "divide was given a zero divisor", at),
+      };
+    }
+    if (!isNumeric(left) || !isNumeric(right)) {
+      return binaryTypeMismatch("divide", "number", left, right, at);
+    }
+    if (isIntegral(left) && isIntegral(right)) {
+      this.stack.push(Math.trunc(left / right));
+      return { ok: true, next: at + 1 };
+    }
+    this.stack.push(new Float(numberOf(left) / numberOf(right)));
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `modulo`, which is integers only and is the inverse of `divide` at the
+   * float zero.
+   *
+   * The integer zero is checked before the type check, as it is at `divide`.
+   * There is no float-zero clause at all: a float right operand is refused on
+   * its type, so a right operand of float zero is a type mismatch rather than
+   * the modulo-by-zero error. That asymmetry is the reference's and it is
+   * pinned by a case of its own.
+   */
+  private modulo(at: number): Step {
+    if (this.stack.length < 2) return insufficientOperands("modulo", at);
+    const right = this.stack.pop() as Value;
+    const left = this.stack.pop() as Value;
+    if (isIntegral(right) && right === 0) {
+      return {
+        ok: false,
+        error: new EvaluationError("modulo_by_zero", "modulo was given a zero divisor", at),
+      };
+    }
+    if (!isIntegral(left) || !isIntegral(right)) {
+      return binaryTypeMismatch("modulo", "number", left, right, at);
+    }
+    this.stack.push(left % right);
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `in` and `contains`, which are one predicate with the list on opposite
+   * sides: `in` wants it on the right and `contains` on the left.
+   *
+   * An absence on either side propagates, and that check runs before the list
+   * check, so an absent list answers an absence rather than a type mismatch.
+   * Membership itself is type-matched equality, under which the absence is
+   * equal to nothing at all while the null value is equal to itself - which is
+   * why a null in a list is found and an absence never is.
+   */
+  private membership(operation: "in" | "contains", at: number): Step {
+    if (this.stack.length < 2) return insufficientOperands(operation, at);
+    const right = this.stack.pop() as Value;
+    const left = this.stack.pop() as Value;
+    if (left === Undefined || right === Undefined) {
+      this.stack.push(Undefined);
+      return { ok: true, next: at + 1 };
+    }
+    const list = operation === "in" ? right : left;
+    if (!Array.isArray(list)) return typeMismatch(operation, "list", list, at);
+    const sought = operation === "in" ? left : right;
+    this.stack.push(list.some((item) => valuesEqual(item, sought)));
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `access`, which reads the property its operand names off the popped
+   * target and has no error path but an empty stack. A miss is the absence,
+   * and so is a target with no members to read.
+   */
+  private access(property: string, at: number): Step {
+    if (this.stack.length < 1) return insufficientOperands("access", at);
+    const target = this.stack.pop() as Value;
+    this.stack.push(readMember(target, property));
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `bracket_access`, which pops the key and then the target beneath it.
+   *
+   * A list takes a non-negative integer and nothing else: an index past the
+   * end or below zero misses and answers the absence, while a key of any other
+   * type - a string, a boolean, an absence, a float - is a type mismatch. A
+   * map takes a wider set of key types, and a key it does not hold is an
+   * ordinary miss; a key outside that set is a type mismatch. A target that is
+   * neither map nor list answers the absence whatever the key, which is why
+   * the target is dispatched on before the key is judged.
+   *
+   * Only a string can index a map here. The wider key types are accepted
+   * rather than refused, and they miss, because this domain's maps carry
+   * string keys only - the reference's do too, and its own lookup of an
+   * integer key against a string-keyed map is the same miss.
+   */
+  private bracketAccess(at: number): Step {
+    if (this.stack.length < 2) return insufficientOperands("bracket_access", at);
+    const key = this.stack.pop() as Value;
+    const target = this.stack.pop() as Value;
+    if (Array.isArray(target)) {
+      if (!isIntegral(key)) return typeMismatch("bracket_access", "integer", key, at);
+      const member = key >= 0 && key < target.length ? target[key] : undefined;
+      this.stack.push(member === undefined ? Undefined : member);
+      return { ok: true, next: at + 1 };
+    }
+    if (isPlainMap(target)) {
+      if (!isMapKey(key)) return typeMismatch("bracket_access", "string", key, at);
+      this.stack.push(typeof key === "string" ? readMember(target, key) : Undefined);
+      return { ok: true, next: at + 1 };
+    }
+    this.stack.push(Undefined);
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `make_list`, which pops its operand's count of values and pushes them as
+   * one list in source order.
+   *
+   * Nothing is reversed: the stack holds the elements deepest first, which is
+   * the order they were pushed and therefore source order already, and taking
+   * a run off the end of the stack preserves it. A count of zero pushes the
+   * empty list without touching the stack, and a count the stack cannot
+   * satisfy is insufficient operands.
+   */
+  private makeList(count: number, at: number): Step {
+    if (this.stack.length < count) return insufficientOperands("make_list", at);
+    this.stack.push(this.stack.splice(this.stack.length - count, count));
     return { ok: true, next: at + 1 };
   }
 
