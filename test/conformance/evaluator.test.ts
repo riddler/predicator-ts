@@ -6,11 +6,10 @@
 // conformance lives, checked by its own suite beside this one. A pass count
 // asserted here would be a second, weaker claim in a place nothing reconciles.
 //
-// The evaluator is not implemented yet, so the honest report is a fail for
-// every case attempted, each naming the gap. That is the never-skip rule doing
-// its job rather than a defect in this suite: an early state is supposed to
-// look like this, and a tier is a complete target on its own, so the first
-// green here will be a tier at a time.
+// A tier is a complete target on its own, so this suite asserts the property
+// that makes a tier finished: every case the run attempted is reported, and
+// none of them is a fail. It still asserts no number - the number is the
+// corpus's to move and the registry's to record.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -36,14 +35,16 @@ describe("the evaluator surface at the first tier", () => {
   });
 
   // Never-skip, stated as the property rather than as a number: every case the
-  // run attempted is reported, and reported as a fail naming the gap, because
-  // nothing in this package evaluates anything yet.
-  it("reports every attempted case as a fail naming the gap", () => {
+  // run attempted is reported, and this tier is complete, so none of them is a
+  // fail. A failing case is named with the difference it found, so a red run
+  // here says what diverged rather than how many cases did.
+  //
+  // Sabotage: negating the answer of the ordering operators in the comparison
+  // opcode turns this red, naming the cases that diverged. It was run and
+  // reverted.
+  it("reports every attempted case, and every one of them passes", () => {
     expect(report.results.length).toBeGreaterThan(0);
-    for (const result of report.results) {
-      expect(result.result).toBe("fail");
-      expect(result.reason).toBe("evaluator not implemented");
-    }
+    expect(report.results.filter((result) => result.result !== "pass")).toEqual([]);
   });
 
   // Absent is not skipped, and the two absences are different. A retired case

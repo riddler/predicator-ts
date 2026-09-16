@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { type DecodeReason, decodeTagged, type EncodeReason, encodeTagged } from "../src/tagged.js";
+import type { EvaluateOptions } from "../src/index.js";
+import {
+  type DecodeReason,
+  decodeTagged,
+  type EncodeReason,
+  encodeTagged,
+  evaluateTagged,
+  type TaggedEvaluateOptions,
+} from "../src/tagged.js";
 import {
   Duration,
   Float,
@@ -517,5 +525,69 @@ describe("every entrance enforces the domain, and every exit emits only the doma
     if (fromCodec.ok || fromNormalizer.ok) return;
     expect(fromCodec.reason).toBe(fromNormalizer.reason);
     expect(fromCodec.reason).toBe("unsupported_host_value");
+  });
+});
+
+describe("evaluateTagged", () => {
+  // Sabotage: projecting plainly even when the encoding was asked for turns
+  // the second assertion red. It was run and reverted.
+  it("answers the plain projection by default and the encoding on request", () => {
+    const program = [["lit", 1]];
+    expect(evaluateTagged(program)).toEqual({ ok: true, value: 1 });
+    expect(evaluateTagged(program, {}, { tagged: true })).toEqual({ ok: true, value: "1" });
+  });
+
+  // The distinction the plain projection cannot carry: an absence and a null
+  // both project to something JSON reads back as null, and the encoding keeps
+  // them apart.
+  it("keeps an absence and a null apart in the encoding", () => {
+    expect(evaluateTagged([["lit", null]], {}, { tagged: true })).toEqual({
+      ok: true,
+      value: "null",
+    });
+    const absence = evaluateTagged(
+      [["load", "nickname"]],
+      { nickname: undefined },
+      { tagged: true },
+    );
+    expect(absence).toEqual({ ok: true, value: '{"$type":"undefined"}' });
+  });
+
+  it("keeps an integral float distinguishable, which the projection does not", () => {
+    const program = [["load", "amount"]];
+    expect(evaluateTagged(program, { amount: float(1) }, { tagged: true })).toEqual({
+      ok: true,
+      value: "1.0",
+    });
+    expect(evaluateTagged(program, { amount: float(1) })).toEqual({ ok: true, value: 1 });
+  });
+
+  // Sabotage: letting the encoder's refusal through as a successful result
+  // turns this red. It was run and reverted.
+  it("answers a result the encoding cannot carry as a failure", () => {
+    const outcome = evaluateTagged(
+      [["load", "receipt"]],
+      { receipt: { $type: "date" } },
+      {
+        tagged: true,
+      },
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("EvaluationError");
+    expect(outcome.error.reason).toBe("reserved_map_key");
+  });
+
+  it("passes an evaluation's own failure through unchanged", () => {
+    const outcome = evaluateTagged([["load", "cohort"]], {}, { tagged: true });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("UndefinedVariableError");
+  });
+
+  it("takes an options object written for the main entry point too", () => {
+    const shared: EvaluateOptions = { onUnbound: "error" };
+    const options: TaggedEvaluateOptions = { ...shared, tagged: true };
+    expect(evaluateTagged([["load", "cohort"]], {}, options).ok).toBe(false);
   });
 });
