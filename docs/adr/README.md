@@ -3,6 +3,7 @@
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-a-conformant-sibling.md) | A conformant sibling, not a second reference implementation | proposed |
+| [0002](0002-the-value-domain-and-the-host-boundary.md) | The value domain in TypeScript, and the host boundary | proposed |
 | [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision,
