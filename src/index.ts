@@ -10,3 +10,14 @@
 export function isaVersion(): number {
   return 6;
 }
+
+/**
+ * The value domain and the host boundary.
+ *
+ * A host writing a context reaches for `float()` and the absence singleton,
+ * and a host reading a plain result back holds a date, a datetime or a
+ * duration as the classes this package defines, so the domain is part of the
+ * main entry point's surface. The corpus's tagged encoding is not: it lives on
+ * the `./tagged` subpath, and this entry point neither emits nor requires it.
+ */
+export * from "./values.js";
