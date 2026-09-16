@@ -10,6 +10,11 @@
 // that makes a tier finished: every case the run attempted is reported, and
 // none of them is a fail. It still asserts no number - the number is the
 // corpus's to move and the registry's to record.
+//
+// The run covers every tier this build implements, cumulatively, and the one
+// constant below is where that reaches. Raising it is what a change adding the
+// next tier's opcodes does, and the suite then holds the same property over the
+// wider set rather than gaining a case of its own per opcode.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -18,9 +23,10 @@ import { isaVersion } from "../../src/index.js";
 import { decodeCase, reportProblems, runEvaluator, writeReport } from "./runner.js";
 
 const manifest = loadManifest();
-const report = runEvaluator(1);
+const TIER = 3;
+const report = runEvaluator(TIER);
 
-describe("the evaluator surface at the first tier", () => {
+describe("the evaluator surface at the tier this build claims", () => {
   // Sabotage: giving a result an unknown key, or dropping the reason from a
   // failing result, turns this red - both were run against this suite.
   it("writes a report the corpus's report schema accepts", () => {
@@ -31,7 +37,7 @@ describe("the evaluator surface at the first tier", () => {
     expect(report.corpus_hash).toBe(manifest.corpus_hash);
     expect(report.isa_version).toBe(isaVersion());
     expect(report.surface).toBe("evaluator");
-    expect(report.tier).toBe(1);
+    expect(report.tier).toBe(TIER);
   });
 
   // Never-skip, stated as the property rather than as a number: every case the
@@ -51,7 +57,7 @@ describe("the evaluator surface at the first tier", () => {
   // is absent from a run claiming the corpus's own version; a null-source case
   // is absent from the COMPILER surface only, so the evaluator still runs it.
   it("leaves out the cases the claimed version retired, and no others", () => {
-    const cases = loadCases(1, manifest);
+    const cases = loadCases(TIER, manifest);
     const reported = new Set(report.results.map((result) => result.id));
     const retired = cases.filter((item) => item.features.includes("retired"));
     expect(retired.length).toBeGreaterThan(0);
@@ -63,7 +69,7 @@ describe("the evaluator surface at the first tier", () => {
   });
 
   it("runs the null-source cases, which are absent only from the compiler", () => {
-    const cases = loadCases(1, manifest);
+    const cases = loadCases(TIER, manifest);
     const evaluatorOnly = cases.filter(
       (item) => item.source === null && !item.features.includes("retired"),
     );

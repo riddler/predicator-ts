@@ -256,8 +256,14 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
     expect(outcome.error.message).toContain("3");
   });
 
+  // The example is an opcode the table holds and this build does not execute,
+  // which is a moving target by design: the surface grows tier by tier, so the
+  // opcode standing in here is replaced by the change that implements it. What
+  // is being asserted is the rule rather than the opcode - a row the table has
+  // and the dispatch does not reaches the same catch-all as a name nobody has
+  // heard of, instead of a third answer that would read as a gap being hidden.
   it("reads an opcode this build does not yet run as an unknown instruction", () => {
-    const outcome = evaluateToValue([["lit", 1], ["lit", 2], ["add"]]);
+    const outcome = evaluateToValue([["object_new"]]);
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.reason).toBe("unknown_instruction");
@@ -477,5 +483,362 @@ describe("unary minus", () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.reason).toBe("unary_minus");
+  });
+});
+
+describe("arithmetic", () => {
+  // Sabotage: dividing two integers without truncating turns the first
+  // assertion red, because the quotient then arrives as a fraction. It was run
+  // and reverted.
+  it("divides two integers truncating toward zero, and any float pair as floats", () => {
+    expect(evaluateToValue([["lit", 7], ["lit", 2], ["divide"]])).toEqual({ ok: true, value: 3 });
+    expect(evaluateToValue([["lit", -7], ["lit", 2], ["divide"]])).toEqual({ ok: true, value: -3 });
+    expect(evaluateToValue([["lit", 7], ["lit", float(2)], ["divide"]])).toEqual({
+      ok: true,
+      value: new Float(3.5),
+    });
+    expect(evaluateToValue([["lit", float(8)], ["lit", 2], ["divide"]])).toEqual({
+      ok: true,
+      value: new Float(4),
+    });
+  });
+
+  // Sabotage: judging the operand types before the zero check turns this red,
+  // because the wrongly typed left operand then wins the report. It was run
+  // and reverted.
+  it("reports a zero divisor before it judges either operand's type", () => {
+    for (const divisor of [0, float(0)]) {
+      const outcome = evaluateToValue([["lit", true], ["lit", divisor], ["divide"]]);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.type).toBe("EvaluationError");
+      expect(outcome.error.reason).toBe("division_by_zero");
+    }
+  });
+
+  // Sabotage: giving modulo a float-zero clause of its own, so that a float
+  // zero answers the modulo-by-zero reason, turns the first assertions red. It
+  // was run and reverted.
+  it("refuses a float at modulo where divide would have taken it as a zero", () => {
+    const floatZero = evaluateToValue([["lit", 5], ["lit", float(0)], ["modulo"]]);
+    expect(floatZero.ok).toBe(false);
+    if (floatZero.ok) return;
+    expect(floatZero.error.type).toBe("TypeMismatchError");
+    expect(floatZero.error.reason).toBe("modulo");
+
+    const integerZero = evaluateToValue([["lit", true], ["lit", 0], ["modulo"]]);
+    expect(integerZero.ok).toBe(false);
+    if (integerZero.ok) return;
+    expect(integerZero.error.type).toBe("EvaluationError");
+    expect(integerZero.error.reason).toBe("modulo_by_zero");
+  });
+
+  it("takes the sign of the left operand at modulo", () => {
+    expect(evaluateToValue([["lit", -7], ["lit", 2], ["modulo"]])).toEqual({ ok: true, value: -1 });
+  });
+
+  // Sabotage: writing a float into a concatenation with the language's own
+  // default spelling, which drops the point from a whole number, turns the
+  // second assertion red. It was run and reverted.
+  it("writes a number into a concatenation keeping which member it was", () => {
+    expect(evaluateToValue([["lit", "limit: "], ["lit", 5], ["add"]])).toEqual({
+      ok: true,
+      value: "limit: 5",
+    });
+    expect(evaluateToValue([["lit", "limit: "], ["lit", float(5)], ["add"]])).toEqual({
+      ok: true,
+      value: "limit: 5.0",
+    });
+    expect(evaluateToValue([["lit", float(2.5)], ["lit", " over"], ["add"]])).toEqual({
+      ok: true,
+      value: "2.5 over",
+    });
+  });
+
+  it("keeps a sum an integer only when both operands were integers", () => {
+    expect(evaluateToValue([["lit", 2], ["lit", 3], ["add"]])).toEqual({ ok: true, value: 5 });
+    expect(evaluateToValue([["lit", 2], ["lit", float(3)], ["add"]])).toEqual({
+      ok: true,
+      value: new Float(5),
+    });
+  });
+
+  // Sabotage: joining the two lists in place, which appends to the left
+  // operand rather than building a third list, turns the last assertion red
+  // because the literal in the program is then changed. It was run and
+  // reverted.
+  it("joins two lists without changing either of them", () => {
+    const left = [1, 2];
+    const right = [3];
+    expect(evaluateToValue([["lit", left], ["lit", right], ["add"]])).toEqual({
+      ok: true,
+      value: [1, 2, 3],
+    });
+    expect(left).toEqual([1, 2]);
+    expect(right).toEqual([3]);
+  });
+
+  // Sabotage: measuring two dates in seconds rather than in days turns the
+  // first assertion red. It was run and reverted.
+  it("measures two dates in days and two instants in seconds", () => {
+    expect(
+      evaluateToValue([
+        ["lit", new PDate(2024, 1, 15)],
+        ["lit", new PDate(2024, 1, 10)],
+        ["subtract"],
+      ]),
+    ).toEqual({ ok: true, value: new Duration({ days: 5 }) });
+    expect(
+      evaluateToValue([
+        ["lit", new PDateTime(7200, 0)],
+        ["lit", new PDateTime(0, 0)],
+        ["subtract"],
+      ]),
+    ).toEqual({ ok: true, value: new Duration({ seconds: 7200 }) });
+  });
+
+  // Sabotage: dropping the mixed clause, so that a date beside an instant
+  // falls to the type check, turns this red. It was run and reverted.
+  it("reads a date at midnight UTC when the other operand is an instant", () => {
+    const midnight = Date.UTC(2024, 0, 15) / 1000;
+    expect(
+      evaluateToValue([
+        ["lit", new PDateTime(midnight + 3600, 0)],
+        ["lit", new PDate(2024, 1, 15)],
+        ["subtract"],
+      ]),
+    ).toEqual({ ok: true, value: new Duration({ seconds: 3600 }) });
+  });
+
+  // The corpus reaches divide's type check only through a zero divisor, where
+  // the zero wins, so the refusal of a non-zero divisor beside a wrongly typed
+  // operand is pinned here instead.
+  //
+  // Sabotage: answering a quotient for any pair rather than refusing one that
+  // is not two numbers turns this red. It was run and reverted.
+  it("refuses a wrongly typed operand at divide when the divisor is not zero", () => {
+    const outcome = evaluateToValue([["lit", true], ["lit", 2], ["divide"]]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("TypeMismatchError");
+    expect(outcome.error.reason).toBe("divide");
+  });
+
+  it("never concatenates at subtract, and takes numbers only at multiply", () => {
+    const strings = evaluateToValue([["lit", "ab"], ["lit", "a"], ["subtract"]]);
+    expect(strings.ok).toBe(false);
+    if (strings.ok) return;
+    expect(strings.error.reason).toBe("subtract");
+    const mixed = evaluateToValue([["lit", 5], ["lit", true], ["multiply"]]);
+    expect(mixed.ok).toBe(false);
+    if (mixed.ok) return;
+    expect(mixed.error.reason).toBe("multiply");
+  });
+
+  it("answers insufficient operands when the stack holds fewer than two", () => {
+    const outcome = evaluateToValue([["lit", 1], ["add"]]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("EvaluationError");
+    expect(outcome.error.reason).toBe("insufficient_operands");
+  });
+
+  // The absence is refused here rather than propagated, and the refusal goes
+  // through the helper the machine rewrites, so an absence an unbound load put
+  // on the stack is reported as that unbound root instead of as a type
+  // mismatch. An absence a host bound deliberately stays a type mismatch,
+  // which is the distinction the two assertions below are separated to hold.
+  //
+  // Sabotage: building the type mismatch directly rather than through that
+  // helper turns the second half red, leaving a type mismatch where an unbound
+  // variable belongs. It was run and reverted.
+  it("refuses an absence, and names the unbound root when a load caused it", () => {
+    const bound = evaluateToValue([["load", "spend"], ["lit", 1], ["add"]], { spend: undefined });
+    expect(bound.ok).toBe(false);
+    if (bound.ok) return;
+    expect(bound.error.type).toBe("TypeMismatchError");
+    expect(bound.error.reason).toBe("add");
+
+    const unbound = evaluateToValue([["load", "spend"], ["lit", 1], ["add"]]);
+    expect(unbound.ok).toBe(false);
+    if (unbound.ok) return;
+    expect(unbound.error.type).toBe("UndefinedVariableError");
+    expect(unbound.error.message).toContain("spend");
+  });
+});
+
+describe("indexing", () => {
+  // Sabotage: reading the property straight off the target without first
+  // asking whether the target holds it turns this red, because a name every
+  // object inherits then answers a function instead of missing. It was run and
+  // reverted.
+  it("misses a name the target only inherits", () => {
+    expect(
+      evaluateToValue(
+        [
+          ["load", "card"],
+          ["access", "toString"],
+        ],
+        { card: {} },
+      ),
+    ).toEqual({
+      ok: true,
+      value: Undefined,
+    });
+    expect(
+      evaluateToValue([["load", "card"], ["lit", "constructor"], ["bracket_access"]], { card: {} }),
+    ).toEqual({ ok: true, value: Undefined });
+  });
+
+  it("reads a member bound to the null value as that value rather than as a miss", () => {
+    expect(
+      evaluateToValue(
+        [
+          ["load", "card"],
+          ["access", "brand"],
+        ],
+        { card: { brand: null } },
+      ),
+    ).toEqual({ ok: true, value: null });
+  });
+
+  // Sabotage: refusing an unindexable key at such a target, rather than
+  // answering the absence, turns the first assertion red - the target is
+  // dispatched on before the key is judged, and reversing that order makes a
+  // target with nothing to index report the key instead. It was run and
+  // reverted.
+  it("answers the absence for a target that is neither map nor list", () => {
+    expect(evaluateToValue([["lit", null], ["lit", float(1.5)], ["bracket_access"]])).toEqual({
+      ok: true,
+      value: Undefined,
+    });
+    expect(
+      evaluateToValue([
+        ["lit", 5],
+        ["access", "brand"],
+      ]),
+    ).toEqual({
+      ok: true,
+      value: Undefined,
+    });
+  });
+
+  // Sabotage: admitting every key type at a map turns the second half red,
+  // answering a miss where the refusal belongs. It was run and reverted.
+  it("takes a wider set of keys at a map than a list does, and misses on them", () => {
+    const context = { card: { brand: "visa" } };
+    expect(evaluateToValue([["load", "card"], ["lit", 1], ["bracket_access"]], context)).toEqual({
+      ok: true,
+      value: Undefined,
+    });
+    expect(evaluateToValue([["load", "card"], ["lit", true], ["bracket_access"]], context)).toEqual(
+      { ok: true, value: Undefined },
+    );
+
+    const nullKey = evaluateToValue([["load", "card"], ["lit", null], ["bracket_access"]], context);
+    expect(nullKey.ok).toBe(false);
+    if (nullKey.ok) return;
+    expect(nullKey.error.type).toBe("TypeMismatchError");
+    expect(nullKey.error.reason).toBe("bracket_access");
+  });
+
+  // The absence splits between the two targets: it is one of the key types a
+  // map admits, so it misses there, while a list takes an integer index and
+  // nothing else, so it is refused.
+  //
+  // Sabotage: refusing the absence at the map branch as well turns the first
+  // assertion red. It was run and reverted.
+  it("splits the absence between a map key and a list index", () => {
+    const context = { card: {}, charges: [1, 2] };
+    const onMap = evaluateToValue(
+      [["load", "card"], ["load", "card"], ["access", "missing"], ["bracket_access"]],
+      context,
+    );
+    expect(onMap).toEqual({ ok: true, value: Undefined });
+
+    const onList = evaluateToValue(
+      [["load", "charges"], ["load", "card"], ["access", "missing"], ["bracket_access"]],
+      context,
+    );
+    expect(onList.ok).toBe(false);
+    if (onList.ok) return;
+    expect(onList.error.type).toBe("TypeMismatchError");
+    expect(onList.error.reason).toBe("bracket_access");
+  });
+
+  // Section 5 rules nothing about an absence inside a list this opcode builds,
+  // and the ordinary reading is that there is nothing to rule: the opcode
+  // moves values and the absence is a member of this domain like any other. It
+  // is pinned here so that the ordinary reading is on the record rather than
+  // an accident, and so that a rule arriving later from the reference shows up
+  // as a failing test rather than as a silent change.
+  //
+  // Sabotage: dropping an absence while the list is built turns this red on
+  // the length. It was run and reverted.
+  it("carries an absence into a built list as one of its elements", () => {
+    expect(
+      evaluateToValue(
+        [
+          ["load", "card"],
+          ["access", "missing"],
+          ["load", "limit"],
+          ["make_list", 2],
+        ],
+        { card: {}, limit: 5 },
+      ),
+    ).toEqual({ ok: true, value: [Undefined, 5] });
+  });
+
+  it("answers insufficient operands when the stack cannot fill a list", () => {
+    const outcome = evaluateToValue([
+      ["lit", 1],
+      ["make_list", 2],
+    ]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("insufficient_operands");
+  });
+
+  it("answers insufficient operands when nothing is on the stack to index", () => {
+    const outcome = evaluateToValue([["access", "brand"]]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("insufficient_operands");
+  });
+
+  // Sabotage: asking for the list operand before checking for an absence turns
+  // both assertions red, answering a type mismatch where an absence belongs.
+  // It was run and reverted.
+  it("propagates an absence at membership before it asks for a list", () => {
+    const context = { card: {} };
+    expect(
+      evaluateToValue([["lit", 1], ["load", "card"], ["access", "missing"], ["in"]], context),
+    ).toEqual({ ok: true, value: Undefined });
+    expect(
+      evaluateToValue([["load", "card"], ["access", "missing"], ["lit", 1], ["contains"]], context),
+    ).toEqual({ ok: true, value: Undefined });
+  });
+
+  it("names each membership opcode's own operand as the one that must be a list", () => {
+    const wrongRight = evaluateToValue([["lit", 1], ["lit", "no"], ["in"]]);
+    expect(wrongRight.ok).toBe(false);
+    if (wrongRight.ok) return;
+    expect(wrongRight.error.reason).toBe("in");
+
+    const wrongLeft = evaluateToValue([["lit", "no"], ["lit", 1], ["contains"]]);
+    expect(wrongLeft.ok).toBe(false);
+    if (wrongLeft.ok) return;
+    expect(wrongLeft.error.reason).toBe("contains");
+  });
+
+  it("treats the null value as a value at membership", () => {
+    expect(evaluateToValue([["lit", null], ["lit", [null]], ["in"]])).toEqual({
+      ok: true,
+      value: true,
+    });
+    expect(evaluateToValue([["lit", [1]], ["lit", 2], ["contains"]])).toEqual({
+      ok: true,
+      value: false,
+    });
   });
 });
