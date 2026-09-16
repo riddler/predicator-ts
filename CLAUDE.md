@@ -162,9 +162,13 @@ before committing.
 - The engine-neutrality stage (`pnpm run neutrality`, `scripts/engine-neutrality.mjs`)
   is part of the full gate and not of the inner loop. It is the mechanical form
   of the four `src/` rules under Conventions below, and it is deliberately
-  redundant with `tsc` and Biome where those already refuse something: a stage
-  that states the whole rule survives a tsconfig or lint-config change that
-  quietly drops half of it.
+  redundant with `tsc` and Biome on the two things those already refuse -
+  `window`/`document`, which fail to typecheck because the `dom` lib is absent,
+  and a bare `eval()`, which is a Biome error. A stage that states the whole
+  rule survives a tsconfig or lint-config change that quietly drops half of it.
+  Nothing else in the gate backstops these rules. In particular Biome's own
+  builtin-import rule is a **warning**, so it does not fail the lint stage and
+  is not a check to lean on.
 - A change touching no TypeScript code has no gate to run and may commit on
   review of the diff alone - the authority table above says the same. The
   exception is any path the manifest lists under `gate.also_gated_paths`:
@@ -178,29 +182,51 @@ before committing.
   and never a bare `null` that loses why. Throwing is reserved for a violated
   internal invariant, which is a bug in this package and not an outcome a
   caller handles. Never catch-to-default at a leaf.
-- **No `eval`, no `new Function`.** The whole point of an embedded expression
-  language is that authoring a condition is not authoring code. A compiler or
-  evaluator that reaches for either has given that away, and both are
-  unavailable on a locked-down JavaScript engine anyway.
-- **No `node:*` import and no DOM under `src/`.** The package runs on a server
+- **No `eval`, no `new Function`, and no alias of either.** The whole point of
+  an embedded expression language is that authoring a condition is not
+  authoring code. A compiler or evaluator that reaches for either has given
+  that away, and both are unavailable on a locked-down JavaScript engine
+  anyway. The rule covers the ways round it as well as the direct call:
+  assigning `eval` or `Function` to another name, the `(0, eval)` indirect
+  call, reaching either through `globalThis`, and getting at the `Function`
+  constructor with `.constructor(...)`.
+- **No Node built-in and no DOM under `src/`.** The package runs on a server
   runtime, in a browser, and on React Native's engine. A Node built-in or a
-  `window`/`document` reference under `src/` breaks two of the three. Test
-  code and `scripts/` may use them freely.
-- **No `Intl` under `src/`.** It is absent or stubbed on some JavaScript
-  engines and its behavior varies by build, so a comparison that reaches for it
+  `window`/`document` reference under `src/` breaks two of the three. The Node
+  half covers the built-in **globals** as well as the imports - `process.env`
+  and `Buffer.from` break a constrained engine exactly as an import does - and
+  the import half covers every specifier form: `node:fs`, bare `fs`, and the
+  subpaths such as `fs/promises`. Test code and `scripts/` may use all of it
+  freely.
+- **Nothing locale-sensitive under `src/`.** Locale data is absent, stubbed or
+  version-dependent across JavaScript engines, so anything that consults it
   would decide differently on two runtimes running the same instruction list.
-  Formatting for a human is the host's job.
+  The hazard is wider than the `Intl` namespace and the realistic way in is not
+  formatting at all: `localeCompare` inside a comparison opcode silently makes
+  string ordering an engine property. So the rule is `Intl`, `localeCompare`,
+  and the `toLocale*` family alike. Formatting for a human is the host's job.
 - **`bigint` never.** The value space is the one the ISA and the corpus define;
   a numeric tower this package invents and its siblings do not is a conformance
   break wearing a precision argument.
-- **The four rules above are enforced, not merely stated.**
-  `scripts/engine-neutrality.mjs` checks every file under `src/` for exactly
-  them, runs as its own stage of the full gate (`pnpm run neutrality`), and is
-  the one place the patterns live - a reviewer runs the stage rather than
-  retyping a pattern. Each rule is anchored to syntax, so the words
-  *evaluator*, *documentation* and the like may appear freely in prose and
-  identifiers while the constructs themselves cannot. A finding is a hard stop:
-  it is answered by changing the code, never by narrowing the rule.
+- **The four rules above are checked mechanically, and this is exactly how far
+  that reaches.** `scripts/engine-neutrality.mjs` is the one place the patterns
+  live. It reads every TypeScript file under `src/` and runs as its own stage
+  of the full gate (`pnpm run neutrality`), so a reviewer runs the stage rather
+  than retyping a pattern from memory.
+  Every rule is anchored to syntax - a property access, an import specifier, a
+  call's open parenthesis, a type position - never to a bare word. That is what
+  lets *evaluator*, *documentation*, `Intl` and `bigint` appear freely in prose
+  and in identifiers, and it means a doc comment in shipped source can state
+  these rules without tripping them.
+  **What it cannot see**, because it reads text and does not follow values: a
+  reference captured into a variable and called later through that variable, a
+  constructor reached by computed member access (`host[key](source)`), a
+  function pulled out of a data structure, or anything arriving from a caller.
+  It catches the forms a developer actually writes, including the aliases named
+  above; the rest is what review and the ISA contract are for, and no claim
+  here should be read as more than that.
+  A finding is a hard stop: it is answered by changing the code, never by
+  narrowing the rule.
 - **Sabotage every new test that asserts `src/` behavior**: break the code it
   covers, confirm the test goes red, revert, and note the mutation in one line
   above the test.
