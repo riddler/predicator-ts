@@ -24,6 +24,14 @@
 // refuses and names what is missing. Entries above a claimed tier are legal and
 // stay checked; a registry with entries and no claims is valid and honest.
 //
+// THE CLAIMED VERSION IS THE PACKAGE'S, NEVER THE VENDORED CORPUS'S. The scope
+// of a claim must be the instruction-set version this package implements: that
+// is the version the runner filtered its case set by, so it is the version the
+// evidence covers. A caller that substitutes the corpus's version states a
+// different rule, and where the two numbers differ that rule can admit a claim
+// this one refuses. This script reads the package's version out of the reports,
+// which is where the run recorded it.
+//
 // The encoding is not decided here either: `scripts/lib/registry-encoding.mjs`
 // is the one implementation of it, and the registry check re-encodes through
 // the same module and compares bytes.
@@ -112,9 +120,19 @@ const tierOf = new Map(cases.map((item) => [item.id, item.tier]));
 // escape rather than as the byte itself: a raw control byte in the source
 // makes the file binary to git and to a text search, which hides it from a
 // diff and from any scan run over one.
+//
+// Each report also records the instruction-set version the package claimed in
+// the run that produced it, and that is what scopes a claim below.
 const candidates = new Map();
+const claimedVersions = new Set();
 for (const path of reportPaths(requestedReports)) {
   const report = readJson(path, "a report");
+  if (!Number.isInteger(report.isa_version)) {
+    die(`${path} records no integer isa_version`, [
+      "A report says which instruction-set version the package claimed, and a claim is scoped by it.",
+    ]);
+  }
+  claimedVersions.add(report.isa_version);
   if (report.corpus_hash !== manifest.corpus_hash) {
     die(
       `${path} was run against ${report.corpus_hash}, and the vendored manifest pins ${manifest.corpus_hash}`,
@@ -164,13 +182,23 @@ const entries = [...merged.values()];
 const claims = new Map(registry.claims.map((claim) => [claim.surface, claim]));
 for (const claim of assertedClaims) claims.set(claim.surface, claim);
 
+// Reports disagreeing here cannot both describe one build of the package, so
+// there is no one claimed version for the write to be scoped by.
+if (claimedVersions.size > 1) {
+  die("the reports disagree about the instruction-set version this package claims", [
+    [...claimedVersions].sort((left, right) => left - right).join(", "),
+    "A report records the version claimed by the build that produced it. Re-run the suite.",
+  ]);
+}
+const [claimedVersion] = claimedVersions;
+
 const entryKeys = new Set(merged.keys());
 const unsupported = [];
 for (const claim of claims.values()) {
   const required = runnableCases(
     surfaceCaseSet(cases, claim.surface).filter((item) => item.tier <= claim.tier),
     claim.surface,
-    manifest.isa_version,
+    claimedVersion,
     manifest.isa_version,
   );
   for (const item of required) {
