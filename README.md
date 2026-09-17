@@ -153,6 +153,18 @@ arm carries an error type the corpus's cases match on - `EvaluationError`,
 `TypeMismatchError` or `UndefinedVariableError` - with a `reason` token those
 cases match on too and a `message` they do not.
 
+The shape of the context object is the exception, and it is the host's own
+graph rather than anything in the expression. `evaluate` normalizes the whole
+context before it runs a program, walking it recursively with no cycle guard
+and no depth guard, so a context carrying a cycle anywhere in it - any object
+graph with a back-reference - raises `RangeError` out of `evaluate` instead of
+answering a result, whether or not the program loads the root it sits under. A
+context nested deeply enough to exhaust the call stack raises the same way. The
+cycle is deterministic; the depth is not, because how deep is deep enough
+varies with the host's stack and with what is already on it - the same input
+can be normalized in one program and exhaust the stack in another. A host that
+builds a context out of objects it did not shape itself should wrap the call.
+
 ```ts
 import { evaluate } from "@riddler/predicator";
 
@@ -357,9 +369,19 @@ if (!signedUpAt.ok || signedUpAt.value !== '{"$type":"datetime","value":"2026-03
 ```
 
 `decodeTagged` and `encodeTagged` are the codec itself, for a host that
-persists a value rather than evaluating one. Both answer a result carrying a
-reason rather than throwing, and a decode's failing arm also carries the offset
-in the text it went wrong at.
+persists a value rather than evaluating one. Every failure the codec names a
+reason for is answered as the failing arm of a result rather than thrown, and a
+decode's failing arm also carries the offset in the text it went wrong at. What
+falls outside that is the shape of the input rather than its content: both
+directions recurse over the structure with no cycle guard and no depth guard,
+so a cyclic host value handed to `encodeTagged`, and a text or a value nested
+deeply enough to exhaust the call stack handed to either, raise `RangeError`
+instead of answering a result. The cycle is deterministic; the depth is not -
+the same text can decode in one program and exhaust the stack in another. On
+the toolchain pinned here it took a few thousand levels of nesting, which is an
+observation and not a limit to design against. A host reading text back out of
+storage is reading input it did not write, and should wrap the call rather than
+rest on `ok` alone.
 
 The encoding is the corpus's apparatus rather than a published serialization
 format: predicator-ex's `conformance/README.md` specifies it, it is revised by
@@ -435,8 +457,12 @@ pnpm run gate:loop           # typecheck, lint, the suite
 pnpm run gate                # the full gate, which CI runs too
 ```
 
-`mise.toml` is the single source of truth for the toolchain, and CI reads the
-versions out of it rather than duplicating them.
+`mise.toml` carries the toolchain versions and CI reads them out of it with
+`sed` rather than duplicating them into the workflow. The pnpm version is the
+one exact version written in two places: `mise.toml` pins it for `mise install`
+and `package.json`'s `packageManager` pins it for corepack. Nothing checks that
+the two agree, so a bump has to move both. (`engines.node` in `package.json` is a floor
+for a consumer's runtime, not a second pin of the toolchain.)
 
 ## License
 
