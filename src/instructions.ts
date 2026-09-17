@@ -93,6 +93,7 @@ export type OperandShape =
   | "non_negative_integer"
   | "positive_integer"
   | "comparison_operator"
+  | "cast_type"
   | "duration_units";
 
 /** One operand: what it is called in the reference's table, and its shape. */
@@ -160,6 +161,30 @@ export const COMPARISON_OPERATORS = [
 
 /** One of the operators `compare` accepts. */
 export type ComparisonOperator = (typeof COMPARISON_OPERATORS)[number];
+
+/**
+ * The type names `cast` accepts, all of them: the scalar type names of section
+ * 3. Any other string is an unknown instruction rather than a bad operand,
+ * which is the first half of the obligation above applied to this opcode -
+ * section 5 gives `cast` no error of its own, so a name outside this list is
+ * kept away from the opcode by its shape and answers at the catch-all.
+ *
+ * `list` and `map` are not among them, and a cast to either is a malformed
+ * operand rather than a conversion that fails: a cast never serializes a
+ * collection.
+ */
+export const CAST_TYPE_NAMES = [
+  "integer",
+  "float",
+  "string",
+  "boolean",
+  "date",
+  "datetime",
+  "duration",
+] as const;
+
+/** One of the type names `cast` accepts. */
+export type CastType = (typeof CAST_TYPE_NAMES)[number];
 
 /**
  * The opcode table, in the reference's own row order.
@@ -443,7 +468,7 @@ export const OPCODE_TABLE: readonly OpcodeRow[] = [
   },
   {
     opcode: "cast",
-    operands: [{ name: "type", shape: "string" }],
+    operands: [{ name: "type", shape: "cast_type" }],
     pops: fixed(1),
     pushes: 1,
     isa: 4,
@@ -535,6 +560,13 @@ export function isComparisonOperator(candidate: Value): candidate is ComparisonO
   );
 }
 
+/** Whether a value is one of the type names `cast` accepts. */
+export function isCastType(candidate: Value): candidate is CastType {
+  return (
+    typeof candidate === "string" && (CAST_TYPE_NAMES as readonly string[]).includes(candidate)
+  );
+}
+
 /**
  * Whether an operand has the shape its opcode's row declares.
  *
@@ -554,6 +586,8 @@ export function matchesShape(operand: Value, shape: OperandShape): boolean {
       return typeof operand === "number" && Number.isSafeInteger(operand) && operand > 0;
     case "comparison_operator":
       return isComparisonOperator(operand);
+    case "cast_type":
+      return isCastType(operand);
     case "duration_units":
       // A list, and no more than that: the pairs inside it are judged by the
       // `duration` opcode, which has a named reason for a malformed one.

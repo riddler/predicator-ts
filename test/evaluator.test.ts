@@ -234,6 +234,7 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
     for (const program of [
       [["load", 5]],
       [["compare", "FOO"]],
+      [["cast", "octopus"]],
       [["jump_if_falsy_or_pop", 0]],
       [["make_list", -1]],
       [["lit"]],
@@ -256,22 +257,6 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
     if (outcome.ok) return;
     expect(outcome.error.reason).toBe("retired_opcode");
     expect(outcome.error.message).toContain("3");
-  });
-
-  // The example is an opcode the table holds and this build does not execute,
-  // which is a moving target by design: the surface grows tier by tier, so the
-  // opcode standing in here is replaced by the change that implements it. What
-  // is being asserted is the rule rather than the opcode - a row the table has
-  // and the dispatch does not reaches the same catch-all as a name nobody has
-  // heard of, instead of a third answer that would read as a gap being hidden.
-  it("reads an opcode this build does not yet run as an unknown instruction", () => {
-    const outcome = evaluateToValue([
-      ["lit", 1],
-      ["cast", "string"],
-    ]);
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) return;
-    expect(outcome.error.reason).toBe("unknown_instruction");
   });
 
   it("halts on a forward jump past the last instruction", () => {

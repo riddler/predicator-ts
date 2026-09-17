@@ -40,6 +40,7 @@
  * by adding the arm rather than by widening the catch-all.
  */
 
+import { castValue, numberText } from "./cast.js";
 import { civilFromDays, daysFromCivil } from "./civil.js";
 import {
   type Context,
@@ -63,6 +64,7 @@ import {
 } from "./errors.js";
 import { BUILTINS, perEvaluationBuiltins } from "./functions/index.js";
 import {
+  type CastType,
   type ComparisonOperator,
   type Instruction,
   isaVersion,
@@ -564,22 +566,6 @@ function numericResult(magnitude: number, floating: boolean): Arithmetic {
   if (!Number.isSafeInteger(magnitude)) return { ok: false, refusal: "integer_out_of_range" };
   return { ok: true, value: magnitude };
 }
-
-/**
- * Writes a number as the text a concatenation splices in.
- *
- * An integer is its digits. A float keeps its point, so that the text still
- * says which member of the domain the number was: a trailing `.0` is appended
- * when the spelling carries neither a point nor an exponent, which is the same
- * rule the corpus encoding writes a float by.
- */
-function numberText(value: number | Float): string {
-  if (!(value instanceof Float)) return String(value);
-  const spelling = String(value.valueOf());
-  return POINT_OR_EXPONENT.test(spelling) ? spelling : `${spelling}.0`;
-}
-
-const POINT_OR_EXPONENT = /[.eE]/;
 
 /**
  * `add`, the widest of the five.
@@ -1161,6 +1147,8 @@ class Machine {
         return this.store(instruction[1] as number, at);
       case "pop":
         return this.pop(at);
+      case "cast":
+        return this.cast(instruction[1] as CastType, at);
       case "jump":
         return { ok: true, next: at + (instruction[1] as number) };
       case "pop_jump_if_falsy":
@@ -1507,6 +1495,23 @@ class Machine {
   private pop(at: number): Step {
     if (this.stack.length < 1) return insufficientOperands("pop", at);
     this.lastPopped = this.stack.pop() as Value;
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `cast`, which converts the stack top to the named type.
+   *
+   * An empty stack is insufficient operands, and that is the whole of this
+   * opcode's error surface once the operand has passed its shape: the matrix
+   * is total over values, so a conversion that cannot produce a value of the
+   * target type pushes an absence rather than failing. A type name outside the
+   * accepted set never arrives, because the operand shape keeps it out and the
+   * catch-all answers it as an unknown instruction.
+   */
+  private cast(target: CastType, at: number): Step {
+    if (this.stack.length < 1) return insufficientOperands("cast", at);
+    const value = this.stack.pop() as Value;
+    this.stack.push(castValue(value, target));
     return { ok: true, next: at + 1 };
   }
 
