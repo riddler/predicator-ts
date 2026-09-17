@@ -581,3 +581,169 @@ object to both, because `TaggedEvaluateOptions` extends `EvaluateOptions` and
 the smaller type lost nothing in the split. Which requests typecheck and which
 do not is a type-level test's enumeration, written where the types are first
 defined, and not this record's.
+
+## Amendment: the out-of-range rule's sites, and the cast exemption (2026-09-17)
+
+Status: proposed (2026-09-17)
+
+Recorded for `pts-brv`, which asked whether a cast result belongs among the
+places the out-of-range rule refuses at.
+
+What this amends. The Decision section above rules that an integer outside the
+safe range is "refused rather than rounded, at every place one can arise", and
+names three places in an inline series: normalizing a host context value,
+accepting a `lit` operand in an instruction list, and computing an arithmetic
+result. This amendment supersedes that sentence in two ways - its universal
+becomes an obligation, and a `cast` result is named exempt - and it is appended
+rather than written in place because an amendment to a merged record here
+removes no line of it, and the superseded rule is a single sentence whose list
+is an inline series, so correcting it in place would delete that line. That the
+superseded wording stays readable beside what replaced it is a consequence of
+that constraint and not the reason for it. This section is the operative text.
+It changes what this record decides rather than only where an accepted decision
+renders, which is why it carries a Status line where the note above it does
+not.
+
+Why the universal does not hold. "At every place one can arise" quantifies over
+a series that was never an enumeration of the code, and it quantifies over the
+wrong noun. Read at `4aab8cb`, the safe-range TEST appears at more sites than
+the out-of-range REFUSAL does: several sites apply the same test and answer
+something else entirely - a plain boolean, an unknown instruction, a malformed
+duration - and each is right to. The REFUSAL runs where a number is admitted
+into the value domain as an integer: host-context normalization, an arithmetic
+result, a host or builtin function's answered value, and the tagged decoder. It
+runs once more in the tagged encoder, which admits nothing and is treated on its
+own below. Some of those the superseded sentence names, others it does not, and
+one it names is not enforced anywhere (below). That reading is of one commit and
+is not a standing claim: a sentence that says "every" and then lists is
+falsified by the next site somebody adds.
+
+**Wherever this package admits a number into the value domain as an integer,
+an integer outside the safe range is refused rather than rounded, and an author
+adding such a site carries that refusal.** A change adding a site that admits a
+number as a domain integer performs the safe-range test there and ships a test
+asserting the refusal, or records here why that site is exempt. The obligation
+binds a future author at the point of admission; it is not a description of a
+live set, and a new admitting site cannot falsify it.
+
+**It does not bind every site that tests the same bound**, and it must not: some
+of those sites answer a question rather than admit a value, and refusing would
+be the wrong answer there. The rule is therefore stated over admission, and the
+sites this rule does not bind are listed below, each with what it answers
+instead or with why it needs no test, so that the rule can be checked against
+the code rather than taken as plausible.
+
+**The tagged encoder applies the same bound before writing an integer to wire
+text, and that is a check rather than an admission.** Its argument is a caller's
+claim that a value is a domain integer, and the wire text it writes has to read
+back as the same value, so it re-tests the claim and refuses with the same
+reason. Nothing enters the domain there. It is recorded as its own site rather
+than folded into the rule above, because the plain projection also writes a
+domain integer back out and tests nothing - it is documented lossy and promises
+no round trip - so a rule worded to cover writing out would bind it wrongly.
+
+What the rule does not bind, read at `4aab8cb`, and why each is right as it
+stands:
+
+- `isInteger` and `typeName`, both exported from the main entry point. A
+  predicate answers false and a classifier answers a name; refusing is not
+  available to either, and neither admits anything. `isInteger` answers false
+  for a magnitude past the bound, and `typeName` answers `"integer"` without
+  testing the bound at all. A number outside the range reaching either of them
+  is the admitting site's defect, not theirs.
+- The `duration` opcode's magnitude guard. The number there becomes a component
+  of a duration rather than a domain integer, and a pair this package cannot
+  read is a malformed instruction with its own named reason.
+- The operand-shape tests for a non-negative and a positive integer. They judge
+  an instruction's own operand - an offset, a count - which is not a domain
+  value at all, and their verdict is an unknown instruction.
+- The plain projection, for the reason given above.
+- `unary_minus`, which negates an integer the domain has already admitted. It
+  applies no safe-range test and needs none: the admitted range is symmetric,
+  `MIN_SAFE_INTEGER` being exactly the negation of `MAX_SAFE_INTEGER`, so
+  negating an admitted integer cannot carry it out of the range. This bullet is
+  the record the rule above asks for in place of a test. It is here because
+  `unary_minus` is the one arithmetic path that does not route through the
+  shared numeric-result helper, so a reader checking this rule against the code
+  will find it and should not have to re-derive why it is sound.
+
+An author adding a site of one of those kinds carries the verdict that kind
+already answers, not this refusal.
+
+**The two codec entry points, called directly, answer the reason without an
+error category.** The Decision section says each out-of-range refusal is an
+`EvaluationError` carrying the reason. That holds of every refusing site named
+above except `decodeTagged` and `encodeTagged` when a host calls either of them
+itself: a decode answers the reason together with the offset in the wire text it
+failed at, and an encode answers the reason alone. What decides the shape is the
+entry point the caller used, not what the operation is. **An encode refusal
+reached through the tagged evaluation entry point does carry the category**:
+that path wraps the encoder's reason into an `EvaluationError` before answering,
+so a host that evaluates never meets the bare form. `decodeTagged` has no caller
+inside this package, so its refusal reaches a host only as the reason and the
+offset. The qualification is recorded here rather than by reopening the sentence
+above, which this amendment supersedes only in its first half.
+
+**A `cast` result is exempt, and answers undefined rather than refusing.**
+Predicator-ex's `docs/isa.md`, read at tag `v9.4.1`, closes the cast opcode's
+error behaviour: apart from the malformed-operand rule and the empty-stack
+arity rule stated in the same breath, it says that `cast` "has no other error
+path", and that "`cast` is total over values: a conversion that cannot produce
+a value of the target type pushes `:undefined`, never an error." An integer
+result this package's narrower integer type cannot hold is a conversion that
+cannot produce a value of the target type, so the conforming answer is undefined
+and a cast is not a place this rule refuses at.
+
+**That last step is this package's reading of the totality rule, not an observed
+behaviour of the reference.** The reference has no safe-integer range to
+observe: its integers are arbitrary precision, and run at `v9.4.1` it answers
+the exact value for magnitudes far above this package's bound, so the condition
+the reading resolves never arises there and no reference run confirms or denies
+it. The bound is this package's own boundary, as the reason-token sentence above
+already says of `"integer_out_of_range"`. If the corpus later carries a case
+that decides this, the case wins over the reading.
+
+**The conversions that can produce an integer this package has not already
+admitted are float-to-integer and string-to-integer.** The qualifier is load
+bearing and the sentence is false without it: the normative conversion matrix in
+that same document's cast subsection gives the integer target an integer source
+as well, which is identity and so can only hand back a magnitude that was
+already admitted. A float source truncates toward zero and a string source
+parses an optionally negated run of decimal digits; every other source is
+undefined there. So the exemption above covers exactly the two conversions that
+can carry such a magnitude AS AN INTEGER. They are not the only conversions that
+can carry one: run at `v9.4.1`, a string-to-duration parse accepts a component
+far past the bound - a twenty-digit day count answers with exactly that many
+days - and this package would refuse that duration when it is written to wire
+text, because the duration encoder routes every component through the same
+integer check. The blanket exemption above covers that case too, since it is
+also a cast. The string parse has no length bound, but length is not the
+predicate that matters - a long run of leading zeros parses to a small number,
+and what decides the outcome is the parsed value.
+
+**A `lit` operand admits a number into the domain, so the rule above binds it,
+and it does not honour it.** At `4aab8cb` a lit operand is pushed without a
+range check and its operand shape admits any number, so an integer outside the
+safe range enters the domain as a successful value; the only safe-range check
+on a literal is in the tagged wire-text decoder, which reads a number out of
+wire text and is a different admission.
+That is a defect against the rule and not an exemption from it, and this
+amendment neither narrows the rule to excuse it nor fixes it: `pts-lvm` carries
+it, because closing it changes what the evaluator accepts.
+
+Each site this amendment names as enforced is pinned by a shipped test that
+asserts the refusal, not merely by prose. For the admitting sites: "refuses an
+integer the domain will not round" and the normalization refusals in the value
+tests, "refuses an integer result that leaves the safe range" for arithmetic,
+"leaves a result outside the domain to the boundary that owns it" for an
+answered function value, and "refuses an integer literal outside the safe range"
+for the tagged decoder. For the encoder's check: "refuses a number that is not
+a member of the domain" for the tagged encoder.
+
+Consequences. No cast opcode is implemented at `4aab8cb`, so this amendment
+constrains the conversion work rather than describing behaviour that ships
+today. A host casting a magnitude past the safe range gets undefined, which is
+quiet where the admitting sites above are loud; that asymmetry is the price of
+conforming to a total cast, and it is the reason the divergence is recorded here
+rather than discovered when the conversion matrix is written. Nothing in this
+amendment adds an opcode, a reason token or a wire-format change.
