@@ -1,6 +1,6 @@
 # ADR-0003: The conformance apparatus
 
-Status: proposed (2026-09-16)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
 
 ## Context
 
