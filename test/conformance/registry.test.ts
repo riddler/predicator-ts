@@ -327,16 +327,18 @@ describe("completeness", () => {
   // The seam between the retired filter and completeness: a claim covering a
   // retired case would otherwise be unreachable by a package implementing the
   // current version, because no run can enter a case it does not attempt.
+  //
+  // The entries stand for a registry the ratchet wrote, so they are the cases a
+  // run of THIS package attempts - scoped by the version it claims, the way the
+  // runner scopes its own case set. Scoping them by the corpus's version would
+  // model a run no build of this package makes once the two numbers differ.
   it("does not want an entry for a case the claimed version retired", () => {
     const firstTier = cases.filter((item) => item.tier === 1);
     const retired = firstTier.filter((item) => item.features.includes("retired"));
     expect(retired.length).toBeGreaterThan(0);
-    const entries = runnableCases(
-      firstTier,
-      "evaluator",
-      manifest.isa_version,
-      manifest.isa_version,
-    ).map((item) => ({ case_id: item.id, surface: "evaluator", tier: item.tier }));
+    const entries = runnableCases(firstTier, "evaluator", isaVersion(), manifest.isa_version).map(
+      (item) => ({ case_id: item.id, surface: "evaluator", tier: item.tier }),
+    );
     const claimed = withEntries(entries, [{ surface: "evaluator", tier: 1 }]);
     expect(completenessProblems(claimed, cases, manifest.isa_version)).toEqual([]);
   });
