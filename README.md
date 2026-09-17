@@ -15,20 +15,34 @@ This package is the TypeScript sibling: same language, same instruction set,
 same answers, so an expression authored once can be compiled on a server and
 evaluated in a browser or in a React Native app without a round trip.
 
-> **Pre-release.** `package.json` carries the version `0.0.0` and nothing is
-> published yet. The surface below is this build's, and what this build claims
-> against the shared conformance corpus is recorded in
-> `conformance/registry.json`.
+> **Pre-release.** `package.json` carries the version `0.0.0`, and nothing
+> built from this repository has been published. The surface below is this
+> build's, and what this build claims against the shared conformance corpus is
+> recorded in `conformance/registry.json`.
 
 ## Install
+
+**There is no install that reaches this build, and the name is already taken.**
+`@riddler/predicator` exists on npm and belongs to an earlier generation of
+this project. Read from the live registry on 2026-09-17:
+`npm view @riddler/predicator version` answers `0.1.1`, its `dist-tags` are
+`{ latest: '0.1.1' }`, its description is "Safe predicate engine", its
+`repository` names `github.com/riddler/predicator-js` rather than this
+repository, it declares a runtime dependency on `chevrotain`, and the only two
+versions it has ever carried were published on 2019-08-08Z. A registry is
+live: check it yourself rather than trusting this paragraph's date.
+
+So this command succeeds today - on that same date, `npm pack
+@riddler/predicator` fetched that package's tarball - and what it installs is
+that 2019 package, with no error and no warning that it is not this one:
 
 ```bash
 pnpm add @riddler/predicator
 ```
 
-That command resolves nothing until the first release. The version intended for
-it is `0.2.0`, so a host pinning the first published line writes
-`pnpm add @riddler/predicator@^0.2.0`.
+No version of that name resolves to this build, and which name and version
+line this code will ship under is not decided in this repository. Until it is,
+reach this package from a checkout rather than from the registry.
 
 The package has **no runtime dependencies** - there is no `dependencies` key in
 its `package.json` at all - and assumes no host environment. It imports no Node
@@ -82,9 +96,13 @@ if (isaVersion() !== 6) {
 
 The instruction set architecture is the contract between a compiler and every
 evaluator that runs its output. A host holding a compiled instruction list can
-ask an evaluator whether it is new enough to run it: a list that requires a
-higher ISA version than the evaluator implements is refused rather than
-mis-evaluated. The number here is re-derived from the reference
+ask an evaluator whether it is new enough to run it, and refuse the list itself
+if it is not: that comparison and that refusal are the host's to perform.
+**This package performs neither.** A compiled list is a flat list with no
+header, so it states no version of its own for anything to check it against,
+and the one place `isaVersion()` is read inside `src/` runs the other
+direction - it refuses an opcode that this version of the set has retired,
+with `retired_opcode`. The number here is re-derived from the reference
 implementation's ISA document, not chosen independently.
 
 ## Evaluating a rule
@@ -268,15 +286,26 @@ runs of one list under different options may legitimately differ.
 
 The request for the corpus's tagged encoding is not on that type. It belongs to
 `TaggedEvaluateOptions`, which the subpath exports and which extends the type
-above. Asking for it at the main entry point is refused by the compiler
-wherever the options object is written as a literal, which is the form a host
-normally writes and the form the negative test in `test/index.test.ts` pins.
-The split is a type-level boundary and adds no runtime check, so the refusal
-reaches exactly as far as that check does: because the subpath's type extends
-the one above, a host calling both entry points may pass one options object to
+above. The split is a type-level boundary and adds no runtime check: no opcode
+is added, the wire format is untouched, and nothing about an evaluation
+changes.
+
+Which spellings of that request the compiler refuses at the main entry point is
+a type-level test's enumeration, not this page's: more than one of the
+compiler's rules bears on it, and they do not agree about where an options
+object has to be written. `test/index.test.ts` pins the refusal this package
+promises - the request written inline at the call, which is the form a host
+normally writes, does not typecheck - and the `@ts-expect-error` directive
+above it is the assertion: if the member ever returns to this entry point's
+options type, the directive goes unused and the typecheck fails. Read that
+test for the boundary rather than inferring it from here.
+
+At run time there is nothing to infer. Because `TaggedEvaluateOptions` extends
+the type above, a host calling both entry points may pass one options object to
 both, and a `tagged` carried on such a shared object is ignored at the main
-entry point rather than refused, because the compiler's excess-property check
-reaches object literals only.
+entry point rather than refused: the same list, context and options answer
+byte-identically with the member present and with it removed, and no warning is
+raised.
 
 ## Host functions
 
