@@ -60,8 +60,11 @@ instruction list reaches this package already compiled - from the reference
 implementation, or hand-built, as the examples below are.
 
 The TypeScript examples in this file are executed by this repository's test
-suite, and the ones that show a result check it, so an example that stops being
-true of the package fails the gate.
+suite, which also asserts that every name they import is bound, and the ones
+that show a result check it; the JSON quoted further down is compared against
+the files it quotes. So an example whose result changes, or whose imports stop
+resolving, fails the gate. Its types are not checked there, because the runner
+strips them rather than checking them.
 
 ### The ISA version
 
@@ -220,7 +223,15 @@ boundary are the ones a host meets first:
   the safe range is **refused** with the reason `integer_out_of_range` rather
   than rounded into a wrong answer no error names. The record puts that as an
   obligation on a change adding such a site, so the set of sites is the code's
-  to say rather than this page's.
+  to say rather than this page's. Two qualifications the record states travel
+  with the rule, because it misleads without them. A **`cast` is exempt**: the
+  instruction set makes a cast
+  total, so a conversion that cannot produce a value of the target type answers
+  the absence instead of failing. And a **`lit` operand does not honour the
+  rule today**: an out-of-range integer written into an instruction list is
+  admitted and rounded rather than refused, which the record names as a defect
+  against the rule rather than an exemption from it. A host's context value is
+  refused.
 - A JavaScript `Date` normalizes to a `PDateTime`, and JavaScript `undefined`
   normalizes to the absence. Predicator's absence is the singleton and never
   the language's own inside the machine, which is what keeps an absent key and
