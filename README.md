@@ -374,9 +374,9 @@ reason for is answered as the failing arm of a result rather than thrown, and a
 decode's failing arm also carries the offset in the text it went wrong at. What
 falls outside that is the shape of the input rather than its content: both
 directions recurse over the structure with no cycle guard and no depth guard,
-so a cyclic host value handed to `encodeTagged`, and a text or a value nested
-deeply enough to exhaust the call stack handed to either, raise `RangeError`
-instead of answering a result. The cycle is deterministic; the depth is not -
+so a cyclic host value handed to `encodeTagged`, a text nested deeply enough to
+exhaust the call stack handed to `decodeTagged`, and a value nested that deeply
+handed to `encodeTagged`, all raise `RangeError` instead of answering a result. The cycle is deterministic; the depth is not -
 the same text can decode in one program and exhaust the stack in another. On
 the toolchain pinned here it took a few thousand levels of nesting, which is an
 observation and not a limit to design against. A host reading text back out of
