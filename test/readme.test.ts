@@ -49,8 +49,12 @@
 // and the appended epilogue. The example text is otherwise the file's, byte
 // for byte.
 //
-// Every function this file checks the README with is exercised on both sides:
-// against the README, and against a constructed input it must report. A check
+// Every check below that reads the README is paired with a constructed input.
+// In every case but one that input is one the check must report; the exception
+// is the block discovery the two counts rest on, whose constructed input is a
+// page with no fence in it and which fails by returning something rather than
+// nothing. Two helpers, `fenceOpeners` and `runnable`, are reached only
+// through their callers and have no constructed input of their own. A check
 // that has only ever seen a passing input is not a check yet.
 //
 // Sabotage: answering the comparison opcode's greater-than with the less-than
