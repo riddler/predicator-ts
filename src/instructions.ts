@@ -55,13 +55,21 @@ export type Program = readonly Instruction[];
  * back as `unknown_instruction`. Naming the shape here is what lets the
  * evaluator apply that rule once instead of at each opcode.
  *
- * `duration_units` is the one shape the reference deliberately holds wider
- * than the operand it accepts. Section 5 of the instruction-set document gives
- * the `duration` opcode two error reasons of its own, one of them for a unit
- * pair that is not an integer beside a string, and the reference guards that
- * clause on nothing more than the operand being a list. So a malformed PAIR is
- * that opcode's own named error rather than an unknown instruction, and the
- * shape checked here stops at the list. A corpus case pins the distinction.
+ * A shape here is sometimes wider than the set of operands its opcode will
+ * actually take, and the rule for when is the reference's rather than a choice
+ * made here: **a shape stops where the reference's own guard stops.** Where
+ * section 5 gives an opcode its own named error for an operand it refuses, the
+ * reference guards that opcode's clause loosely enough for the operand to
+ * reach it, and the narrower judgment is then the opcode's own rather than the
+ * catch-all's. Where section 5 gives it no such error, the guard is tight and
+ * the catch-all is the whole answer.
+ *
+ * `duration_units` is checked as a list for exactly that reason: section 5
+ * names a reason for a unit pair that is not an integer beside a string, so a
+ * malformed PAIR is that error and not an unknown instruction, and a corpus
+ * case pins the distinction. That is an instance and not the rule. Carry the
+ * property forward instead of a list of which shapes have it, because the next
+ * opcode added would falsify the list and leave the property untouched.
  */
 export type OperandShape =
   | "value"

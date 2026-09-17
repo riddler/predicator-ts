@@ -1327,7 +1327,9 @@ describe("the relative date opcode, against a clock the host supplies", () => {
     expect(reads).toBe(1);
   });
 
-  // The three checks in the order section 5 gives them.
+  // The three checks in the order the reference's clauses impose. Section 5
+  // lists the three failures without sequencing them, so the order is read off
+  // the reference rather than off the spec.
   //
   // Sabotage: judging the direction before the value on top of the stack turns
   // the third assertion red. It was run and reverted.

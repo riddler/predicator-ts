@@ -25,6 +25,6 @@
 ### Changed
 
 - A duration opcode whose operand carries a malformed unit pair now answers
-  that opcode's own error naming the malformed pair, where before it was
-  refused as an unknown instruction. A host reading the reason off a failed
-  evaluation sees the more specific of the two.
+  that opcode's own error, where before it was refused as an unknown
+  instruction. A host reading the reason off a failed evaluation sees the more
+  specific of the two.

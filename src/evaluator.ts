@@ -1395,8 +1395,14 @@ class Machine {
    * answer supplies the clock through an evaluation option, which is this
    * package's own extension and adds no opcode.
    *
-   * The three checks run in the order section 5 gives them: the stack depth,
-   * then the value on top of the stack, then the direction.
+   * The three checks run in the order the REFERENCE'S CLAUSES impose, which
+   * section 5 does not state - it lists the three failures without sequencing
+   * them, and lists them in the opposite order to this. What fixes the order
+   * upstream is the shape of the clauses: the two that destructure a non-empty
+   * stack cannot match an empty one, so the depth is answered first, and the
+   * guard on the value decides before the helper that reads the direction is
+   * ever reached. The depth, then the value on top of the stack, then the
+   * direction.
    */
   private relativeDate(direction: string, at: number): Step {
     if (this.stack.length < 1) return insufficientOperands("relative_date", at);
