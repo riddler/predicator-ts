@@ -8,14 +8,28 @@
  * `./tagged` subpath, and this entry point neither emits nor requires it.
  */
 
-import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
+import {
+  type EvaluateOptions,
+  type EvaluateResult,
+  type ExecuteResult,
+  type ExecuteValueResult,
+  evaluateToValue,
+  executeToContext,
+  projectContext,
+} from "./evaluator.js";
 import type { Program } from "./instructions.js";
 import { toHost } from "./values.js";
 
 export type { UnboundPolicy } from "./context.js";
 export type { PredicatorError, Reason } from "./errors.js";
 export { EvaluationError, TypeMismatchError, UndefinedVariableError } from "./errors.js";
-export type { EvaluateOptions, EvaluateResult, HostFunction } from "./evaluator.js";
+export type {
+  EvaluateOptions,
+  EvaluateResult,
+  ExecuteResult,
+  ExecuteValueResult,
+  HostFunction,
+} from "./evaluator.js";
 export type { Instruction, Program } from "./instructions.js";
 export { isaVersion } from "./instructions.js";
 export * from "./values.js";
@@ -45,4 +59,73 @@ export function evaluate(
 ): EvaluateResult {
   const outcome = evaluateToValue(instructions, context, options);
   return outcome.ok ? { ok: true, value: toHost(outcome.value) } : outcome;
+}
+
+/**
+ * Runs a compiled instruction list as a STATEMENT program and answers the
+ * context it halted with.
+ *
+ * The mode is carried by the entry point rather than by the artifact: the same
+ * instruction list runs here and at `evaluate`, and what differs is only what
+ * comes back. Here the result is the context, so a program of assignments is
+ * read by looking at what it bound rather than at what it left on the stack.
+ * An empty stack at halt is a well-formed statement program's normal ending
+ * and not an error.
+ *
+ * The context comes back as a plain object of projected values, under the same
+ * projection `evaluate` applies to a result, so it carries the same documented
+ * loss: a float comes back as a plain number with the brand gone, and a host
+ * that means a float when it feeds one back writes `float()`.
+ *
+ * The caller's own context is never written into. A run answers a new context,
+ * so a caller that wants all-or-nothing on failure ignores what comes back and
+ * keeps the one it already had.
+ *
+ * Failure is a value here too, and the failing arm carries the context as far
+ * as the program got: every write completed before the failing statement is
+ * handed back rather than dropped. The one failing arm with no context is a
+ * context the value boundary refused, which is answered before any program
+ * runs.
+ */
+export function execute(
+  instructions: Program,
+  context?: unknown,
+  options?: EvaluateOptions,
+): ExecuteResult {
+  const outcome = executeToContext(instructions, context, options);
+  if (outcome.ok) return { ok: true, context: projectContext(outcome.context) };
+  if (outcome.context === undefined) return { ok: false, error: outcome.error };
+  return { ok: false, error: outcome.error, context: projectContext(outcome.context) };
+}
+
+/**
+ * Runs a statement program and answers the value of its last expression
+ * statement alongside the context.
+ *
+ * This is a host convenience rather than an instruction-set guarantee. The
+ * value is what the statement boundary's `pop` discarded, retained rather than
+ * obtained by compiling the program differently, so the compiled artifact is
+ * identical either way and a sibling need not offer this at all.
+ *
+ * The value is the last EXPRESSION statement's, not the last statement's: a
+ * program that ends in an assignment answers the expression statement before
+ * it. A program with no expression statement to take a value from answers the
+ * absence, and so does an expression statement whose own value is an absence -
+ * the two are indistinguishable here, and under the plain projection both come
+ * back as the language's own `undefined`.
+ *
+ * The failing arm is `execute`'s - the error and the context the program got
+ * as far as binding, with no value at all.
+ */
+export function executeValue(
+  instructions: Program,
+  context?: unknown,
+  options?: EvaluateOptions,
+): ExecuteValueResult {
+  const outcome = executeToContext(instructions, context, options);
+  if (outcome.ok) {
+    return { ok: true, value: toHost(outcome.value), context: projectContext(outcome.context) };
+  }
+  if (outcome.context === undefined) return { ok: false, error: outcome.error };
+  return { ok: false, error: outcome.error, context: projectContext(outcome.context) };
 }
