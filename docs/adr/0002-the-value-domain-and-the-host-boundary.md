@@ -1114,3 +1114,124 @@ a successful `executeValue` whose value is an absence is indistinguishable from
 one whose value member was never set. That is the same indistinguishability the
 expression entry point already carries for an absence result, and it follows
 from the projection this record chose rather than being a new loss.
+
+## Amendment: an integer bracket key reads its string spelling (2026-09-17)
+
+Status: proposed (2026-09-17)
+
+Recorded under the ruling on the question this record held about a store whose
+path segment is an integer landing on a map that already exists. The ruling
+was to amend the accepted read rule, which is the answer that restores the
+round trip. Divergences it leaves on the integer key are declared below.
+
+What this amends. The Decision section above rules the read side this way:
+
+> **A bracket access whose key is a boolean or an integer is a key lookup and
+> never a type rejection.** A miss pushes `Undefined`, as it does for any
+> missing key. A map held by this package has no boolean-keyed or
+> integer-keyed hit form to find, so such a lookup is always a structural
+> miss.
+
+The INTEGER half of that rule is superseded here. The boolean half is not, and
+the sentences below say which is which rather than leaving a reader to divide
+them. This amendment is appended rather than written in place because an
+amendment to a merged record here removes no line of it, and the superseded
+rule states both halves in one sentence, so correcting it in place would
+delete that line.
+
+**A bracket access whose key is an integer finds what that key's string
+spelling holds.** A hit answers that value. A miss pushes `Undefined`, as it
+does for any missing key, and an integer key is still never a type rejection.
+
+**The spelling is the decimal one, and it is unambiguous for every integer this
+domain admits.** An integer here satisfies `Number.isSafeInteger`, and
+JavaScript spells every such number in plain decimal - the exponent form
+begins far above the safe range - so the key an access looks up is fixed by
+the integer alone and needs no formatting choice at the call site.
+
+**The boolean half stands, unamended.** A boolean key against a map still
+always misses. A map in this domain carries string keys and nothing else, and
+this amendment assigns a spelling to an integer key and to no other type, so a
+boolean key has nothing to look up and no occupant to find.
+
+**The map-representation rule is not amended.** A map remains a plain
+JavaScript object whose own enumerable keys are strings. That is exactly what
+makes the string spelling the mechanism: the lookup reaches an ordinary
+string-keyed slot, and there is no integer-keyed slot for it to reach. A
+change written from this record must look the key up under its spelling and
+must not give a map typed keys, which is the reading this rule is here to
+foreclose.
+
+**Divergences from the reference that this amendment leaves on the integer key
+are declared here rather than discovered later, and naming them does not close
+the set.** Each was established by running the reference rather than reasoned
+about. The checkout run sits three commits past the tag this package vendors
+its corpus from, and what separates them is the lexer's string-escape and
+date-literal handling, which none of these probes reaches.
+
+1. **Wherever a write under an integer key happens, it displaces what that
+   key's string spelling held.** The reference keeps the two side by side,
+   because there the two spellings are different keys; here they are one key,
+   so the write replaces the occupant.
+
+2. **A map holding only a string-spelled numeric key becomes reachable by an
+   integer key here, where the reference answers the absence.** This
+   divergence is created by this amendment and did not exist before it. It is
+   the price of restoring the round trip with one key, and it is worth paying:
+   the alternative is a map whose value can be stored under one spelling and
+   read only under the other.
+
+3. **A value written under an integer key into a map that does not already
+   carry that key's string spelling is reachable here by that spelling, where
+   the reference answers the absence.** This is the mirror of the divergence
+   above it - that one is a string-spelled slot read by an integer key, this
+   one an integer-keyed write read by the string spelling - and it arises from
+   the same one key rather than from the rule this amendment states. In a run,
+   the reference wrote an integer key into a map carrying no such spelling,
+   answered the written value for the integer key and the absence for the
+   string one, and left the map's other key untouched.
+
+**What the ruling fixes is the round trip.** A value stored under an integer
+key can be read back under the spelling that wrote it. That collision - a
+write the reference makes visible to a later read, against a read rule that
+made it unreachable - is what the held question was about.
+
+**What this amendment supersedes beside the rule itself.** Every statement in
+this record that an integer key against a map always misses, or that a value
+written under an integer key is never reachable under the spelling that wrote
+it, rests on the superseded half and falls with it, wherever it appears - and
+so does every statement that RESTS ON either of those, however it is worded. A
+consequence drawn from a superseded statement is superseded with it, even
+where it repeats neither of them in its own words. The
+sites named here are signposts rather than a closed list: the accepted rule's
+own closing statement that such a lookup is always a structural miss; the
+store section's account of what an integer segment against an existing map
+leaves behind; the sentence that this package cannot reproduce both halves of
+the reference's write and read; the qualification attached to the rule that a
+write must be visible to a later load in the same run; and the closing
+section's restatement that the accepted body fixes the read side the other
+way. The passages about a BOOLEAN key - including this record's consequence
+that a map with a boolean-keyed hit is not representable here - are untouched
+and stay true.
+
+**What this amendment does not decide.** It does not amend the store section.
+What it removes is a read-side claim that section rests on: what that section
+says no read of that map reaches under the spelling that wrote it is now
+reached under that spelling. It adds no failure to the closed table of
+failures a well-formed store answers, and it obliges no write anywhere.
+
+**Nothing in this package implements this rule yet, so the rules above are
+obligations on the change that adds it.** At `860b842` an integer key against
+a plain map pushes the absence, and the prose stating that - including the doc
+comment on `bracketAccess` in `src/evaluator.ts` - belongs to that change to
+correct along with the behaviour. That change also owes a case pinning the
+restored round trip: a value stored under an integer key and read back under
+the same spelling.
+
+No case in the corpus vendored at `v9.4.1` changes outcome under this
+amendment. Every case there that applies an integer key - by a bracket access
+or as a store segment - applies it to a list, which this amendment does not
+touch; the cases that apply a key to a map use a string key, a boolean key and
+a float key, and this amendment moves none of them. None puts an integer
+key against a map, which is why the corpus left the question open rather than
+deciding it, and why nothing it pins moves now that the question is answered.
