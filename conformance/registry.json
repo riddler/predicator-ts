@@ -1,6 +1,6 @@
 {
 "claims": [
-{"surface":"evaluator","tier":5}
+{"surface":"evaluator","tier":6}
 ],
 "corpus_hash": "sha256:548f54cacdcb700df0c47d67f86a944b5dbe6b0c6f96ef0c4c6fbb95b0494892",
 "entries": [
@@ -156,7 +156,16 @@
 {"case_id":"functions/substring-three-arg","surface":"evaluator","tier":5},
 {"case_id":"functions/trim","surface":"evaluator","tier":5},
 {"case_id":"functions/unknown-function","surface":"evaluator","tier":5},
-{"case_id":"functions/upper","surface":"evaluator","tier":5}
+{"case_id":"functions/upper","surface":"evaluator","tier":5},
+{"case_id":"statements/pop-discards-top","surface":"evaluator","tier":6},
+{"case_id":"statements/pop-empty-stack","surface":"evaluator","tier":6},
+{"case_id":"statements/store-index-vivifies-list","surface":"evaluator","tier":6},
+{"case_id":"statements/store-insufficient-operands","surface":"evaluator","tier":6},
+{"case_id":"statements/store-nested-vivifies-map","surface":"evaluator","tier":6},
+{"case_id":"statements/store-non-scalar-segment","surface":"evaluator","tier":6},
+{"case_id":"statements/store-not-a-container","surface":"evaluator","tier":6},
+{"case_id":"statements/store-overwrites","surface":"evaluator","tier":6},
+{"case_id":"statements/store-root","surface":"evaluator","tier":6}
 ],
 "implementation": "predicator-ts",
 "isa_version": 6

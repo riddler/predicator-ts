@@ -4,10 +4,17 @@
  * A program is a flat list of instructions executed sequentially from zero,
  * and it halts when the instruction pointer reaches or passes the end - so a
  * forward jump past the last instruction is a normal halt rather than an
- * error. In expression mode, which is the mode this entry point runs, the
- * result is the top of the stack at halt; anything beneath the top is
- * discarded, and an empty stack at halt is the one error that belongs to no
- * instruction and therefore carries no position.
+ * error.
+ *
+ * THE MODE IS CARRIED BY THE ENTRY POINT, NOT BY THE ARTIFACT. A program says
+ * nothing about which mode it runs in, the instruction set is identical in
+ * both, and only what "result" means differs. In expression mode the result is
+ * the top of the stack at halt; anything beneath the top is discarded, and an
+ * empty stack at halt is the one error that belongs to no instruction and
+ * therefore carries no position. In statement mode the result is the context
+ * at halt, an empty stack there is a well-formed program's normal ending, and
+ * a deeper stack is residue to discard. `empty_stack` and the at-halt rewrite
+ * of an absence into an unbound-variable error are expression mode's alone.
  *
  * Three rules shape every opcode below and are stated here once.
  *
@@ -39,9 +46,14 @@ import {
   EMPTY_CONTEXT,
   type LoadOutcome,
   loadRoot,
+  NOT_A_CONTAINER,
+  NOT_ASSIGNABLE,
   normalizeContext,
+  type PathSegment,
   UNBOUND_VARIABLE,
   type UnboundPolicy,
+  type WriteRefusal,
+  writePath,
 } from "./context.js";
 import {
   EvaluationError,
@@ -63,9 +75,11 @@ import {
   Float,
   fromHost,
   type HostValue,
+  isInteger,
   PDate,
   PDateTime,
   type RefusalReason,
+  toHost,
   Undefined,
   type Value,
 } from "./values.js";
@@ -182,6 +196,61 @@ export type EvaluationOutcome =
 export type EvaluateResult =
   | { readonly ok: true; readonly value: HostValue }
   | { readonly ok: false; readonly error: PredicatorError };
+
+/**
+ * What one statement run produced, in the value domain.
+ *
+ * The failing arm's context is optional because one failure happens before any
+ * program runs: a context the value boundary refuses is answered without a
+ * machine ever being built, so there is no context to hand back, and the entry
+ * point below answers that arm itself. A failure the MACHINE answers carries
+ * the context as it stood, which is every write that completed before the
+ * failing statement.
+ *
+ * The successful arm's `value` is the last expression statement's, and the
+ * absence when the program had none. The two are indistinguishable: an
+ * expression statement whose own value is an absence answers the absence too,
+ * and a caller needing to tell them apart is asking a question this surface
+ * does not answer.
+ */
+export type StatementOutcome =
+  | { readonly ok: true; readonly context: Context; readonly value: Value }
+  | {
+      readonly ok: false;
+      readonly error: PredicatorError;
+      readonly context?: Context;
+    };
+
+/**
+ * A context handed back to a host: a plain object of projected values.
+ *
+ * It is NOT exported from the main entry point. `docs/adr/0002` rules that a
+ * change adding the statement entry points must not put a context type on that
+ * entry point's exports to carry the result, because a name there would
+ * describe what the plain projection describes without it. `HostValue` is
+ * already public, and an index signature over it is exactly that. The two
+ * result types below ARE exported, because a two-arm result with a context
+ * member is a shape the projection does not describe.
+ */
+type HostContext = { readonly [key: string]: HostValue };
+
+/** What `execute` answers: the context at halt, projected. */
+export type ExecuteResult =
+  | { readonly ok: true; readonly context: HostContext }
+  | {
+      readonly ok: false;
+      readonly error: PredicatorError;
+      readonly context?: HostContext;
+    };
+
+/** What `executeValue` answers: the last expression statement's value, and the context. */
+export type ExecuteValueResult =
+  | { readonly ok: true; readonly value: HostValue; readonly context: HostContext }
+  | {
+      readonly ok: false;
+      readonly error: PredicatorError;
+      readonly context?: HostContext;
+    };
 
 // ---------------------------------------------------------------------------
 // Equality and ordering
@@ -875,6 +944,19 @@ function invalidDurationFormat(at: number): Step {
   };
 }
 
+/**
+ * The message a refused write carries.
+ *
+ * The reason token is the write path's own and travels unchanged; only the
+ * sentence is written here, because a message is each sibling's idiom while
+ * the reason is the contract.
+ */
+function writeMessage(reason: WriteRefusal): string {
+  if (reason === NOT_ASSIGNABLE) return "store has no location to write";
+  if (reason === NOT_A_CONTAINER) return "a segment of the path holds a scalar";
+  return "a list index below zero is not a location";
+}
+
 function typeMismatch(operation: string, wanted: string, got: Value, at: number): Step {
   return {
     ok: false,
@@ -905,11 +987,15 @@ function binaryTypeMismatch(
 
 class Machine {
   private readonly program: Program;
-  private readonly context: Context;
+  private context: Context;
   private readonly settings: EvaluationSettings;
   private readonly stack: Value[] = [];
   private unboundRoot: string | undefined;
   private unboundAt: number | undefined;
+  /** What the last `pop` discarded, which is a statement's value to a host. */
+  private lastPopped: Value = Undefined;
+  /** How many back edges this run has taken, against the budget. */
+  private backEdges = 0;
 
   constructor(program: Program, context: Context, settings: EvaluationSettings) {
     this.program = program;
@@ -917,15 +1003,49 @@ class Machine {
     this.settings = settings;
   }
 
-  run(): EvaluationOutcome {
+  /**
+   * Runs the program to a halt, answering the error that stopped it or nothing
+   * at all when it halted normally.
+   *
+   * The two modes share this loop entirely: the instruction set is identical in
+   * both and no opcode means anything different in the other, so what the modes
+   * differ over is only what they make of the halt.
+   */
+  private drive(): PredicatorError | undefined {
     let at = 0;
     while (at < this.program.length) {
       const instruction = this.program[at];
       const step = instruction === undefined ? unknownInstruction(at) : this.step(instruction, at);
-      if (!step.ok) return { ok: false, error: this.rewrite(step) };
+      if (!step.ok) return this.rewrite(step);
       at = step.next;
     }
+    return undefined;
+  }
+
+  run(): EvaluationOutcome {
+    const error = this.drive();
+    if (error !== undefined) return { ok: false, error };
     return this.halt();
+  }
+
+  /**
+   * Runs the program in statement mode, where the result is the context.
+   *
+   * Neither of expression mode's two halt rules is applied: an empty stack at
+   * halt is a well-formed statement program's normal ending rather than
+   * `empty_stack`, and the at-halt rewrite of an absence into an
+   * unbound-variable error has no result to rewrite. The rewrite of a type
+   * mismatch over an absence still applies, because that one sits on the
+   * failing arm rather than at halt.
+   *
+   * The failing arm carries the context as it stood when the program stopped,
+   * so every write that completed before the failing statement survives. What
+   * a caller does with a partial context is its own policy.
+   */
+  runStatements(): StatementOutcome {
+    const error = this.drive();
+    if (error !== undefined) return { ok: false, error, context: this.context };
+    return { ok: true, context: this.context, value: this.lastPopped };
   }
 
   /**
@@ -1037,6 +1157,16 @@ class Machine {
         return this.objectSet(instruction[1] as string, at);
       case "call":
         return this.call(instruction[1] as string, instruction[2] as number, at);
+      case "store":
+        return this.store(instruction[1] as number, at);
+      case "pop":
+        return this.pop(at);
+      case "jump":
+        return { ok: true, next: at + (instruction[1] as number) };
+      case "pop_jump_if_falsy":
+        return this.popJumpIfFalsy(instruction[1] as number, at);
+      case "jump_backward":
+        return this.jumpBackward(instruction[1] as number, at);
       default:
         return unknownInstruction(at);
     }
@@ -1261,16 +1391,23 @@ class Machine {
    * neither map nor list answers the absence whatever the key, which is why
    * the target is dispatched on before the key is judged.
    *
-   * Only a string can index a map here. The wider key types are accepted
-   * rather than refused, and they always miss, because a map in THIS domain
-   * carries string keys and nothing else. That is not parity: the reference's
-   * maps can carry a boolean key, its own normalization preserves one for
-   * exactly that reason, and section 5 records that a map may legitimately be
-   * keyed that way - so a lookup this build must answer as a miss is one the
-   * reference can answer with a value. `docs/adr/0002` records that gap as a
-   * divergence and bounds it: no case in a language-neutral corpus can express
-   * a boolean-keyed hit, because JSON object keys are strings and the tagged
-   * encoding has no boolean-keyed map form.
+   * An INTEGER key against a map finds what that key's decimal spelling holds.
+   * A map here is a plain object whose own enumerable keys are strings, so the
+   * two spellings name one key rather than two, and a value a `store` wrote
+   * under an integer is read back under the spelling that wrote it. That round
+   * trip is what `docs/adr/0002`'s amendment to this rule restores, and the
+   * divergences one key leaves against the reference's two are declared there.
+   *
+   * A BOOLEAN key against a map still always misses. The amendment assigns a
+   * spelling to an integer key and to no other type, so a boolean key has
+   * nothing to look up. That is not parity: the reference's maps can carry a
+   * boolean key, its own normalization preserves one for exactly that reason,
+   * and section 5 records that a map may legitimately be keyed that way - so a
+   * lookup this build answers as a miss is one the reference can answer with a
+   * value. `docs/adr/0002` records that gap as a divergence and bounds it: no
+   * case in a language-neutral corpus can express a boolean-keyed hit, because
+   * JSON object keys are strings and the tagged encoding has no boolean-keyed
+   * map form.
    */
   private bracketAccess(at: number): Step {
     if (this.stack.length < 2) return insufficientOperands("bracket_access", at);
@@ -1284,7 +1421,8 @@ class Machine {
     }
     if (isPlainMap(target)) {
       if (!isMapKey(key)) return typeMismatch("bracket_access", "string", key, at);
-      this.stack.push(typeof key === "string" ? readMember(target, key) : Undefined);
+      const spelled = typeof key === "string" ? key : isIntegral(key) ? String(key) : undefined;
+      this.stack.push(spelled === undefined ? Undefined : readMember(target, spelled));
       return { ok: true, next: at + 1 };
     }
     this.stack.push(Undefined);
@@ -1305,6 +1443,123 @@ class Machine {
     if (this.stack.length < count) return insufficientOperands("make_list", at);
     this.stack.push(this.stack.splice(this.stack.length - count, count));
     return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `store`, the one opcode that writes the context. It pushes nothing.
+   *
+   * It pops the value from the top and then its operand's count of location
+   * segments beneath it. The compiler pushes the segments root-to-leaf and the
+   * value last, so the stack already holds them root-first and taking a run off
+   * the end preserves that order, exactly as `make_list` does.
+   *
+   * The order of the checks is part of the contract. Stack depth comes first,
+   * then every segment's type, then the protected-root policy, and only then
+   * the write - so a malformed path reports its type failure rather than a
+   * policy refusal, and a refused write leaves no partial write behind.
+   *
+   * A segment that is neither a string nor an integer is a type mismatch whose
+   * reason is this opcode's own name, which is the rule the error type states
+   * and the corpus's cases expect. It is routed through the shared helper so
+   * that a segment which is an absence an unbound load put there is rewritten
+   * into an unbound-variable error like any other refused absence.
+   */
+  private store(count: number, at: number): Step {
+    if (this.stack.length < count + 1) return insufficientOperands("store", at);
+    const value = this.stack.pop() as Value;
+    const segments = this.stack.splice(this.stack.length - count, count);
+    const path: PathSegment[] = [];
+    for (const segment of segments) {
+      if (typeof segment !== "string" && !isInteger(segment)) {
+        return typeMismatch("store", "string or integer segment", segment, at);
+      }
+      path.push(segment);
+    }
+    const root = path[0];
+    if (root !== undefined && this.settings.protectedRoots.includes(String(root))) {
+      return {
+        ok: false,
+        error: new EvaluationError("protected_root", `${String(root)} is a protected root`, at),
+      };
+    }
+    const written = writePath(this.context, path, value);
+    if (!written.ok) {
+      return {
+        ok: false,
+        error: new EvaluationError(written.reason, writeMessage(written.reason), at),
+      };
+    }
+    this.context = written.context;
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `pop`, the statement boundary: it discards the stack top and pushes
+   * nothing. An empty stack is insufficient operands rather than the
+   * expression-mode `empty_stack` rule, which belongs to halt.
+   *
+   * What it discards is retained here, which is how a host reads the last
+   * expression statement's value out of a statement run. That retention is
+   * this implementation's own convenience rather than anything the instruction
+   * set guarantees: the stack effect and the error are what a sibling has to
+   * reproduce, and a sibling need not retain anything.
+   */
+  private pop(at: number): Step {
+    if (this.stack.length < 1) return insufficientOperands("pop", at);
+    this.lastPopped = this.stack.pop() as Value;
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `pop_jump_if_falsy`, which pops UNCONDITIONALLY and jumps on a falsy value.
+   *
+   * That is what separates it from `jump_if_falsy_or_pop`, which leaves the
+   * value on the stack on the taken branch because it exists to make the
+   * boolean connectives answer one of their operands. A statement's condition
+   * is never a result, so there is nothing to preserve and leaving it behind
+   * would strand a value for the following statement to trip over.
+   *
+   * The falsy set this opcode reads is closed - false, null and the absence -
+   * and anything outside it that is not exactly true is a type mismatch rather
+   * than a truthiness coercion.
+   */
+  private popJumpIfFalsy(offset: number, at: number): Step {
+    if (this.stack.length < 1) return insufficientOperands("pop_jump_if_falsy", at);
+    const top = this.stack.pop() as Value;
+    if (top === false || top === null || top === Undefined) {
+      return { ok: true, next: at + offset };
+    }
+    if (top === true) return { ok: true, next: at + 1 };
+    return typeMismatch("pop_jump_if_falsy", "boolean", top, at);
+  }
+
+  /**
+   * `jump_backward`, the one back edge in the instruction set. It targets
+   * `index - offset`, pops nothing and pushes nothing.
+   *
+   * A target before index zero is an unknown instruction, under the standing
+   * rule that a malformed operand falls to the catch-all: a non-positive
+   * offset is already refused by the operand's shape, and this is the same
+   * refusal reached one step later, where the program's own length is what
+   * makes the operand malformed.
+   *
+   * Every back edge charges the budget, and exhausting it stops the run. The
+   * budget's default and the option that sets it are this package's own policy
+   * - only the bound's existence and the reason it carries are the contract -
+   * and the guarantee it buys is that the pointer strictly increases between
+   * consecutive back edges, so a program's total work is bounded.
+   */
+  private jumpBackward(offset: number, at: number): Step {
+    const target = at - offset;
+    if (target < 0) return unknownInstruction(at);
+    if (this.backEdges >= this.settings.loopBudget) {
+      return {
+        ok: false,
+        error: new EvaluationError("loop_budget_exceeded", "the loop budget is spent", at),
+      };
+    }
+    this.backEdges += 1;
+    return { ok: true, next: target };
   }
 
   /**
@@ -1538,4 +1793,35 @@ export function evaluateToValue(
     bound = normalized.context;
   }
   return evaluateProgram(program, bound, resolveOptions(options));
+}
+
+/**
+ * Normalizes a host's context, applies the option defaults, and runs the
+ * program in statement mode.
+ *
+ * A context the value boundary refuses is answered here, before a machine
+ * exists, which is why that arm carries no context: there is none to give.
+ */
+export function executeToContext(
+  program: Program,
+  context?: unknown,
+  options?: EvaluateOptions,
+): StatementOutcome {
+  let bound = EMPTY_CONTEXT;
+  if (context !== undefined) {
+    const normalized = normalizeContext(context);
+    if (!normalized.ok) {
+      return {
+        ok: false,
+        error: new EvaluationError(normalized.reason, "the context is not in the value domain"),
+      };
+    }
+    bound = normalized.context;
+  }
+  return new Machine(program, bound, resolveOptions(options)).runStatements();
+}
+
+/** Projects a context back to plain host values, one root at a time. */
+export function projectContext(context: Context): HostContext {
+  return toHost(context.asMap()) as HostContext;
 }

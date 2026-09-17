@@ -24,6 +24,7 @@ import {
   compareStrings,
   compareValues,
   DEFAULT_LOOP_BUDGET,
+  type EvaluateOptions,
   evaluateToValue,
   resolveOptions,
 } from "../src/evaluator.js";
@@ -264,7 +265,10 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
   // and the dispatch does not reaches the same catch-all as a name nobody has
   // heard of, instead of a third answer that would read as a gap being hidden.
   it("reads an opcode this build does not yet run as an unknown instruction", () => {
-    const outcome = evaluateToValue([["pop"]]);
+    const outcome = evaluateToValue([
+      ["lit", 1],
+      ["cast", "string"],
+    ]);
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.reason).toBe("unknown_instruction");
@@ -1353,5 +1357,578 @@ describe("the relative date opcode, against a clock the host supplies", () => {
         ["relative_date", "sideways"],
       ]),
     ).toBe("invalid_direction");
+  });
+});
+
+describe("the store write path", () => {
+  // Sabotage: making the leaf keep its occupant instead of taking the value
+  // falsifies the rule that the leaf is always overwritten, whatever it held.
+  // It was run and reverted.
+  it("always overwrites the leaf, whatever it held", () => {
+    for (const held of [1, "a", null, Undefined, [1], { b: 1 }] as Value[]) {
+      const outcome = evaluateToValue(
+        [
+          ["lit", "attempts"],
+          ["lit", 7],
+          ["store", 1],
+          ["load", "attempts"],
+        ],
+        { attempts: held },
+      );
+      expect(outcome).toEqual({ ok: true, value: 7 });
+    }
+  });
+
+  // Sabotage: vivifying a map whatever the next segment is falsifies the rule
+  // that an interior segment holding nothing becomes a list when the next
+  // segment is an integer. It was run and reverted.
+  it("vivifies a list where the next segment is an integer", () => {
+    const outcome = evaluateToValue([
+      ["lit", "declines"],
+      ["lit", 0],
+      ["lit", "expired_card"],
+      ["store", 2],
+      ["load", "declines"],
+    ]);
+    expect(outcome).toEqual({ ok: true, value: ["expired_card"] });
+  });
+
+  it("vivifies a map where the next segment is a string", () => {
+    const outcome = evaluateToValue([
+      ["lit", "signup"],
+      ["lit", "variant"],
+      ["lit", "b"],
+      ["store", 2],
+      ["load", "signup"],
+    ]);
+    expect(outcome).toEqual({ ok: true, value: { variant: "b" } });
+  });
+
+  // Sabotage: refusing a null occupant as not a container falsifies the rule
+  // that writing through a null vivifies exactly as writing through an absence
+  // does. It was run and reverted.
+  it("vivifies through a null exactly as through an absence", () => {
+    const program = [
+      ["lit", "signup"],
+      ["lit", "variant"],
+      ["lit", "b"],
+      ["store", 2],
+      ["load", "signup"],
+    ] as Program;
+    expect(evaluateToValue(program, { signup: null })).toEqual({
+      ok: true,
+      value: { variant: "b" },
+    });
+    expect(evaluateToValue(program, {})).toEqual({ ok: true, value: { variant: "b" } });
+  });
+
+  // Sabotage: padding with null falsifies the rule that an integer index past
+  // a list's end pads the gap with the absence. It was run and reverted.
+  it("pads a gap past a list's end with the absence", () => {
+    const outcome = evaluateToValue(
+      [
+        ["lit", "attempts"],
+        ["lit", 2],
+        ["lit", "approved"],
+        ["store", 2],
+        ["load", "attempts"],
+      ],
+      { attempts: ["declined"] },
+    );
+    expect(outcome).toEqual({ ok: true, value: ["declined", Undefined, "approved"] });
+  });
+
+  it("pads a list the same write vivified, not only one already there", () => {
+    const outcome = evaluateToValue([
+      ["lit", "attempts"],
+      ["lit", 1],
+      ["lit", "approved"],
+      ["store", 2],
+      ["load", "attempts"],
+    ]);
+    expect(outcome).toEqual({ ok: true, value: [Undefined, "approved"] });
+  });
+
+  // Sabotage: descending into a map's slot by replacing it falsifies the rule
+  // that an interior segment already holding a container is descended into and
+  // never replaced. It was run and reverted.
+  it("descends into a container an interior segment already holds", () => {
+    const outcome = evaluateToValue(
+      [
+        ["lit", "signup"],
+        ["lit", "variant"],
+        ["lit", "b"],
+        ["store", 2],
+        ["load", "signup"],
+      ],
+      { signup: { step: 2 } },
+    );
+    expect(outcome).toEqual({ ok: true, value: { step: 2, variant: "b" } });
+  });
+
+  // Sabotage: reading a map's integer key as a miss falsifies the rule that an
+  // integer key finds what that key's string spelling holds, which is what
+  // makes the round trip close. It was run and reverted.
+  it("reads a value stored under an integer key back under that key", () => {
+    const outcome = evaluateToValue(
+      [
+        ["lit", "attempts"],
+        ["lit", 0],
+        ["lit", "approved"],
+        ["store", 2],
+        ["load", "attempts"],
+        ["lit", 0],
+        ["bracket_access"],
+      ],
+      { attempts: { pending: true } },
+    );
+    expect(outcome).toEqual({ ok: true, value: "approved" });
+  });
+
+  // In a MAP the two spellings name one key, which is what one key rather than
+  // two means; in a list an integer index is the hit form and a string is a
+  // type mismatch, and this amendment does not touch a list.
+  it("names one key of a map by an integer and by that integer's spelling", () => {
+    const read = (key: Value) =>
+      evaluateToValue(
+        [
+          ["lit", "attempts"],
+          ["lit", 0],
+          ["lit", "approved"],
+          ["store", 2],
+          ["load", "attempts"],
+          ["lit", key],
+          ["bracket_access"],
+        ],
+        { attempts: { pending: true } },
+      );
+    expect(read(0)).toEqual({ ok: true, value: "approved" });
+    expect(read("0")).toEqual({ ok: true, value: "approved" });
+  });
+
+  // The write displaces what the string spelling held, because here the two are
+  // one key. The reference keeps both entries side by side; that divergence is
+  // declared in the record.
+  it("displaces what an integer key's string spelling held", () => {
+    const outcome = evaluateToValue(
+      [
+        ["lit", "attempts"],
+        ["lit", 0],
+        ["lit", "approved"],
+        ["store", 2],
+        ["load", "attempts"],
+      ],
+      { attempts: { "0": "declined", pending: true } },
+    );
+    expect(outcome).toEqual({ ok: true, value: { "0": "approved", pending: true } });
+  });
+
+  // A boolean key is untouched by that amendment and still always misses,
+  // because a spelling was assigned to an integer key and to no other type.
+  it("still misses on a boolean key against a map", () => {
+    const outcome = evaluateToValue([["load", "signup"], ["lit", true], ["bracket_access"]], {
+      signup: { variant: "b" },
+    });
+    expect(outcome).toEqual({ ok: true, value: Undefined });
+  });
+
+  // In the interior the write acts on the slot the key's string spelling already
+  // names - descending into it here - where the reference leaves that slot
+  // alone and writes a separate integer-keyed entry. That divergence follows
+  // from one key rather than two and is declared in the record.
+  //
+  // Sabotage: looking an interior integer segment up under some key other than
+  // its spelling falsifies the rule that the two spellings name one key. It was
+  // run and reverted.
+  it("descends into the slot an interior integer segment's spelling names", () => {
+    const outcome = evaluateToValue(
+      [
+        ["lit", "attempts"],
+        ["lit", 0],
+        ["lit", "outcome"],
+        ["lit", "approved"],
+        ["store", 3],
+        ["load", "attempts"],
+      ],
+      { attempts: { "0": { at: 1 } } },
+    );
+    expect(outcome).toEqual({ ok: true, value: { "0": { at: 1, outcome: "approved" } } });
+  });
+
+  // Sabotage: writing into the map the context already holds, rather than into
+  // a copy, falsifies the rule that a write answers a new context and mutates
+  // none. It was run and reverted.
+  it("answers a new context rather than writing into the host's own value", () => {
+    const signup = { step: 2 };
+    const outcome = evaluateToValue(
+      [
+        ["lit", "signup"],
+        ["lit", "variant"],
+        ["lit", "b"],
+        ["store", 2],
+        ["load", "signup"],
+      ],
+      { signup },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(signup).toEqual({ step: 2 });
+  });
+});
+
+describe("the six failures a well-formed store answers", () => {
+  const failure = (program: Program, context?: unknown, options?: EvaluateOptions) => {
+    const outcome = evaluateToValue(program, context, options);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("the store succeeded");
+    return outcome.error;
+  };
+
+  // Sabotage: checking types before depth falsifies the rule that insufficient
+  // operands is answered before any type is judged. It was run and reverted.
+  it("answers insufficient operands for fewer than n + 1 values", () => {
+    const error = failure([
+      ["lit", "x"],
+      ["store", 1],
+    ]);
+    expect(error.type).toBe("EvaluationError");
+    expect(error.reason).toBe("insufficient_operands");
+  });
+
+  // Sabotage: giving the mismatch a reason of its own instead of the
+  // operation's name falsifies the rule that a type mismatch's reason is the
+  // operation that refused the operand. It was run and reverted.
+  it("answers a type mismatch naming the operation for a segment of another type", () => {
+    const error = failure([
+      ["lit", true],
+      ["lit", 1],
+      ["store", 1],
+    ]);
+    expect(error.type).toBe("TypeMismatchError");
+    expect(error.reason).toBe("store");
+  });
+
+  // A raw number that is not a safe integer is not an integer of this domain, so
+  // it is refused as a segment rather than spelled as a key. The list case is
+  // why this matters: a fractional index against a list would pad the list and
+  // write to a property the projection drops, which no caller could detect.
+  //
+  // Sabotage: testing the segment with a bare typeof rather than the domain's
+  // own integer predicate falsifies the rule that a segment is a string or an
+  // integer and nothing else. It was run and reverted.
+  it("refuses a segment that is a number the domain admits as no integer", () => {
+    for (const segment of [1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53] as Value[]) {
+      const error = failure(
+        [
+          ["lit", "attempts"],
+          ["lit", segment],
+          ["lit", "approved"],
+          ["store", 2],
+        ],
+        { attempts: ["declined"] },
+      );
+      expect(error.type).toBe("TypeMismatchError");
+      expect(error.reason).toBe("store");
+    }
+  });
+
+  it("rewrites a segment that is an absence an unbound load put there", () => {
+    const error = failure([
+      ["load", "cohort"],
+      ["lit", 1],
+      ["store", 1],
+    ]);
+    expect(error.type).toBe("UndefinedVariableError");
+  });
+
+  it("does not rewrite a segment that is an absence the host bound", () => {
+    const error = failure(
+      [
+        ["load", "cohort"],
+        ["lit", 1],
+        ["store", 1],
+      ],
+      {
+        cohort: undefined,
+      },
+    );
+    expect(error.type).toBe("TypeMismatchError");
+    expect(error.reason).toBe("store");
+  });
+
+  // Sabotage: writing an empty path into the context under some invented key
+  // falsifies the rule that an empty path names no location. It was run and
+  // reverted.
+  it("answers not assignable for an empty path", () => {
+    const error = failure([
+      ["lit", 1],
+      ["store", 0],
+    ]);
+    expect(error.type).toBe("EvaluationError");
+    expect(error.reason).toBe("not_assignable");
+  });
+
+  // Sabotage: vivifying over a scalar occupant falsifies the rule that an
+  // interior segment holding a scalar other than null or the absence is not a
+  // container. It was run and reverted.
+  it("answers not a container for an interior segment holding a scalar", () => {
+    const error = failure(
+      [
+        ["lit", "signup"],
+        ["lit", "variant"],
+        ["lit", "b"],
+        ["store", 2],
+      ],
+      { signup: 2 },
+    );
+    expect(error.type).toBe("EvaluationError");
+    expect(error.reason).toBe("not_a_container");
+  });
+
+  // Sabotage: answering the padded list instead of passing a deeper refusal
+  // back out falsifies the rule that a refused write leaves no partial write
+  // behind. It was run and reverted.
+  it("answers not a container for a scalar an interior LIST slot holds", () => {
+    const error = failure(
+      [
+        ["lit", "attempts"],
+        ["lit", 0],
+        ["lit", "outcome"],
+        ["lit", "approved"],
+        ["store", 3],
+      ],
+      { attempts: [2] },
+    );
+    expect(error.reason).toBe("not_a_container");
+  });
+
+  it("answers not a container for a string segment against a list", () => {
+    const error = failure(
+      [
+        ["lit", "attempts"],
+        ["lit", "first"],
+        ["lit", "approved"],
+        ["store", 2],
+      ],
+      { attempts: [] },
+    );
+    expect(error.reason).toBe("not_a_container");
+  });
+
+  // Sabotage: dropping the negative-index guard falsifies the rule that a
+  // negative list index is an invalid index. It was run and reverted.
+  it("answers an invalid index for a negative list index", () => {
+    const error = failure(
+      [
+        ["lit", "attempts"],
+        ["lit", -1],
+        ["lit", "approved"],
+        ["store", 2],
+      ],
+      {
+        attempts: [],
+      },
+    );
+    expect(error.type).toBe("EvaluationError");
+    expect(error.reason).toBe("invalid_index");
+  });
+
+  // Sabotage: dropping the protected-root check falsifies the rule that a
+  // store whose path's root segment is protected refuses instead of writing.
+  // It was run and reverted.
+  //
+  // A protected root bears wherever a store runs and not on statement mode
+  // alone: this refusal comes from the expression entry point.
+  it("answers a protected root for a path whose root is protected", () => {
+    const error = failure(
+      [
+        ["lit", "amount"],
+        ["lit", 1],
+        ["store", 1],
+      ],
+      {},
+      {
+        protectedRoots: ["amount"],
+      },
+    );
+    expect(error.type).toBe("EvaluationError");
+    expect(error.reason).toBe("protected_root");
+  });
+
+  // Protection is per-root rather than per-path: a protected root refuses every
+  // write beneath it, and there is no way to protect one path under a root
+  // while leaving another writable.
+  it("refuses every write beneath a protected root", () => {
+    const error = failure(
+      [
+        ["lit", "card"],
+        ["lit", "pan"],
+        ["lit", "4111"],
+        ["store", 2],
+      ],
+      {},
+      { protectedRoots: ["card"] },
+    );
+    expect(error.reason).toBe("protected_root");
+  });
+
+  // Sabotage: running the protected-root check before the segment types
+  // falsifies the rule that a malformed path reports its type failure first.
+  // It was run and reverted.
+  it("reports a malformed path's type failure before the policy refusal", () => {
+    const error = failure(
+      [
+        ["lit", "card"],
+        ["lit", true],
+        ["lit", "4111"],
+        ["store", 2],
+      ],
+      {},
+      { protectedRoots: ["card"] },
+    );
+    expect(error.type).toBe("TypeMismatchError");
+    expect(error.reason).toBe("store");
+  });
+});
+
+describe("pop and the jumps this build now runs", () => {
+  // Sabotage: pushing the discarded value back falsifies the rule that pop
+  // discards the stack top and pushes nothing. It was run and reverted.
+  it("discards the stack top at pop", () => {
+    expect(evaluateToValue([["lit", 1], ["pop"], ["lit", 2]])).toEqual({ ok: true, value: 2 });
+  });
+
+  it("answers insufficient operands for a pop on an empty stack", () => {
+    const outcome = evaluateToValue([["pop"]]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("insufficient_operands");
+  });
+
+  // Sabotage: leaving the condition on the stack on the taken branch falsifies
+  // the rule that pop_jump_if_falsy pops unconditionally, which is what
+  // separates it from the connectives' jump. It was run and reverted.
+  it("pops the condition on both branches", () => {
+    expect(
+      evaluateToValue([
+        ["lit", 9],
+        ["lit", false],
+        ["pop_jump_if_falsy", 2],
+        ["lit", 1],
+      ]),
+    ).toEqual({ ok: true, value: 9 });
+    expect(
+      evaluateToValue([
+        ["lit", 9],
+        ["lit", true],
+        ["pop_jump_if_falsy", 3],
+        ["lit", 1],
+      ]),
+    ).toEqual({ ok: true, value: 1 });
+  });
+
+  it("refuses a non-boolean condition rather than coercing it", () => {
+    const outcome = evaluateToValue([
+      ["lit", 1],
+      ["pop_jump_if_falsy", 2],
+      ["lit", 2],
+    ]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("TypeMismatchError");
+    expect(outcome.error.reason).toBe("pop_jump_if_falsy");
+  });
+
+  it("answers insufficient operands for a conditional jump on an empty stack", () => {
+    const outcome = evaluateToValue([["pop_jump_if_falsy", 1]]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("insufficient_operands");
+  });
+
+  // Sabotage: reading a back edge's target as index + offset falsifies the rule
+  // that jump_backward targets index - offset. It was run and reverted.
+  it("takes a back edge to index minus offset", () => {
+    const outcome = evaluateToValue([
+      ["lit", "i"],
+      ["lit", 0],
+      ["store", 1],
+      ["load", "i"],
+      ["lit", 1],
+      ["compare", "LT"],
+      ["pop_jump_if_falsy", 5],
+      ["lit", "i"],
+      ["lit", 1],
+      ["store", 1],
+      ["jump_backward", 7],
+      ["load", "i"],
+    ]);
+    expect(outcome).toEqual({ ok: true, value: 1 });
+  });
+
+  // Sabotage: dropping the target guard falsifies the rule that a back edge
+  // aimed before index zero is an unknown instruction. It was run and reverted.
+  it("reads a back edge aimed before index zero as an unknown instruction", () => {
+    const outcome = evaluateToValue([
+      ["lit", 1],
+      ["jump_backward", 5],
+    ]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("unknown_instruction");
+  });
+});
+
+describe("the loop budget, which the back edge now consumes", () => {
+  const FOREVER = [
+    ["lit", true],
+    ["pop_jump_if_falsy", 2],
+    ["jump_backward", 2],
+  ] as Program;
+
+  // Sabotage: not charging the budget on a back edge falsifies the rule that
+  // every back edge charges it, and the test hangs rather than reddening -
+  // which is itself the point of the bound. It was run and reverted.
+  it("stops an unbounded loop once the budget is spent", () => {
+    const outcome = evaluateToValue(FOREVER, {}, { loopBudget: 3 });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("EvaluationError");
+    expect(outcome.error.reason).toBe("loop_budget_exceeded");
+  });
+
+  // Sabotage: charging the budget twice per back edge, or comparing with the
+  // wrong boundary, falsifies the rule that the budget is the number of back
+  // edges a run may take. It was run and reverted.
+  it("spends the budget on back edges taken and no others", () => {
+    const counted = (limit: number): Program => [
+      ["lit", "i"],
+      ["lit", 0],
+      ["store", 1],
+      ["load", "i"],
+      ["lit", limit],
+      ["compare", "LT"],
+      ["pop_jump_if_falsy", 7],
+      ["lit", "i"],
+      ["load", "i"],
+      ["lit", 1],
+      ["add"],
+      ["store", 1],
+      ["jump_backward", 9],
+      ["load", "i"],
+    ];
+    // A loop of three iterations takes three back edges: a budget of three
+    // finishes it and a budget of two does not.
+    expect(evaluateToValue(counted(3), {}, { loopBudget: 3 })).toEqual({ ok: true, value: 3 });
+    const short = evaluateToValue(counted(3), {}, { loopBudget: 2 });
+    expect(short.ok).toBe(false);
+    if (short.ok) return;
+    expect(short.error.reason).toBe("loop_budget_exceeded");
+  });
+
+  it("carries the back edge's own position on the refusal", () => {
+    const outcome = evaluateToValue(FOREVER, {}, { loopBudget: 1 });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.position).toBe(2);
   });
 });
