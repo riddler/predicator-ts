@@ -301,12 +301,12 @@ describe("the call opcode's dispatch", () => {
   it("answers an unknown function for a name nothing provides", () => {
     const outcome = evaluateToValue([
       ["lit", "4111"],
-      ["call", "len", 1],
+      ["call", "card_score", 1],
     ]);
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.type).toBe("EvaluationError");
-    expect(outcome.error.reason).toBe("Unknown function: len");
+    expect(outcome.error.reason).toBe("Unknown function: card_score");
   });
 
   // Sabotage: handing the arguments over reversed turns this red, because the

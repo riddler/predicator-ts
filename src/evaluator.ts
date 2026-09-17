@@ -33,6 +33,7 @@
  * by adding the arm rather than by widening the catch-all.
  */
 
+import { civilFromDays, daysFromCivil } from "./civil.js";
 import {
   type Context,
   EMPTY_CONTEXT,
@@ -48,6 +49,7 @@ import {
   TypeMismatchError,
   UndefinedVariableError,
 } from "./errors.js";
+import { BUILTINS, perEvaluationBuiltins } from "./functions/index.js";
 import {
   type ComparisonOperator,
   type Instruction,
@@ -104,17 +106,6 @@ export interface EvaluateOptions {
 /** The default bound on the back edges one evaluation may take. */
 export const DEFAULT_LOOP_BUDGET = 10000;
 
-/**
- * The builtin functions this build provides, which is none of them.
- *
- * `call` dispatches into this registry merged with whatever the host supplied,
- * and a host name shadows a builtin of the same name rather than merging with
- * it. Filling this map is the job of the change that implements the function
- * surface; the dispatch around it is already here, so that change adds
- * functions and not plumbing.
- */
-const BUILTINS: ReadonlyMap<string, HostFunction> = new Map<string, HostFunction>();
-
 /** The options an evaluation actually runs under, with every default applied. */
 export interface EvaluationSettings {
   readonly functions: ReadonlyMap<string, HostFunction>;
@@ -144,12 +135,29 @@ function systemNow(): PDateTime {
  *
  * The result is per-evaluation rather than shared, which is what lets the
  * clock memoize: the instant is fixed for this run and forgotten afterwards.
+ *
+ * THE MERGE ORDER IS THREE LAYERS AND IT IS DECIDED HERE. The builtins that
+ * are functions of their arguments alone go down first; the two that read
+ * something belonging to this one evaluation - the clock and the source of
+ * randomness - go over them, because they are built from the very values this
+ * function has just settled and cannot exist before it runs; and the host's own
+ * functions go over both, so a host name shadows a builtin of the same name
+ * rather than merging with it. Later shadows earlier, which is the order
+ * `docs/adr/0002` fixes.
  */
 export function resolveOptions(options: EvaluateOptions = {}): EvaluationSettings {
   const clock = options.now ?? systemNow;
   let instant: PDateTime | undefined;
-  const supplied = options.functions;
+  const readNow = (): PDateTime => {
+    instant ??= clock();
+    return instant;
+  };
+  const random = options.random ?? Math.random;
   const functions = new Map(BUILTINS);
+  for (const [name, implementation] of perEvaluationBuiltins(readNow, random)) {
+    functions.set(name, implementation);
+  }
+  const supplied = options.functions;
   if (supplied !== undefined) {
     for (const [name, implementation] of Object.entries(supplied)) {
       functions.set(name, implementation);
@@ -158,11 +166,8 @@ export function resolveOptions(options: EvaluateOptions = {}): EvaluationSetting
   return {
     functions,
     loopBudget: options.loopBudget ?? DEFAULT_LOOP_BUDGET,
-    readNow: () => {
-      instant ??= clock();
-      return instant;
-    },
-    random: options.random ?? Math.random,
+    readNow,
+    random,
     onUnbound: options.onUnbound ?? "undefined",
     protectedRoots: options.protectedRoots ?? [],
   };
@@ -677,48 +682,6 @@ const MILLIS_PER_SECOND = 1000;
  */
 const DAYS_PER_MONTH = 30;
 const DAYS_PER_YEAR = 365;
-
-/**
- * The day number of a civil date, counting 1970-01-01 as zero.
- *
- * This is plain arithmetic rather than a host date object, for two reasons.
- * The host's UTC constructor reads a year below one hundred as that year plus
- * 1900, which would move a date this domain admits; and arithmetic depends on
- * nothing a constrained JavaScript engine might leave out. The algorithm is
- * the standard days-from-civil pair, exact over the proleptic Gregorian
- * calendar, with March taken as the first month of the year so that the leap
- * day lands at the end.
- */
-function daysFromCivil(year: number, month: number, day: number): number {
-  const shiftedYear = month <= 2 ? year - 1 : year;
-  const era = Math.floor(shiftedYear / 400);
-  const yearOfEra = shiftedYear - era * 400;
-  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
-  const dayOfEra =
-    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
-  return era * 146097 + dayOfEra - 719468;
-}
-
-/** The inverse of `daysFromCivil`. */
-function civilFromDays(days: number): PDate {
-  const shifted = days + 719468;
-  const era = Math.floor(shifted / 146097);
-  const dayOfEra = shifted - era * 146097;
-  const yearOfEra = Math.floor(
-    (dayOfEra -
-      Math.floor(dayOfEra / 1460) +
-      Math.floor(dayOfEra / 36524) -
-      Math.floor(dayOfEra / 146096)) /
-      365,
-  );
-  const dayOfYear =
-    dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
-  const monthsFromMarch = Math.floor((5 * dayOfYear + 2) / 153);
-  const day = dayOfYear - Math.floor((153 * monthsFromMarch + 2) / 5) + 1;
-  const month = monthsFromMarch + (monthsFromMarch < 10 ? 3 : -9);
-  const year = yearOfEra + era * 400 + (month <= 2 ? 1 : 0);
-  return new PDate(year, month, day);
-}
 
 /**
  * A duration as the whole number of days the reference moves a date by.
