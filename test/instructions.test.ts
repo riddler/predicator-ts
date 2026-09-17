@@ -114,7 +114,10 @@ describe("operand shapes", () => {
     expect(matchesShape("EQ", "comparison_operator")).toBe(true);
     expect(matchesShape("FOO", "comparison_operator")).toBe(false);
     expect(matchesShape([[3, "days"]], "duration_units")).toBe(true);
-    expect(matchesShape([[3]], "duration_units")).toBe(false);
+    // A malformed pair inside the list still HAS the shape: the duration
+    // opcode carries its own reason for one, so the check stops at the list.
+    expect(matchesShape([[3]], "duration_units")).toBe(true);
+    expect(matchesShape("3d", "duration_units")).toBe(false);
     expect(matchesShape(null, "value")).toBe(true);
   });
 

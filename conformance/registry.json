@@ -1,6 +1,6 @@
 {
 "claims": [
-{"surface":"evaluator","tier":3}
+{"surface":"evaluator","tier":4}
 ],
 "corpus_hash": "sha256:548f54cacdcb700df0c47d67f86a944b5dbe6b0c6f96ef0c4c6fbb95b0494892",
 "entries": [
@@ -110,7 +110,24 @@
 {"case_id":"membership/in-true","surface":"evaluator","tier":3},
 {"case_id":"membership/in-undefined-left-propagates","surface":"evaluator","tier":3},
 {"case_id":"short_circuit/undefined-and-x-short-circuits-to-undefined","surface":"evaluator","tier":3},
-{"case_id":"short_circuit/undefined-or-x-falls-through-to-x","surface":"evaluator","tier":3}
+{"case_id":"short_circuit/undefined-or-x-falls-through-to-x","surface":"evaluator","tier":3},
+{"case_id":"arithmetic/date-plus-duration","surface":"evaluator","tier":4},
+{"case_id":"durations/date-minus-duration","surface":"evaluator","tier":4},
+{"case_id":"durations/datetime-plus-duration","surface":"evaluator","tier":4},
+{"case_id":"durations/fractional-literal-expands","surface":"evaluator","tier":4},
+{"case_id":"durations/fractional-month-uses-approximation","surface":"evaluator","tier":4},
+{"case_id":"durations/invalid-format","surface":"evaluator","tier":4},
+{"case_id":"durations/invalid-unit","surface":"evaluator","tier":4},
+{"case_id":"durations/later-unit-pair-overwrites-earlier","surface":"evaluator","tier":4},
+{"case_id":"durations/milliseconds-key-present-only-when-used","surface":"evaluator","tier":4},
+{"case_id":"durations/multi-unit","surface":"evaluator","tier":4},
+{"case_id":"durations/single-unit","surface":"evaluator","tier":4},
+{"case_id":"errors/object-set-non-map-target","surface":"evaluator","tier":4},
+{"case_id":"objects/equality-by-structure","surface":"evaluator","tier":4},
+{"case_id":"objects/literal-multi-key","surface":"evaluator","tier":4},
+{"case_id":"objects/literal-nested","surface":"evaluator","tier":4},
+{"case_id":"objects/literal-single-key","surface":"evaluator","tier":4},
+{"case_id":"objects/strict-equality-by-structure","surface":"evaluator","tier":4}
 ],
 "implementation": "predicator-ts",
 "isa_version": 6
