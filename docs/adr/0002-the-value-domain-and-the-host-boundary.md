@@ -1235,3 +1235,207 @@ touch; the cases that apply a key to a map use a string key, a boolean key and
 a float key, and this amendment moves none of them. None puts an integer
 key against a map, which is why the corpus left the question open rather than
 deciding it, and why nothing it pins moves now that the question is answered.
+
+## Amendment: the three questions the statement-mode note holds (2026-09-17)
+
+Status: proposed (2026-09-17)
+
+Recorded for `pts-5h8`, under rulings taken on all three of the questions the
+note above holds in its "what this note does not decide" section. Each is
+answered below, and that section is superseded in respect of those three
+rather than struck: this amendment is appended, because an amendment to a
+merged record here removes no line of it.
+
+The first of that section's bolded paragraphs is not one of the three. Its
+pointer stays true: `src/evaluator.ts` is where the existing entry point's
+result contract is declared. Its closing claim that this record fixes no
+result shape does not survive this amendment, which fixes members of the
+statement result's shape, and it is retired to that extent.
+
+Every reference-side sentence below was established by RUNNING predicator-ex
+rather than by reading its prose. The checkout the runs executed sits three
+commits past the tag this package vendors its corpus from; what separates them
+is the lexer's string-escape and date-literal handling, and every probe below
+was built from a hand-built instruction list rather than from a source string,
+which takes the lexer out of the path.
+
+### The main entry point's returned context is a plain projected object
+
+**The main entry point's statement mode must answer a returned context that is
+a plain object of projected values.** This record's projection rule says a
+result comes back as plain JavaScript by default, and its projection table
+says a map comes back as an object of projected values; a context read across
+that rule comes back the same way. The reference's own context type is not
+reproduced.
+
+**A change adding the statement entry points must not put a context type on the
+main entry point's exports to carry that result.** This record declined to
+widen that entry point's surface once already, when the `tagged` option was
+ruled onto the `./tagged` subpath's entry point alone, and the reason carries:
+a name added there would describe what the plain projection describes without
+it.
+
+**The plain projection's cost is a lossy round trip, and the loss is the one
+this record's projection section already names, met in a new place.** A float
+in the returned context comes back as a plain number with the brand gone. A
+host that feeds such a number back as a context value gets an integer where
+that number is integral, by normalization's own row for an integral number
+inside the safe range - unless the host writes `float(n)`, which this record
+already names as what a host that means a float writes.
+
+**The encoding that carries the integer/float distinction across the trip is
+the corpus's tagged one, and this record places it on the `./tagged` subpath's
+entry point alone.** That encoding writes an integral float so that it reads
+back as a float, which is the distinction the plain projection gives up.
+Whether that subpath gains a statement mode is not decided here: a change that
+gives it one owes the encoding across the returned context to a caller that
+needs the distinction to survive, and leaves the main entry point's returned
+context as the plain projection.
+
+### A `context` member on both arms, optional on the failing arm
+
+**Both arms of each statement result must carry a member named `context`, and
+the failing arm's must be optional.** The successful arm's is the context at
+halt. Nothing about the existing expression result changes: this adds no arm,
+moves no discriminant, and leaves `ok` as what tells the two apart.
+
+**The failing arm's member must be present where the failure happened after the
+program started.** That member is what carries the partial context the note
+above obliges - the writes completed before the failing statement, handed back
+rather than dropped.
+
+**It must be absent where the failure is a context refusal.** A context the
+value boundary refuses is answered before any program runs: at `5a82c3b`
+`evaluateToValue` in `src/evaluator.ts` returns that refusal without
+constructing a machine, so no context exists to hand back. A member required on
+the failing arm would be false in exactly that case.
+
+**Optional is therefore the shape rather than a convenience.** A required
+member would oblige a value where there is none to give, and a failing arm
+carrying no member at all would drop the partial context.
+
+### The store hold dissolves
+
+**The question the store section holds is answered, and answering it adds no
+rule to that section.** It was ruled by amending the accepted read rule -
+the amendment above, and one of the three ways out that section names, the
+other two being to write under the key and to refuse the write. Choosing it is
+a choice against refusing, and a restored round trip needs a write at one end.
+What follows checks the held shapes against rules that section already states,
+rather than stating new ones.
+
+**At the leaf, the always-overwrite rule governs.** That section rules that the
+leaf must always be overwritten, whatever it currently holds; an integer
+segment at the leaf against an existing map is a leaf like any other under that
+rule. The `not_a_container` row does not reach it: that row's predicate is a
+disjunction, and the only arm of it that could refuse an integer segment
+against a map is the arm predicated on an INTERIOR segment.
+
+**In the held interior shape the key is present, and the rules that section
+names as the ones that could govern do govern.** The descend rule where
+the occupant is a map or a list; the `not_a_container` row where the occupant
+is a scalar other than `null` or the absence; the vivify rule where it is
+`null` or the absence, whose antecedent names both in its own words. That
+section named those rules itself; what it lacked was the ruling, not a rule.
+
+**For that shape the `not_a_container` row is applied as written, neither
+extended nor exempted.** The six-failures section says refusing the held
+interior shape would mean extending that row. That was written while the shape
+stood exempt from every obligation the store section states; what this ruling
+lifts is the exemption rather than the row's text, and the row's own predicate
+then reaches the shape unchanged.
+
+**This ruling adds no row to the table of six.** A seventh would have been
+needed to refuse the held leaf shape, and the leaf writes rather than refusing.
+
+**The exemption itself is superseded.** The store section exempts the held
+shapes from every obligation it states until the question is answered; the
+question is answered, so an implementer owes those shapes the rules named here
+along with the rest of that section.
+
+**Divergences from the reference that this ruling leaves are declared here
+rather than left to be discovered, and naming them does not close the set.**
+Each named below was established by running the reference.
+
+1. **At the leaf, a write under an integer key displaces what that key's string
+   spelling held, where the reference keeps both entries.** This is the
+   displacement the amendment above states for a write under an integer key,
+   met at the leaf. In a run, the reference wrote `a[0] = 5` into a map already
+   holding `"0"` mapped to `9`, answered a map carrying both entries, and read
+   back `5` for `a[0]` and `9` for `a["0"]` within the same program. Here the
+   two spellings name one key, so the write replaces the occupant and one entry
+   is left.
+
+2. **In the interior, the write acts on the slot the key's string spelling
+   already names - descending into it, refusing against it, or vivifying it -
+   where the reference leaves that slot untouched and writes a separate
+   integer-keyed entry.** In runs, the reference wrote `a[0].b = 7` into a map
+   carrying `"0"`, answered a map holding both a new integer-keyed map and the
+   original occupant unchanged, and did so with that occupant a map, a list, an
+   integer, a string, `null` and a boolean in turn. Where the occupant was a
+   scalar the reference SUCCEEDED; the `not_a_container` row refuses there.
+
+**A divergence named here is not a defect for a later change to fix.** Each
+follows from one key rather than two, which this record's map representation
+fixes, and each is the declared price of the ruling.
+
+### What this supersedes elsewhere
+
+**A statement in this record that either of the shapes the store section holds
+is held, or that nothing is owed for them, is superseded, and so is a statement
+resting on one, however it is worded.** The sites named here are signposts
+rather than a closed list: the store section's sentence holding an integer
+segment at the leaf against an existing map; its sentence holding the interior
+sub-form where the map already carries that key's string spelling; its
+sentence that an implementer owes nothing for the held shapes until the
+question is answered;
+the qualification attached to its rule that a write must be visible to a later
+load in the same run; the six-failures section's sentence that the held shapes
+could make that table seven; the statement-mode note's opening sentence that a
+shape left open is named at the foot of that note; and that note's closing
+sentence that a change implementing the statement layer needs these questions
+answered before it can write a signature or an integer segment.
+
+**Where a statement in this record obliges or asserts a context on a statement
+result's failing arm without excepting a context refusal, it is retired in
+respect of a context refusal and obliges nothing there.** This clause reaches
+such a statement wherever it stands and however it is worded, including one
+written as an obligation on a future author before this amendment, and it is
+written as a predicate rather than a list so that it reaches one this
+amendment has not read. It retires reliance and adds no obligation of its
+own: what a failing arm owes is what the section above states.
+
+**A statement in this record claiming IN THE PRESENT TENSE that nothing
+recorded here governs the statement layer, or that everything in the
+statement-mode note is reproduced from the reference rather than designed, is
+retired TO THE EXTENT this amendment governs or designs.** That extent
+includes the statement result's shape; what the main entry point's statement
+mode answers as a returned context, which this amendment DESIGNS from this
+record's own projection rule rather than reproducing the reference's own
+context type; and the store write, which this amendment governs by answering
+the question the store section held, so that an implementer owes the shapes
+that section held the rules it states. Naming those does not close the
+extent.
+
+A part of this record that this amendment neither governs nor designs is
+untouched by the clause above - including that this record governs the value
+domain, the host boundary and the expression entry point; that the statement
+layer adds the two further entry points and the one opcode that writes a
+context; the statement-mode note's provenance sentence about running the
+reference, which this amendment follows rather than displaces; and the store
+section's sentence that the write path is surface this record has not
+PREVIOUSLY governed, which is time-bounded and stays true, since governing
+that surface now says nothing about what was governed before. Like the clause
+before it, this one retires reliance and adds no obligation of its own.
+
+**An interior integer segment meeting a map that does NOT carry that key's
+string spelling stays governed rather than held, and this amendment moves
+nothing about it.** Where the passages about that shape rest on the superseded
+read rule they were already superseded by the amendment above; this one leaves
+them where that amendment left them.
+
+**Nothing in this package implements any of this.** At `5a82c3b` neither
+statement entry point exists, and the machine executes no opcode that writes a
+context - `store` is declared in the instruction registry and the machine has
+no case for it. Every rule above is therefore an obligation on the change that
+implements it rather than a description of live code.
