@@ -747,3 +747,370 @@ quiet where the admitting sites above are loud; that asymmetry is the price of
 conforming to a total cast, and it is the reason the divergence is recorded here
 rather than discovered when the conversion matrix is written. Nothing in this
 amendment adds an opcode, a reason token or a wire-format change.
+
+## Note: statement mode, the two program entry points, and the store write (2026-09-17)
+
+Status: proposed (2026-09-17)
+
+Recorded for `pts-mqm`, ahead of the change that implements the statement
+layer. This record governs the value domain, the host boundary and the
+expression entry point. The statement layer adds two further entry points -
+`execute` and `executeValue` - and the one opcode that writes a context, and
+nothing recorded here governs any of them.
+
+Everything below is reproduced from predicator-ex rather than designed here,
+and every reference-side sentence was established by RUNNING that
+implementation rather than by reading its prose. Where a TypeScript shape is
+fixed neither by the reference nor by the result contract this package's
+existing entry point implements, the sentence states an obligation, and the
+shape left open is named at the foot of this note rather than settled in
+passing.
+
+**What was run, exactly, since the difference matters to anyone rechecking a
+sentence below.** The vendored tag is `v9.4.1`. The checkout the runs executed
+is three commits past it - `git describe --tags` there prints
+`v9.4.1-3-g71ae4da` - so no sentence below rests on running the tag itself.
+The only `lib/` file differing between the two is the lexer, and every probe
+was therefore built from a hand-built instruction list rather than from a
+source string, which takes the lexer out of the path. Where a sentence says a
+behaviour was observed in a run, that is the run it means.
+
+### The mode is carried by the entry point
+
+**A program is a flat instruction list with no header, so the artifact does not
+say which mode it runs in; the entry point does.** The instruction set is
+identical in both modes: no opcode is restricted to one, and no opcode means
+anything different in the other. Only what "result" means differs.
+
+**In expression mode the result is the top of the stack at halt; in statement
+mode the result is the context at halt.** A deeper stack is not an error in
+either mode - expression mode discards everything beneath the top, and
+statement mode discards the residue.
+
+**`empty_stack` is expression mode's alone.** A well-formed statement program
+ends each statement with a store or a pop and therefore halts with an empty
+stack by design, which is a normal halt. In a run, the empty program
+answers the empty context in statement mode and `empty_stack` in expression
+mode.
+
+**The at-halt absence rewrite is expression mode's alone as well, and it is the
+rule a shared machine loses.** This record already fixes expression mode's
+halt: a result of `Undefined` in a run that executed at least one unbound load
+comes back as an `UndefinedVariableError` instead of that result. Neither
+statement entry point does this. In a run, a program whose last
+expression statement loads an unbound root answers the absence and the context,
+where the same load in expression mode answers an unbound-variable error.
+**A future author owes statement mode a halt that does not inherit that
+rewrite.** Reusing expression mode's halt unchanged is how the divergence goes
+missing, because the rewrite lives inside it.
+
+**Two neighbouring rules are NOT expression mode's alone, which is the whole
+point of the paragraph above.** The unbound policy applies at every entry
+point: under `"error"` the load itself fails in statement mode exactly as it
+does in expression mode. So does the rewrite of a type mismatch whose rejected
+operand is an absence into an unbound-variable error, because that one sits on
+the failing arm rather than at halt.
+
+### `execute`
+
+**`execute` answers the context on success.**
+
+**On the failing arm `execute` answers the error AND the partial context.**
+Every write completed before the failing statement survives and is handed back,
+the failing statement's write does not happen, and no later statement runs.
+In a run, a program that writes a root and then writes through that
+root's scalar value answers the not-a-container failure together with a context
+already holding the first write.
+
+**A future author owes that partial context on the failing arm.** It is put as
+an obligation because the obvious shape for a TypeScript failure carries an
+error and nothing else, and a failing arm built to that shape drops the writes
+silently - nothing about such an arm reads as wrong.
+
+**Whether the partial context is kept or discarded is the caller's policy, not
+this package's.** A caller wanting all-or-nothing ignores the returned context
+and keeps the one it already had, which is undisturbed either way: a run
+answers a new context rather than writing into the caller's, as the store
+obligations below require whatever the returned context turns out to be
+expressed as.
+
+### `executeValue`
+
+**`executeValue` answers the value and the context on success.**
+
+**The value is the program's LAST EXPRESSION STATEMENT's value, not its last
+statement's.** In a run, a program of an expression statement followed by
+an assignment answers the expression statement's value, not an absence.
+
+**`executeValue` answers the absence when the program has no expression
+statement to take a value from.**
+
+**The absence is not a signal that the program had none.** An expression
+statement whose own value is an absence answers the absence too, and the two
+are indistinguishable in the result. A caller needing to tell them apart is
+asking a question this surface does not answer.
+
+**`executeValue`'s failing arm is `execute`'s: the error and the partial
+context, and no value.** A run that stopped early reports no value at all.
+
+**`executeValue` is a host convenience rather than an instruction-set
+guarantee.** The reference obtains the value by retaining what the statement
+boundary's pop discarded rather than by compiling the program differently, so
+the compiled artifact is identical either way, and a sibling need not offer it.
+
+### The store write, as obligations
+
+A store is the only opcode that writes a context, and it pushes nothing. The
+context type this package defines is frozen and its own documentation says it
+is read and never written, so the write path is surface this record has not
+previously governed. The rules below are obligations on the change that adds
+it, except the shapes named below as held, and each was established by
+running the reference's write algorithm.
+
+**A write must answer a new context and mutate none.**
+
+**An interior segment holding nothing, `null` or the absence must be created as
+a list when the NEXT segment is an integer, and as a map otherwise.** Writing
+through a `null` must vivify exactly as writing through an absence does:
+"you cannot index into a null" is a rule this domain enforces nowhere else, and
+a bracket access against a null is already an ordinary miss rather than a
+refusal.
+
+**An interior segment already holding a map or a list must be descended into
+and never replaced.**
+
+**An integer index past the end of a list must pad the gap with the absence**,
+and must pad a list the same write has just vivified and not only a list that
+was already there.
+
+**An integer segment that is the LEAF, against an existing map, is HELD, and
+this note obliges nothing for it.** An INTERIOR integer segment
+against an existing map is governed rather than held - PROVIDED that map does
+not already carry that key's string spelling. The segment then holds nothing,
+and the vivify rule above says what a segment holding nothing becomes. In a
+run, the reference wrote `a[0].b` into a map carrying an unrelated string key
+by creating a map under the integer key and leaving that key in place. This
+package reproduces the SHAPE of that write - a container created where the
+segment was, the map's other keys untouched - but not the key's spelling,
+which this record's own collapse of the two spellings erases, and not the
+read back, which no read of that map reaches under the spelling that wrote it.
+
+**The sub-form where the map DOES already carry that key's string spelling is
+held too, with the leaf, and for the same reason.** `a[0]` and `a["0"]` name
+one key here, so the key is already PRESENT. **The hold turns on that presence
+alone, not on what the key holds.** In a run, the reference wrote `a[0].b`
+into a map carrying `"0"` and produced a map holding BOTH the integer entry
+and the string one, preserving the occupant in every case run - a map, a list,
+a scalar, a `null` and the absence alike. One key cannot hold both entries, so
+this package cannot follow the reference whatever the occupant is.
+
+Which of this record's rules would otherwise govern does depend on the
+occupant, and this record states three that could: the vivify rule where the
+occupant is `null` or the absence, whose antecedent names both in its own
+words; the descend rule where it is a map or a list; and the
+`not_a_container` row where it is a scalar other than those. The scalar is the
+sharpest - the reference SUCCEEDS there, where that row as written would
+refuse - so a ruling has to say what becomes of that row for THIS shape as
+well. That rides along with the question rather than being a separate one, and
+it does not arise at the leaf, where the row's own predicate names an interior
+segment and so never reaches.
+
+Both held shapes turn on one collision, and the leaf shows it most plainly.
+The reference writes under the integer key there and reads it back: in a run,
+writing `a[0]` into a map already holding a string key produced a map carrying
+both keys, and reading `a[0]` back within the same program answered the
+written value. **This package cannot reproduce both halves**, because this
+record's accepted body already rules the read side the other way:
+
+> **A bracket access whose key is a boolean or an integer is a key lookup and
+> never a type rejection.** A miss pushes `Undefined`, as it does for any
+> missing key. A map held by this package has no boolean-keyed or
+> integer-keyed hit form to find, so such a lookup is always a structural
+> miss.
+
+Under that accepted rule an integer key against a map is always a miss, so a
+write under that key would never be read back BY THE SPELLING THAT WROTE IT,
+and the obligation that a write is visible to a later load in the same run
+would be broken by the very write an obligation here would have demanded. The
+two cannot both hold in this package.
+
+That is a lost round trip rather than a lost value, and the difference is part
+of what is being chosen. In a run against this package, a map carrying that
+key answered the absence for `a[0]` and answered the written value for
+`a["0"]`. The write lands somewhere real; it is simply never reachable under
+the spelling that made it.
+
+The corpus as vendored at `v9.4.1` does not settle it. Its statement tier
+exercises an integer segment only where that segment vivifies a LIST from
+nothing and is read back, which this package satisfies, because a list under
+an integer index is exactly the hit form it does have; no case there puts an
+integer segment against a map that already exists.
+
+There are three ways out, not four. Writing under the integer key and writing
+under the key's string spelling are ONE way out here, not two: this record's
+accepted body fixes a map as a plain object whose own enumerable keys are
+strings, so `a[0]` and `a["0"]` name one key and the distinction the reference
+draws between them does not survive the transfer. The other two are to refuse
+the write, or to amend the accepted read rule.
+
+Refusing costs differently in the two held shapes. At the leaf it would need a
+SEVENTH row in the failure table below, since such a store is well-formed, its
+failure is not rewritten, and no row there can carry it. In the interior it
+would instead mean extending the `not_a_container` row to reach a shape this
+section exempts from every obligation it states.
+
+Each of the three is a decision about public semantics and a declared
+divergence rather than a reproduction of ruled behaviour. So the question is
+held rather than settled here, and queued as `pts-7pe`, which covers both held
+shapes. **An implementer owes every other rule in this section - including the
+vivify rule where an interior integer segment meets an existing map that does
+not already carry that key's string spelling - and owes nothing for the held
+shapes until that question is answered.**
+
+**The leaf must always be overwritten, whatever it currently holds** - a
+scalar, a map or a list.
+
+**A write must be visible to a later load in the same run.** The one write
+this package cannot make visible is a write under an integer key into a map,
+which no read of that map reaches under the spelling that wrote it. Where that
+write is held above - at the leaf, and in the interior where the key is
+already present - this note obliges nothing, so nothing here demands it. Where
+it is governed - in the interior where the key is absent - the vivify rule
+obliges it, and it carries this limit.
+
+### The six failures a well-formed store answers when its failure is not rewritten
+
+**A WELL-FORMED store whose failure is not rewritten answers one of the six
+failures below, and an implementation owes all six.** Each was returned by the
+reference in a run rather than inferred from its prose. Both qualifiers carry
+weight, and each was established by running a case that leaves the table:
+
+**Well-formed.** A store whose operand is not a non-negative integer never
+reaches the opcode: it falls to the catch-all as `unknown_instruction`, under
+the standing rule that a malformed operand is an unknown instruction rather
+than a bad one. In a run, `["store", -1]` and `["store", "two"]` each answered
+`unknown_instruction` where the same program with `["store", 1]` succeeded.
+
+**Not rewritten.** A segment that is an absence PRODUCED BY AN UNBOUND LOAD is
+refused as a type mismatch and then rewritten into an unbound-variable error,
+by the rewrite this note states above as applying at every entry point. In a
+run, a store whose segment came from a load of an unbound root answered an
+`UndefinedVariableError` naming that root rather than the second row below.
+The rewrite is gated on both halves, so a segment that is an absence the host
+BOUND is not rewritten and does answer the second row - as does a segment that
+is a literal of some other type.
+
+| The failure | Type | Reason |
+|---|---|---|
+| fewer than `n + 1` values on the stack | `EvaluationError` | `insufficient_operands` |
+| a segment that is neither a string nor an integer | `TypeMismatchError` | `store` |
+| an empty path | `EvaluationError` | `not_assignable` |
+| an interior segment holding a scalar other than `null` or the absence, or a string segment against a list | `EvaluationError` | `not_a_container` |
+| a negative list index | `EvaluationError` | `invalid_index` |
+| a path whose root segment is protected | `EvaluationError` | `protected_root` |
+
+**A type mismatch's reason is the operation that refused the operand**, so the
+second row's reason is the store's own name rather than a token of its own.
+That rule is not this record's: it is stated on the error type in
+`src/errors.ts` and pinned by the conformance cases, which expect the operation
+where they expect a reason.
+
+**An empty path arrives from a hand-built `["store", 0]`**, which pops a value
+and no segments at all. Whether a source a compiler accepts can also produce
+one is not established here.
+
+**The protected-root check runs after segment validation and before the
+write**, so a malformed path reports its type failure first, and a refused
+write leaves no partial write behind.
+
+**Six is what this record closes today, and the held shapes above could make
+it seven.** Refusing the held leaf shape would need a row here, because such a
+store is well-formed, its failure is not rewritten, and no row above can carry
+it. Refusing the held interior shape would instead mean extending the
+`not_a_container` row to reach a shape the section above exempts from every
+obligation it states. Either move belongs to the ruling on that question, and
+the closure is not meant to settle it by omission.
+
+### The two options that stop being inert
+
+**`protectedRoots` is consumed by the store opcode, and `loopBudget` by the
+backward jump.** As of `4aab8cb` this package declares, defaults and documents
+both, and NO OPCODE CONSUMES EITHER: the option resolver writes them onto the
+settings type and the tests read them back from there, which is the whole of
+their traffic. The change that adds each of those two opcodes is the change
+that consumes the option that opcode reads.
+
+**`protectedRoots` bears wherever a store runs, and not on statement mode
+alone.** In a run, a hand-built list containing a store, run at the
+EXPRESSION entry point with that path's root protected, is refused with
+`protected_root`. Protection is per-root rather than per-path: a protected root
+refuses every write beneath it, and there is no way to protect one path under a
+root while leaving another writable.
+
+**`loopBudget` is charged on each back edge in BOTH modes.** In a run, a
+list that jumps backward forever is stopped with `loop_budget_exceeded` at
+either entry point.
+
+### What this note does not decide
+
+The questions below are not settled here. This note names each rather than
+choosing, because a record is what a later change is written from and a shape
+invented here would be indistinguishable from one decided. Each carries its
+own reason for being open.
+
+**The result contract that the two entry-point questions turn on is not in
+this record, and a later author should not come here looking for it.** It is
+in the code: `src/evaluator.ts` declares the two-arm result the existing entry
+point answers, discriminated by `ok` and carrying `value` on one arm and
+`error` on the other. That a failure is a value rather
+than a throw is ADR-0001's ruling. This record fixes what the value domain is,
+what crosses the host boundary, and the reason tokens it names; it fixes no
+result shape.
+
+**What the returned context is expressed as.** This record's projection rule
+says a result comes back as plain JavaScript by default, which read across a
+context makes the returned context a plain object of projected values. The
+reference instead answers its own context type. The two readings point at
+different surfaces, and the second would add a name to this entry point's
+exports that neither this record nor ADR-0001 has placed there. Neither the
+reference's own shape nor the contract named above chooses between them.
+
+**Which member carries the context in each arm, and whether the failing arm's
+is required.** The contract named above settles the discriminant and the two
+members either arm carries today. It names no member for a context, and a
+failing arm carrying a value alongside its error is a shape no EXPORTED result
+of this package currently has - the machine's own internal step type does
+carry a member beside its error, so the shape is not unknown here, only
+unexported.
+
+**Whether a store writes at all where an integer segment at the LEAF meets a
+map that already exists, or an INTERIOR one meets a map that already carries
+that key's string spelling.** Not which key it writes under: this record's
+accepted body
+fixes a map as a plain object whose own enumerable keys are strings, so there
+is only one key to write. This one the reference does fix - it writes and
+reads the key back, established by running it - and this record's own accepted
+body fixes it the other way, ruling that an integer key against a map is
+always a structural miss. So the two halves cannot both be reproduced here,
+and every available answer is a declared divergence rather than a
+reproduction. Those are the two shapes it covers; an interior segment against
+a map carrying no such key is governed by the store section above and is not
+held. The store
+section above states the collision in full, with the accepted rule quoted in
+its own words and the corpus's silence on it. It is queued as `pts-7pe`,
+which the store work waits on.
+
+A change implementing the statement layer needs the two entry-point questions
+answered before it can write a signature, and the store question answered
+before it writes an integer segment at the leaf against an existing map, or an
+interior one into a map that already carries that key's string spelling.
+Answering any of them is a decision to be taken, not an implementation detail
+to be settled by whoever types first.
+
+### One consequence worth stating
+
+Under the plain projection an absence comes back as JavaScript `undefined`, so
+a successful `executeValue` whose value is an absence is indistinguishable from
+one whose value member was never set. That is the same indistinguishability the
+expression entry point already carries for an absence result, and it follows
+from the projection this record chose rather than being a new loss.
