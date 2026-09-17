@@ -28,9 +28,10 @@ this project. Read from the live registry on 2026-09-17:
 `npm view @riddler/predicator version` answers `0.1.1`, its `dist-tags` are
 `{ latest: '0.1.1' }`, its description is "Safe predicate engine", its
 `repository` names `github.com/riddler/predicator-js` rather than this
-repository, it declares a runtime dependency on `chevrotain`, and the only two
-versions it has ever carried were published on 2019-08-08Z. A registry is
-live: check it yourself rather than trusting this paragraph's date.
+repository, it declares a runtime dependency on `chevrotain`, its `time`
+metadata records publishes of `0.1.0` and `0.1.1` on 2019-08-08Z, and `0.1.1`
+is the only version it now offers. A registry is live: check it yourself
+rather than trusting this paragraph's date.
 
 So this command succeeds today - on that same date, `npm pack
 @riddler/predicator` fetched that package's tarball - and what it installs is
