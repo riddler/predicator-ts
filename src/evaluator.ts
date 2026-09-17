@@ -512,9 +512,9 @@ const POINT_OR_EXPONENT = /[.eE]/;
  *
  * Numbers add. A string and a string, a string and a number, and a number and
  * a string all concatenate, with the number written as text. Two lists join.
- * A date or an instant with a duration is date arithmetic, which this build
- * does not do yet and which therefore falls to the type check with everything
- * else rather than answering a wrong value.
+ * A date or an instant with a duration is date arithmetic, and `add` takes
+ * that pair in either order - the duration may be on either side, which is the
+ * one asymmetry with `subtract` below.
  */
 function applyAdd(left: Value, right: Value): Arithmetic {
   if (isNumeric(left) && isNumeric(right)) {
@@ -532,6 +532,12 @@ function applyAdd(left: Value, right: Value): Arithmetic {
   if (Array.isArray(left) && Array.isArray(right)) {
     return { ok: true, value: [...left, ...right] };
   }
+  if (isChronological(left) && right instanceof Duration) {
+    return { ok: true, value: shiftChronological(left, right, 1) };
+  }
+  if (left instanceof Duration && isChronological(right)) {
+    return { ok: true, value: shiftChronological(right, left, 1) };
+  }
   return NO_RULE;
 }
 
@@ -544,6 +550,10 @@ function applyAdd(left: Value, right: Value): Arithmetic {
  * midnight UTC, which is the same coercion a comparison makes. Neither result
  * is normalized across units and neither is a calendar rule: a duration here
  * carries the one part it was measured in.
+ *
+ * A date or an instant MINUS a duration is date arithmetic, and only in that
+ * order: a duration with a date subtracted from it is no rule at all, which is
+ * where this opcode's pair of rules stops short of `add`'s.
  */
 function applySubtract(left: Value, right: Value): Arithmetic {
   if (isNumeric(left) && isNumeric(right)) {
@@ -559,6 +569,9 @@ function applySubtract(left: Value, right: Value): Arithmetic {
     const elapsed =
       after.seconds - before.seconds + (after.micros - before.micros) / MICROS_PER_SECOND;
     return { ok: true, value: new Duration({ seconds: Math.trunc(elapsed) }) };
+  }
+  if (isChronological(left) && right instanceof Duration) {
+    return { ok: true, value: shiftChronological(left, right, -1) };
   }
   return NO_RULE;
 }
@@ -592,6 +605,212 @@ const ARITHMETIC: Record<
 function isZero(value: Value): boolean {
   if (value instanceof Float) return value.valueOf() === 0;
   return isIntegral(value) && value === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Durations and date arithmetic
+// ---------------------------------------------------------------------------
+
+/** One of the eight keys a duration carries. */
+type DurationKey = (typeof DURATION_KEYS)[number];
+
+/**
+ * Every unit spelling the `duration` opcode accepts, and the key each names.
+ *
+ * Section 5 of the reference's instruction-set document lists the spellings,
+ * short and long, and this table is that list. The value side is typed against
+ * the key list above rather than restating it, so a key that moved there would
+ * stop this table from compiling instead of letting the two drift apart.
+ */
+const DURATION_UNITS: ReadonlyMap<string, DurationKey> = new Map<string, DurationKey>([
+  ["y", "years"],
+  ["year", "years"],
+  ["years", "years"],
+  ["mo", "months"],
+  ["month", "months"],
+  ["months", "months"],
+  ["w", "weeks"],
+  ["week", "weeks"],
+  ["weeks", "weeks"],
+  ["d", "days"],
+  ["day", "days"],
+  ["days", "days"],
+  ["h", "hours"],
+  ["hour", "hours"],
+  ["hours", "hours"],
+  ["m", "minutes"],
+  ["min", "minutes"],
+  ["minute", "minutes"],
+  ["minutes", "minutes"],
+  ["s", "seconds"],
+  ["sec", "seconds"],
+  ["second", "seconds"],
+  ["seconds", "seconds"],
+  ["ms", "milliseconds"],
+  ["millisecond", "milliseconds"],
+  ["milliseconds", "milliseconds"],
+]);
+
+/** Which way each direction the `relative_date` opcode accepts moves time. */
+const RELATIVE_DIRECTIONS: ReadonlyMap<string, 1 | -1> = new Map<string, 1 | -1>([
+  ["ago", -1],
+  ["last", -1],
+  ["future", 1],
+  ["next", 1],
+]);
+
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3600;
+const DAYS_PER_WEEK = 7;
+const MILLIS_PER_SECOND = 1000;
+
+/**
+ * The two approximations the whole of this arithmetic rests on.
+ *
+ * A month is thirty days and a year is three hundred and sixty five. The
+ * reference converts a duration to a day count with exactly these factors, and
+ * its own comment on that conversion calls it approximate for months and
+ * years. There is no calendar shift and no month-end clamp anywhere in it, and
+ * section 5 says nothing about either, so this arithmetic is read off the
+ * reference's duration module rather than off the spec. A clamping calendar
+ * rule would answer a different date for the same expression.
+ */
+const DAYS_PER_MONTH = 30;
+const DAYS_PER_YEAR = 365;
+
+/**
+ * The day number of a civil date, counting 1970-01-01 as zero.
+ *
+ * This is plain arithmetic rather than a host date object, for two reasons.
+ * The host's UTC constructor reads a year below one hundred as that year plus
+ * 1900, which would move a date this domain admits; and arithmetic depends on
+ * nothing a constrained JavaScript engine might leave out. The algorithm is
+ * the standard days-from-civil pair, exact over the proleptic Gregorian
+ * calendar, with March taken as the first month of the year so that the leap
+ * day lands at the end.
+ */
+function daysFromCivil(year: number, month: number, day: number): number {
+  const shiftedYear = month <= 2 ? year - 1 : year;
+  const era = Math.floor(shiftedYear / 400);
+  const yearOfEra = shiftedYear - era * 400;
+  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+/** The inverse of `daysFromCivil`. */
+function civilFromDays(days: number): PDate {
+  const shifted = days + 719468;
+  const era = Math.floor(shifted / 146097);
+  const dayOfEra = shifted - era * 146097;
+  const yearOfEra = Math.floor(
+    (dayOfEra -
+      Math.floor(dayOfEra / 1460) +
+      Math.floor(dayOfEra / 36524) -
+      Math.floor(dayOfEra / 146096)) /
+      365,
+  );
+  const dayOfYear =
+    dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
+  const monthsFromMarch = Math.floor((5 * dayOfYear + 2) / 153);
+  const day = dayOfYear - Math.floor((153 * monthsFromMarch + 2) / 5) + 1;
+  const month = monthsFromMarch + (monthsFromMarch < 10 ? 3 : -9);
+  const year = yearOfEra + era * 400 + (month <= 2 ? 1 : 0);
+  return new PDate(year, month, day);
+}
+
+/**
+ * A duration as the whole number of days the reference moves a date by.
+ *
+ * The date parts convert through the two approximations above. The time parts
+ * contribute only the whole days they add up to, truncated toward zero, and
+ * the milliseconds do not contribute at all - both of those are the
+ * reference's behaviour at this conversion rather than a simplification made
+ * here, and a date moved by an hour is therefore the same date.
+ */
+function durationDays(duration: Duration): number {
+  const whole =
+    duration.days +
+    duration.weeks * DAYS_PER_WEEK +
+    duration.months * DAYS_PER_MONTH +
+    duration.years * DAYS_PER_YEAR;
+  const seconds =
+    duration.hours * SECONDS_PER_HOUR + duration.minutes * SECONDS_PER_MINUTE + duration.seconds;
+  return whole + Math.trunc(seconds / SECONDS_PER_DAY);
+}
+
+/**
+ * A duration as a whole number of seconds, which is what the reference moves
+ * an instant by. It carries no milliseconds component, by the same conversion.
+ */
+function durationSeconds(duration: Duration): number {
+  return (
+    duration.seconds +
+    duration.minutes * SECONDS_PER_MINUTE +
+    duration.hours * SECONDS_PER_HOUR +
+    (duration.days +
+      duration.weeks * DAYS_PER_WEEK +
+      duration.months * DAYS_PER_MONTH +
+      duration.years * DAYS_PER_YEAR) *
+      SECONDS_PER_DAY
+  );
+}
+
+/** The same duration in milliseconds, which is the conversion that keeps them. */
+function durationMillis(duration: Duration): number {
+  return duration.milliseconds + durationSeconds(duration) * MILLIS_PER_SECOND;
+}
+
+/** An instant moved by a signed count of microseconds, carrying the borrow. */
+function instantPlusMicros(anchor: PDateTime, micros: number): PDateTime {
+  let seconds = anchor.epochSeconds + Math.trunc(micros / MICROS_PER_SECOND);
+  let micro = anchor.microsecond + (micros % MICROS_PER_SECOND);
+  if (micro < 0) {
+    micro += MICROS_PER_SECOND;
+    seconds -= 1;
+  } else if (micro >= MICROS_PER_SECOND) {
+    micro -= MICROS_PER_SECOND;
+    seconds += 1;
+  }
+  return new PDateTime(seconds, micro);
+}
+
+/**
+ * An instant moved by a duration.
+ *
+ * The reference splits this on the duration's milliseconds: a POSITIVE
+ * milliseconds moves the instant in milliseconds, and every other duration
+ * moves it in whole seconds, by a conversion that carries no milliseconds at
+ * all. So a duration whose only sub-second part is negative moves the instant
+ * by its other parts alone. That split is the reference's and it is reproduced
+ * rather than tidied, because the corpus is what conformance means here.
+ */
+function shiftDateTime(anchor: PDateTime, duration: Duration, sign: 1 | -1): PDateTime {
+  if (duration.milliseconds > 0) {
+    const micros = sign * durationMillis(duration) * (MICROS_PER_SECOND / MILLIS_PER_SECOND);
+    return instantPlusMicros(anchor, micros);
+  }
+  return new PDateTime(anchor.epochSeconds + sign * durationSeconds(duration), anchor.microsecond);
+}
+
+/**
+ * A date or an instant moved by a duration, which is the whole of the date
+ * arithmetic the `add` and `subtract` opcodes reach for.
+ *
+ * A date moves by a day count and stays a date; an instant moves by a second
+ * or millisecond count and stays an instant. Neither ever changes which member
+ * of the domain it is.
+ */
+function shiftChronological(
+  anchor: PDate | PDateTime,
+  duration: Duration,
+  sign: 1 | -1,
+): PDate | PDateTime {
+  if (anchor instanceof PDateTime) return shiftDateTime(anchor, duration, sign);
+  const moved =
+    daysFromCivil(anchor.year, anchor.month, anchor.day) + sign * durationDays(duration);
+  return civilFromDays(moved);
 }
 
 // ---------------------------------------------------------------------------
@@ -671,6 +890,23 @@ function insufficientOperands(opcode: string, at: number): Step {
     error: new EvaluationError(
       INSUFFICIENT_OPERANDS,
       `${opcode} needs more operands than the stack holds`,
+      at,
+    ),
+  };
+}
+
+/**
+ * A unit pair the `duration` opcode could not read. It is built in one place
+ * because the pair fails the same way for three different reasons - it is not
+ * a pair at all, its magnitude is not an integer, or its unit is not a string
+ * - and section 5 gives all three the single reason below.
+ */
+function invalidDurationFormat(at: number): Step {
+  return {
+    ok: false,
+    error: new EvaluationError(
+      "invalid_duration_format",
+      "duration expects each unit pair to be an integer and a unit string",
       at,
     ),
   };
@@ -828,6 +1064,14 @@ class Machine {
         return this.bracketAccess(at);
       case "make_list":
         return this.makeList(instruction[1] as number, at);
+      case "duration":
+        return this.duration(instruction[1] as readonly Value[], at);
+      case "relative_date":
+        return this.relativeDate(instruction[1] as string, at);
+      case "object_new":
+        return this.objectNew(at);
+      case "object_set":
+        return this.objectSet(instruction[1] as string, at);
       case "call":
         return this.call(instruction[1] as string, instruction[2] as number, at);
       default:
@@ -1097,6 +1341,138 @@ class Machine {
   private makeList(count: number, at: number): Step {
     if (this.stack.length < count) return insufficientOperands("make_list", at);
     this.stack.push(this.stack.splice(this.stack.length - count, count));
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `duration`, which builds a duration out of its operand's unit pairs.
+   *
+   * A later pair naming a unit an earlier pair already named OVERWRITES it
+   * rather than adding to it. That is what section 5 specifies, and it is why
+   * the reference's own accumulating helper is the wrong tool for this opcode
+   * even though it takes the same unit strings; the reference says so in a
+   * comment beside the fold that does the overwriting.
+   *
+   * Both of this opcode's error reasons belong to the OPERAND rather than to
+   * the stack, and neither is an unknown instruction: a pair that is not an
+   * integer beside a string is one, an unrecognized unit string is the other.
+   * The operand shape check upstream therefore stops at the list.
+   */
+  private duration(units: readonly Value[], at: number): Step {
+    const parts: { [key in DurationKey]?: number } = {};
+    for (const pair of units) {
+      if (!Array.isArray(pair) || pair.length !== 2) return invalidDurationFormat(at);
+      const magnitude = pair[0];
+      const unit = pair[1];
+      if (typeof magnitude !== "number" || !Number.isSafeInteger(magnitude)) {
+        return invalidDurationFormat(at);
+      }
+      if (typeof unit !== "string") return invalidDurationFormat(at);
+      const key = DURATION_UNITS.get(unit);
+      if (key === undefined) {
+        return {
+          ok: false,
+          error: new EvaluationError(
+            "invalid_duration_unit",
+            `duration does not accept ${unit} as a unit`,
+            at,
+          ),
+        };
+      }
+      parts[key] = magnitude;
+    }
+    this.stack.push(new Duration(parts));
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `relative_date`, the one opcode whose answer depends on the clock.
+   *
+   * The instant comes from this evaluation's own clock, read at most once per
+   * run, so two time-dependent instructions in one evaluation agree with each
+   * other. Section 5 states that this opcode reads the current time, which is
+   * why no conformance case can pin what it answers; a host that wants a fixed
+   * answer supplies the clock through an evaluation option, which is this
+   * package's own extension and adds no opcode.
+   *
+   * The three checks run in the order section 5 gives them: the stack depth,
+   * then the value on top of the stack, then the direction.
+   */
+  private relativeDate(direction: string, at: number): Step {
+    if (this.stack.length < 1) return insufficientOperands("relative_date", at);
+    const top = this.stack.pop() as Value;
+    if (!(top instanceof Duration)) {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          "invalid_stack_value",
+          "relative_date expects a duration on the stack",
+          at,
+        ),
+      };
+    }
+    const sign = RELATIVE_DIRECTIONS.get(direction);
+    if (sign === undefined) {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          "invalid_direction",
+          `relative_date does not accept ${direction} as a direction`,
+          at,
+        ),
+      };
+    }
+    this.stack.push(shiftDateTime(this.settings.readNow(), top, sign));
+    return { ok: true, next: at + 1 };
+  }
+
+  /** `object_new`, which pushes an empty map and has no error path at all. */
+  private objectNew(at: number): Step {
+    this.stack.push({});
+    return { ok: true, next: at + 1 };
+  }
+
+  /**
+   * `object_set`, which pops the value and then the map beneath it, and pushes
+   * that map carrying one more member.
+   *
+   * Stack depth is checked BEFORE the target's type, which is the order
+   * section 5 states, so two pops short of a map answers insufficient operands
+   * rather than the stack-value refusal. The compiler only ever emits this
+   * opcode straight after `object_new`, so a non-map target is reachable only
+   * from a hand-built list - specified rather than undefined, and a corpus
+   * case pins it.
+   *
+   * The map is copied rather than written in place: the value underneath may
+   * have come from the context, and an opcode that mutated it would change
+   * what a later load of the same root answers.
+   */
+  private objectSet(key: string, at: number): Step {
+    if (this.stack.length < 2) return insufficientOperands("object_set", at);
+    const value = this.stack.pop() as Value;
+    const target = this.stack.pop() as Value;
+    if (!isPlainMap(target)) {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          "invalid_stack_value",
+          "object_set expects a map beneath the value",
+          at,
+        ),
+      };
+    }
+    const updated: { [name: string]: Value } = { ...target };
+    // defineProperty rather than an assignment, for the same reason the value
+    // boundary uses it: a key spelled as the prototype accessor would set the
+    // object's prototype instead of adding a member, and the map would read
+    // back as something other than what was written.
+    Object.defineProperty(updated, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    this.stack.push(updated);
     return { ok: true, next: at + 1 };
   }
 

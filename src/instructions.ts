@@ -54,6 +54,14 @@ export type Program = readonly Instruction[];
  * out-of-range or wrong-typed operand falls through to the catch-all and comes
  * back as `unknown_instruction`. Naming the shape here is what lets the
  * evaluator apply that rule once instead of at each opcode.
+ *
+ * `duration_units` is the one shape the reference deliberately holds wider
+ * than the operand it accepts. Section 5 of the instruction-set document gives
+ * the `duration` opcode two error reasons of its own, one of them for a unit
+ * pair that is not an integer beside a string, and the reference guards that
+ * clause on nothing more than the operand being a list. So a malformed PAIR is
+ * that opcode's own named error rather than an unknown instruction, and the
+ * shape checked here stops at the list. A corpus case pins the distinction.
  */
 export type OperandShape =
   | "value"
@@ -503,14 +511,6 @@ export function isComparisonOperator(candidate: Value): candidate is ComparisonO
   );
 }
 
-function isUnitPair(candidate: Value): boolean {
-  if (!Array.isArray(candidate) || candidate.length !== 2) return false;
-  const [magnitude, unit] = candidate;
-  return (
-    typeof magnitude === "number" && Number.isSafeInteger(magnitude) && typeof unit === "string"
-  );
-}
-
 /**
  * Whether an operand has the shape its opcode's row declares.
  *
@@ -531,6 +531,8 @@ export function matchesShape(operand: Value, shape: OperandShape): boolean {
     case "comparison_operator":
       return isComparisonOperator(operand);
     case "duration_units":
-      return Array.isArray(operand) && operand.every(isUnitPair);
+      // A list, and no more than that: the pairs inside it are judged by the
+      // `duration` opcode, which has a named reason for a malformed one.
+      return Array.isArray(operand);
   }
 }

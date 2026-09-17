@@ -27,7 +27,8 @@ import {
   evaluateToValue,
   resolveOptions,
 } from "../src/evaluator.js";
-import { Duration, Float, float, PDate, PDateTime, Undefined } from "../src/values.js";
+import type { Program } from "../src/instructions.js";
+import { Duration, Float, float, PDate, PDateTime, Undefined, type Value } from "../src/values.js";
 
 const APPROVED = [
   ["load", "authorization"],
@@ -263,7 +264,7 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
   // and the dispatch does not reaches the same catch-all as a name nobody has
   // heard of, instead of a third answer that would read as a gap being hidden.
   it("reads an opcode this build does not yet run as an unknown instruction", () => {
-    const outcome = evaluateToValue([["object_new"]]);
+    const outcome = evaluateToValue([["pop"]]);
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.reason).toBe("unknown_instruction");
@@ -910,5 +911,445 @@ describe("indexing", () => {
       ok: true,
       value: false,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The rich types
+// ---------------------------------------------------------------------------
+
+/** The reason a program refused, or a sentence saying it did not. */
+function refusalOf(program: Program): string {
+  const outcome = evaluateToValue(program);
+  return outcome.ok ? "it did not refuse" : outcome.error.reason;
+}
+
+/** The value a program answered, or a sentence naming the refusal instead. */
+function answerOf(program: Program): Value | string {
+  const outcome = evaluateToValue(program);
+  return outcome.ok ? outcome.value : `refused: ${outcome.error.reason}`;
+}
+
+describe("the duration opcode", () => {
+  // Every spelling section 5 accepts, written out here rather than imported
+  // from the table under test: a test that read the table would agree with it
+  // whatever the table said. The pairs are the spelling and the key it names.
+  const SPELLINGS: readonly (readonly [string, string])[] = [
+    ["y", "years"],
+    ["year", "years"],
+    ["years", "years"],
+    ["mo", "months"],
+    ["month", "months"],
+    ["months", "months"],
+    ["w", "weeks"],
+    ["week", "weeks"],
+    ["weeks", "weeks"],
+    ["d", "days"],
+    ["day", "days"],
+    ["days", "days"],
+    ["h", "hours"],
+    ["hour", "hours"],
+    ["hours", "hours"],
+    ["m", "minutes"],
+    ["min", "minutes"],
+    ["minute", "minutes"],
+    ["minutes", "minutes"],
+    ["s", "seconds"],
+    ["sec", "seconds"],
+    ["second", "seconds"],
+    ["seconds", "seconds"],
+    ["ms", "milliseconds"],
+    ["millisecond", "milliseconds"],
+    ["milliseconds", "milliseconds"],
+  ];
+
+  // Sabotage: dropping the long spellings from the unit table, leaving only
+  // the short forms, turns this red at the first long one. It was run and
+  // reverted.
+  it("accepts every unit spelling, long and short, and no others", () => {
+    for (const [spelling, key] of SPELLINGS) {
+      expect(answerOf([["duration", [[7, spelling]]]])).toStrictEqual(new Duration({ [key]: 7 }));
+    }
+    expect(refusalOf([["duration", [[3, "xyz"]]]])).toBe("invalid_duration_unit");
+    expect(refusalOf([["duration", [[3, "DAYS"]]]])).toBe("invalid_duration_unit");
+  });
+
+  // Sabotage: accumulating a repeated unit rather than overwriting it - the
+  // shape the reference's own duration helper has, and the obvious wrong tool
+  // here - turns every assertion below red. It was run and reverted.
+  it("lets a later unit pair overwrite an earlier one naming the same unit", () => {
+    expect(
+      answerOf([
+        [
+          "duration",
+          [
+            [1, "h"],
+            [2, "h"],
+          ],
+        ],
+      ]),
+    ).toStrictEqual(new Duration({ hours: 2 }));
+    expect(
+      answerOf([
+        [
+          "duration",
+          [
+            [1, "hour"],
+            [2, "h"],
+          ],
+        ],
+      ]),
+    ).toStrictEqual(new Duration({ hours: 2 }));
+    expect(
+      answerOf([
+        [
+          "duration",
+          [
+            [5, "d"],
+            [0, "days"],
+          ],
+        ],
+      ]),
+    ).toStrictEqual(new Duration());
+  });
+
+  // Sabotage: reading a malformed pair as an unknown instruction rather than
+  // as this opcode's own reason turns all four assertions red. It was run and
+  // reverted.
+  it("names its own reason for a pair it cannot read, rather than refusing the instruction", () => {
+    expect(refusalOf([["duration", [["bad"]]]])).toBe("invalid_duration_format");
+    expect(refusalOf([["duration", [[3, "d", "extra"]]]])).toBe("invalid_duration_format");
+    expect(refusalOf([["duration", [["3", "d"]]]])).toBe("invalid_duration_format");
+    expect(refusalOf([["duration", [[3, 4]]]])).toBe("invalid_duration_format");
+  });
+
+  // Sabotage: seeding the parts with a non-zero day turns the first assertion
+  // red. It was run and reverted.
+  it("carries all eight keys whatever the expression named, and an empty operand is the zero", () => {
+    expect(answerOf([["duration", []]])).toStrictEqual(new Duration());
+    expect(
+      answerOf([
+        [
+          "duration",
+          [
+            [2, "w"],
+            [3, "d"],
+          ],
+        ],
+      ]),
+    ).toStrictEqual(new Duration({ weeks: 2, days: 3 }));
+  });
+});
+
+describe("date arithmetic, which is a day count and not a calendar rule", () => {
+  // The reference converts a month to thirty days and a year to three hundred
+  // and sixty five before it moves a date, and its own comment on that
+  // conversion calls it approximate. These two assertions are where the
+  // approximation and a calendar rule would disagree, which is why they are
+  // written as the proof rather than a month-end expectation: a calendar rule
+  // clamping to the end of February would answer 2024-02-29 for the first and
+  // 2025-01-01 for the second.
+  //
+  // Sabotage: changing the month factor away from thirty days turns the first
+  // assertion red; changing the year factor away from three hundred and sixty
+  // five turns the second red. Both were run and reverted.
+  it("moves a date across a month boundary by the approximation, not by the calendar", () => {
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 31)], ["duration", [[1, "mo"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 3, 1));
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 1)], ["duration", [[1, "y"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 12, 31));
+  });
+
+  // Sabotage: rounding the time parts up to a whole day rather than truncating
+  // them turns the first assertion red. It was run and reverted.
+  it("moves a date by the time parts only once they add up to a whole day", () => {
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 15)], ["duration", [[23, "h"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 1, 15));
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 15)], ["duration", [[25, "h"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 1, 16));
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 15)], ["duration", [[500, "ms"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 1, 15));
+  });
+
+  // The civil-date arithmetic is written out rather than taken from the host's
+  // UTC constructor, which reads a year below one hundred as that year plus
+  // 1900. These two assertions are what that buys: a leap day crossed exactly,
+  // and a year the host constructor would have moved by nineteen centuries.
+  //
+  // Sabotage: replacing the day-number pair with the host's UTC constructor and
+  // its inverse turns the year-fifty assertion red. It was run and reverted.
+  it("counts civil days exactly, across a leap day and below the year one hundred", () => {
+    expect(
+      answerOf([["lit", new PDate(2024, 2, 28)], ["duration", [[2, "d"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 3, 1));
+    expect(
+      answerOf([["lit", new PDate(2023, 2, 28)], ["duration", [[2, "d"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2023, 3, 2));
+    expect(
+      answerOf([["lit", new PDate(50, 1, 1)], ["duration", [[1, "d"]]], ["add"]]),
+    ).toStrictEqual(new PDate(50, 1, 2));
+  });
+
+  // Sabotage: dropping the clause that takes the duration on the left turns
+  // the second assertion red; adding a clause that subtracts a date from a
+  // duration turns the last one red. Both were run and reverted.
+  it("adds a duration to a date from either side and subtracts one from only the right", () => {
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 15)], ["duration", [[3, "d"]]], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 1, 18));
+    expect(
+      answerOf([["duration", [[3, "d"]]], ["lit", new PDate(2024, 1, 15)], ["add"]]),
+    ).toStrictEqual(new PDate(2024, 1, 18));
+    expect(
+      answerOf([["lit", new PDate(2024, 1, 15)], ["duration", [[3, "d"]]], ["subtract"]]),
+    ).toStrictEqual(new PDate(2024, 1, 12));
+    expect(
+      refusalOf([["duration", [[3, "d"]]], ["lit", new PDate(2024, 1, 15)], ["subtract"]]),
+    ).toBe("subtract");
+  });
+
+  // Sabotage: moving an instant by the day count rather than by the second
+  // count turns the first assertion red. It was run and reverted.
+  it("moves an instant by seconds, keeping it an instant", () => {
+    const noon = new PDateTime(1705312800, 0);
+    expect(answerOf([["lit", noon], ["duration", [[2, "h"]]], ["add"]])).toStrictEqual(
+      new PDateTime(noon.epochSeconds + 7200, 0),
+    );
+    expect(
+      answerOf([
+        ["lit", noon],
+        [
+          "duration",
+          [
+            [1, "d"],
+            [30, "m"],
+          ],
+        ],
+        ["subtract"],
+      ]),
+    ).toStrictEqual(new PDateTime(noon.epochSeconds - 88200, 0));
+  });
+
+  // The reference splits on a POSITIVE milliseconds: that duration moves an
+  // instant in milliseconds, and every other one moves it in whole seconds, by
+  // a conversion carrying no milliseconds at all. The last assertion is that
+  // split, which is why a negative milliseconds is simply not carried.
+  //
+  // Sabotage: carrying the borrow the wrong way, so that a sub-second
+  // subtraction does not decrement the second, turns the second assertion red.
+  // It was run and reverted.
+  it("moves an instant in milliseconds only when the milliseconds are positive", () => {
+    expect(
+      answerOf([["lit", new PDateTime(100, 0)], ["duration", [[500, "ms"]]], ["add"]]),
+    ).toStrictEqual(new PDateTime(100, 500000));
+    expect(
+      answerOf([["lit", new PDateTime(100, 0)], ["duration", [[500, "ms"]]], ["subtract"]]),
+    ).toStrictEqual(new PDateTime(99, 500000));
+    expect(
+      answerOf([["lit", new PDateTime(100, 700000)], ["duration", [[500, "ms"]]], ["add"]]),
+    ).toStrictEqual(new PDateTime(101, 200000));
+    expect(
+      answerOf([
+        ["lit", new PDateTime(100, 0)],
+        [
+          "duration",
+          [
+            [1, "s"],
+            [500, "ms"],
+          ],
+        ],
+        ["add"],
+      ]),
+    ).toStrictEqual(new PDateTime(101, 500000));
+    expect(
+      answerOf([
+        ["lit", new PDateTime(100, 0)],
+        [
+          "duration",
+          [
+            [-500, "ms"],
+            [2, "s"],
+          ],
+        ],
+        ["add"],
+      ]),
+    ).toStrictEqual(new PDateTime(102, 0));
+  });
+});
+
+describe("the object opcodes", () => {
+  // Sabotage: pushing anything but an empty map turns the first assertion red.
+  // It was run and reverted.
+  it("builds a map one member at a time", () => {
+    expect(answerOf([["object_new"]])).toStrictEqual({});
+    expect(answerOf([["object_new"], ["lit", "visa"], ["object_set", "brand"]])).toStrictEqual({
+      brand: "visa",
+    });
+    expect(
+      answerOf([
+        ["object_new"],
+        ["object_new"],
+        ["lit", "visa"],
+        ["object_set", "brand"],
+        ["object_set", "card"],
+      ]),
+    ).toStrictEqual({ card: { brand: "visa" } });
+  });
+
+  // The depth check runs before the target's type, which is the order section
+  // 5 states, so one value short of a map is insufficient operands and a
+  // non-map target with both values present is the stack-value refusal.
+  //
+  // Sabotage: letting the opcode run one value short, so the target's type is
+  // judged before the depth is, turns the first assertion red. It was run and
+  // reverted.
+  it("checks the stack depth before the target's type", () => {
+    expect(
+      refusalOf([
+        ["lit", 5],
+        ["object_set", "brand"],
+      ]),
+    ).toBe("insufficient_operands");
+    expect(
+      refusalOf([
+        ["lit", 5],
+        ["lit", 1],
+        ["object_set", "brand"],
+      ]),
+    ).toBe("invalid_stack_value");
+    expect(
+      refusalOf([
+        ["lit", [1]],
+        ["lit", 1],
+        ["object_set", "brand"],
+      ]),
+    ).toBe("invalid_stack_value");
+  });
+
+  // Sabotage: writing the member in place rather than into a copy turns this
+  // red, because the second load then answers the written map. It was run and
+  // reverted.
+  it("leaves the map it was handed alone", () => {
+    const outcome = evaluateToValue(
+      [
+        ["load", "card"],
+        ["lit", "4111"],
+        ["object_set", "last4"],
+        ["load", "card"],
+        ["compare", "EQ"],
+      ],
+      { card: { brand: "visa" } },
+    );
+    expect(outcome).toEqual({ ok: true, value: false });
+  });
+
+  // Sabotage: writing the member with a plain assignment rather than through
+  // a property definition turns this red - the key names the prototype
+  // accessor, so the assignment sets a prototype instead of adding a member.
+  // It was run and reverted.
+  it("writes a member under a key that names the prototype accessor", () => {
+    const answered = answerOf([["object_new"], ["lit", "visa"], ["object_set", "__proto__"]]);
+    // The expectation is written with a computed key on purpose: spelled as a
+    // plain literal key it would be the prototype-setting syntax and would
+    // build an empty map, which is the very confusion this test is about.
+    expect(answered).toStrictEqual({ ["__proto__"]: "visa" });
+    expect(Object.getPrototypeOf(answered)).toBe(Object.prototype);
+    expect(Object.hasOwn(answered as object, "__proto__")).toBe(true);
+  });
+});
+
+describe("the relative date opcode, against a clock the host supplies", () => {
+  const fixed = new PDateTime(1705312800, 0);
+  const clock = { now: () => fixed };
+
+  // No conformance case can pin this opcode: section 5 says it reads the
+  // current time. The injected clock is this package's own evaluation option,
+  // so a unit test with a fixed instant is the only thing that can cover it.
+  //
+  // Sabotage: swapping the sign of either direction pair turns this red. It
+  // was run and reverted.
+  it("subtracts for a backward direction and adds for a forward one", () => {
+    const day = 86400;
+    for (const direction of ["ago", "last"]) {
+      expect(
+        evaluateToValue(
+          [
+            ["duration", [[1, "d"]]],
+            ["relative_date", direction],
+          ],
+          {},
+          clock,
+        ),
+      ).toStrictEqual({ ok: true, value: new PDateTime(fixed.epochSeconds - day, 0) });
+    }
+    for (const direction of ["future", "next"]) {
+      expect(
+        evaluateToValue(
+          [
+            ["duration", [[1, "d"]]],
+            ["relative_date", direction],
+          ],
+          {},
+          clock,
+        ),
+      ).toStrictEqual({ ok: true, value: new PDateTime(fixed.epochSeconds + day, 0) });
+    }
+  });
+
+  // Sabotage: dropping the memoization from the settings' clock reader turns
+  // this red, because the two instructions then read two instants. It was run
+  // and reverted.
+  it("reads one instant for the whole evaluation", () => {
+    let reads = 0;
+    const ticking = {
+      now: () => {
+        reads += 1;
+        return new PDateTime(1705312800 + reads, 0);
+      },
+    };
+    const outcome = evaluateToValue(
+      [
+        ["duration", [[1, "d"]]],
+        ["relative_date", "ago"],
+        ["duration", [[1, "d"]]],
+        ["relative_date", "ago"],
+        ["compare", "STRICT_EQ"],
+      ],
+      {},
+      ticking,
+    );
+    expect(outcome).toEqual({ ok: true, value: true });
+    expect(reads).toBe(1);
+  });
+
+  // The three checks in the order section 5 gives them.
+  //
+  // Sabotage: judging the direction before the value on top of the stack turns
+  // the third assertion red. It was run and reverted.
+  it("checks the depth, then the value on top, then the direction", () => {
+    expect(refusalOf([["relative_date", "ago"]])).toBe("insufficient_operands");
+    expect(
+      refusalOf([
+        ["lit", 5],
+        ["relative_date", "ago"],
+      ]),
+    ).toBe("invalid_stack_value");
+    expect(
+      refusalOf([
+        ["lit", 5],
+        ["relative_date", "sideways"],
+      ]),
+    ).toBe("invalid_stack_value");
+    expect(
+      refusalOf([
+        ["duration", [[1, "d"]]],
+        ["relative_date", "sideways"],
+      ]),
+    ).toBe("invalid_direction");
   });
 });
