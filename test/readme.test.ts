@@ -6,8 +6,19 @@
 // README.md is extracted and run here, and a block that shows a result is
 // written to check it: such a block throws when it stops being true of the
 // package, and this suite goes red printing what it threw. Nothing in this
-// file knows what any example says - it discovers them, which is what keeps a
-// newly added example from being silently unchecked.
+// file knows what any example says - it discovers them by their fence.
+//
+// THAT DISCOVERY IS EXACT RATHER THAN GENEROUS, and on its own it would skip in
+// silence what it does not recognise. It extracts a block opened by exactly
+// three backticks and a bare language word at the start of a line, and then
+// keeps the languages it has a rule for, so a fence written any other way - an
+// indented or longer opener, a tilde fence, an info string carrying a title -
+// and a language no rule covers are both invisible to it. So the page's fence
+// openers are enumerated separately, and every one of them must open a block
+// this suite runs, a block it checks, or a language on the explicit ignore list
+// below; a fence outside that set turns this red naming its shape and its line
+// rather than vanishing. The two enumerations are also compared against each
+// other, so a block the openers see and the extractor does not is a failure too.
 //
 // RUNNING AN IMPORT IS NOT ENOUGH, which is the hole this harness shipped
 // with. The runner transforms the module, so a named import of something the
@@ -29,20 +40,25 @@
 // strips the types rather than checking them, so a type error inside an
 // example is not caught here; `tsc` covers `src/` and `test/`, and an example
 // lives in neither. Of a `json` block it asserts the match stated above. A
-// fenced block in some other language is not examined at all.
+// fence in any other language is examined only far enough to fail: it is
+// neither run nor compared, and unless the ignore list carries its language it
+// turns this suite red.
 //
 // The rewrite an example undergoes before it runs is its import specifier,
 // which is pointed at `src/` because the package is not installed into itself,
 // and the appended epilogue. The example text is otherwise the file's, byte
 // for byte.
 //
-// Each check here is exercised on both sides, against a constructed input that
-// must fail it as well as against the README: a check that has only ever seen
-// a passing input is not a check yet.
+// Every function this file checks the README with is exercised on both sides:
+// against the README, and against a constructed input it must report. A check
+// that has only ever seen a passing input is not a check yet.
 //
 // Sabotage: answering the comparison opcode's greater-than with the less-than
 // order turns this red at the example whose own check then threw, and prints
-// that example's message. It was run and reverted.
+// that example's message. Adding to the page a fence the extraction does not
+// read - a `typescript` opener, an info string with a title in it, a tilde
+// fence, an indented closing fence - turns it red at the fence checks.
+// All were run and reverted.
 
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -70,6 +86,10 @@ const SPECIFIERS: readonly (readonly [string, string])[] = [
 ];
 
 const FENCE = /^```(\w+)\n([\s\S]*?)^```$/gm;
+const FENCE_OPENER = /^(\s*)(`{3,}|~{3,})(.*)$/;
+/** The languages this suite runs or checks, and the ones it skips on purpose. */
+const HANDLED = ["ts", "json"] as const;
+const IGNORED = ["bash"] as const;
 const ANY_IMPORT = /^\s*import\b.*$/gm;
 const NAMED_IMPORT = /^\s*import\s+(type\s+)?\{([^}]*)\}\s+from\s+"[^"]+";\s*$/;
 
@@ -84,6 +104,68 @@ function fencedBlocks(markdown: string): Block[] {
     blocks.push({ language: match[1] ?? "", code: match[2] ?? "" });
   }
   return blocks;
+}
+
+interface Opener {
+  readonly line: number;
+  readonly text: string;
+  readonly language: string;
+}
+
+/**
+ * Every fence opener in the page, with the line it sits on and its own text.
+ *
+ * A line inside an open fence is content rather than an opener, so the walk
+ * tracks which marker is open and closes on a bare run of the same character at
+ * least as long. That is what keeps a fence quoted inside another one from
+ * being read as an opener of its own.
+ */
+function fenceOpeners(markdown: string): Opener[] {
+  const openers: Opener[] = [];
+  let open: string | null = null;
+  markdown.split("\n").forEach((text, index) => {
+    const match = FENCE_OPENER.exec(text);
+    if (match === null) return;
+    const marker = match[2] ?? "";
+    const info = (match[3] ?? "").trim();
+    if (open !== null) {
+      if (marker[0] === open[0] && marker.length >= open.length && info === "") open = null;
+      return;
+    }
+    open = marker;
+    openers.push({ line: index + 1, text, language: info });
+  });
+  return openers;
+}
+
+/**
+ * The fences on the page this suite neither runs, checks, nor skips on purpose,
+ * reported as the shape and the line - which is what a reader needs in order to
+ * see why a block of theirs is not being executed.
+ */
+function unhandledFences(markdown: string): string[] {
+  const known: readonly string[] = [...HANDLED, ...IGNORED];
+  return fenceOpeners(markdown)
+    .filter(
+      (opener) => opener.text !== `\`\`\`${opener.language}` || !known.includes(opener.language),
+    )
+    .map((opener) => `line ${opener.line}: ${opener.text}`);
+}
+
+/**
+ * Where the extractor and the opener walk disagree about how many blocks of a
+ * handled language the page holds. Either half can be the wrong one; what
+ * matters is that a block one of them sees and the other does not stops being
+ * silent.
+ */
+function extractionAgreesWithFences(markdown: string): string[] {
+  const blocks = fencedBlocks(markdown);
+  const openers = fenceOpeners(markdown);
+  return HANDLED.flatMap((language) => {
+    const extracted = blocks.filter((block) => block.language === language).length;
+    const opened = openers.filter((opener) => opener.language === language).length;
+    return extracted === opened ? [] : [`${language}: ${opened} fenced, ${extracted} extracted`];
+  });
 }
 
 /**
@@ -180,7 +262,8 @@ function quotationProblems(block: string): string[] {
   return [`this suite has no rule for the quoted block: ${text}`];
 }
 
-const blocks = fencedBlocks(readFileSync(readmePath, "utf8"));
+const readmeText = readFileSync(readmePath, "utf8");
+const blocks = fencedBlocks(readmeText);
 const examples = blocks.filter((block) => block.language === "ts");
 const quotations = blocks.filter((block) => block.language === "json");
 
@@ -197,11 +280,54 @@ describe("the README's TypeScript examples", () => {
     expect(examples.length).toBeGreaterThan(0);
   });
 
+  // The constructed half of that count and of the quotations' one below: the
+  // discovery both rest on comes back empty from a page with no fence in it, so
+  // neither is passing merely by being unable to return nothing.
+  it("discovers nothing in a page that holds no fenced block", () => {
+    expect(fencedBlocks("# A page of prose\n\nwith no fenced block in it.\n")).toEqual([]);
+  });
+
+  it("runs, checks or deliberately skips every fence on the page", () => {
+    expect(unhandledFences(readmeText)).toEqual([]);
+  });
+
+  it("extracts every fence of a handled language that the page opens", () => {
+    expect(extractionAgreesWithFences(readmeText)).toEqual([]);
+  });
+
+  it("reports a fence shape it would otherwise skip in silence", () => {
+    expect(unhandledFences('```ts title="example"\nvoid 0;\n```\n')).toEqual([
+      'line 1: ```ts title="example"',
+    ]);
+    expect(unhandledFences("~~~ts\nvoid 0;\n~~~\n")).toEqual(["line 1: ~~~ts"]);
+    expect(unhandledFences("```typescript\nvoid 0;\n```\n")).toEqual(["line 1: ```typescript"]);
+    expect(unhandledFences("prose\n  ```ts\n  void 0;\n  ```\n")).toEqual(["line 2:   ```ts"]);
+    expect(unhandledFences("```ts\nvoid 0;\n```\n\n```bash\nls\n```\n")).toEqual([]);
+    // A fence quoted inside another one is content, not an opener of its own.
+    expect(unhandledFences("```bash\n~~~ts\n```\n")).toEqual([]);
+  });
+
+  it("reports a fence of a handled language that the extractor would drop", () => {
+    // The closing fence is indented, which the extractor's pattern does not
+    // match, so it finds no block where the page opened one.
+    expect(extractionAgreesWithFences("```ts\nvoid 0;\n  ```\n")).toEqual([
+      "ts: 1 fenced, 0 extracted",
+    ]);
+  });
+
   it("points every example's imports at this repository's own source", () => {
     const unrewritten = examples
       .map((block) => pointAtSource(block.code))
       .filter((code) => code.includes("@riddler/predicator"));
     expect(unrewritten).toEqual([]);
+  });
+
+  it("leaves a specifier it has no rewrite for pointing at the package", () => {
+    // The constructed half of the check above: a specifier the table does not
+    // carry survives the rewrite, and that check is what reports it.
+    expect(pointAtSource('import { x } from "@riddler/predicator/untagged";')).toContain(
+      "@riddler/predicator",
+    );
   });
 
   it("reads every example's imports as named bindings", () => {
@@ -213,6 +339,14 @@ describe("the README's TypeScript examples", () => {
     // on one carries its index from call to call.
     const importing = examples.filter((block) => (block.code.match(ANY_IMPORT) ?? []).length > 0);
     expect(importing.filter((block) => runtimeBindings(block.code).length === 0)).toEqual([]);
+  });
+
+  it("finds no binding to check in a block whose only import is type-only", () => {
+    // The constructed half of the check above: this block imports, and binds
+    // nothing at run time, which is the shape that check reports.
+    const code = 'import type { Value } from "@riddler/predicator";\nvoid 0;\n';
+    expect(code.match(ANY_IMPORT) ?? []).toHaveLength(1);
+    expect(runtimeBindings(code)).toEqual([]);
   });
 
   for (const [index, block] of examples.entries()) {
