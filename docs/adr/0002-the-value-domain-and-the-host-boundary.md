@@ -1,6 +1,6 @@
 # ADR-0002: The value domain in TypeScript, and the host boundary
 
-Status: proposed (2026-09-16)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
 
 ## Context
 
@@ -507,10 +507,10 @@ and `tagged` now appears in the options table beside the rest. The worked
 example's second request is named as the subpath's for the same reason.
 
 This note records where an already-accepted decision renders rather than
-changing what this record decides, so it carries no Status line and this record
-stays at proposed. The reachable surface is pinned by a negative test - that the
-main entry point does not accept the option - written with the evaluator entry
-point rather than here.
+changing what this record decides, so it carries no Status line of its own and
+did not advance this record's status. The reachable surface is pinned by a
+negative test - that the main entry point does not accept the option - written
+with the evaluator entry point rather than here.
 
 That negative test is expressible as this note words it - non-acceptance rather
 than non-honoring - only because the amendment below splits the options type.
@@ -519,7 +519,7 @@ no test could have pinned more than that the option is not honored there.
 
 ## Amendment: two options types, and `tagged` on the subpath's only (2026-09-16)
 
-Status: proposed (2026-09-16)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
 
 What this amends. The Typespecs section above declares one `EvaluateOptions`
 interface serving both entry points, carrying `tagged` as an optional member
@@ -584,7 +584,7 @@ defined, and not this record's.
 
 ## Amendment: the out-of-range rule's sites, and the cast exemption (2026-09-17)
 
-Status: proposed (2026-09-17)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
 
 Recorded for `pts-brv`, which asked whether a cast result belongs among the
 places the out-of-range rule refuses at.
@@ -750,7 +750,7 @@ amendment adds an opcode, a reason token or a wire-format change.
 
 ## Note: statement mode, the two program entry points, and the store write (2026-09-17)
 
-Status: proposed (2026-09-17)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
 
 Recorded for `pts-mqm`, ahead of the change that implements the statement
 layer. This record governs the value domain, the host boundary and the
@@ -1117,7 +1117,7 @@ from the projection this record chose rather than being a new loss.
 
 ## Amendment: an integer bracket key reads its string spelling (2026-09-17)
 
-Status: proposed (2026-09-17)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
 
 Recorded under the ruling on the question this record held about a store whose
 path segment is an integer landing on a map that already exists. The ruling
@@ -1238,7 +1238,7 @@ deciding it, and why nothing it pins moves now that the question is answered.
 
 ## Amendment: the three questions the statement-mode note holds (2026-09-17)
 
-Status: proposed (2026-09-17)
+Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
 
 Recorded for `pts-5h8`, under rulings taken on all three of the questions the
 note above holds in its "what this note does not decide" section. Each is
