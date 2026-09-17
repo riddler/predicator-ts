@@ -33,6 +33,7 @@ import {
 } from "../../scripts/lib/corpus.mjs";
 import type { Registry, RegistryEntry } from "../../scripts/lib/registry-encoding.mjs";
 import { encodeRegistry } from "../../scripts/lib/registry-encoding.mjs";
+import { isaVersion } from "../../src/index.js";
 import type { Report } from "./runner.js";
 import { runEvaluator } from "./runner.js";
 
@@ -132,12 +133,21 @@ function currencyProblems(subject: Registry, reports: readonly Report[]): string
  * Completeness: a claim of tier N says every case in tiers 1 through N on that
  * surface has an entry - of those the claimed version runs, because a case the
  * version retired is one no run can enter.
+ *
+ * `claimed` must be the instruction-set version THIS PACKAGE implements, and
+ * `corpusVersion` the vendored corpus's own. They are two different numbers
+ * serving two different roles, so a caller must not pass one for the other: the
+ * runner scopes its case set by the package's version, and a completeness rule
+ * scoped by anything else need not ask for what a run of this package attempts.
+ * That is why `claimed` defaults to the package's accessor rather than being
+ * supplied at each call site - a default cannot be got wrong by a caller that
+ * had the corpus's number to hand.
  */
 function completenessProblems(
   subject: Registry,
   corpus: readonly CaseMetadata[],
   corpusVersion: number,
-  claimed: number,
+  claimed: number = isaVersion(),
 ): string[] {
   const entered = new Set(subject.entries.map(key));
   const problems: string[] = [];
@@ -215,9 +225,7 @@ describe("the registry this package ships", () => {
   });
 
   it("passes completeness", () => {
-    expect(
-      completenessProblems(registry, cases, manifest.isa_version, manifest.isa_version),
-    ).toEqual([]);
+    expect(completenessProblems(registry, cases, manifest.isa_version)).toEqual([]);
   });
 });
 
@@ -313,9 +321,7 @@ describe("currency", () => {
 describe("completeness", () => {
   it("fails a tier claim the entries do not cover", () => {
     const claimed = withEntries([], [{ surface: "evaluator", tier: 1 }]);
-    expect(
-      completenessProblems(claimed, cases, manifest.isa_version, manifest.isa_version),
-    ).not.toEqual([]);
+    expect(completenessProblems(claimed, cases, manifest.isa_version)).not.toEqual([]);
   });
 
   // The seam between the retired filter and completeness: a claim covering a
@@ -332,9 +338,7 @@ describe("completeness", () => {
       manifest.isa_version,
     ).map((item) => ({ case_id: item.id, surface: "evaluator", tier: item.tier }));
     const claimed = withEntries(entries, [{ surface: "evaluator", tier: 1 }]);
-    expect(
-      completenessProblems(claimed, cases, manifest.isa_version, manifest.isa_version),
-    ).toEqual([]);
+    expect(completenessProblems(claimed, cases, manifest.isa_version)).toEqual([]);
   });
 
   // And the other half of the same rule: a package claiming a version before
@@ -351,5 +355,34 @@ describe("completeness", () => {
     expect(
       completenessProblems(claimed, cases, manifest.isa_version, manifest.isa_version - 1),
     ).not.toEqual([]);
+  });
+
+  // The divergent case, stated through the call shape the shipped registry's
+  // own completeness assertion uses: three arguments, with the claimed version
+  // coming from the package rather than from a caller. It is the case that
+  // tells the two numbers apart, which the case above cannot do, because that
+  // one hands the claimed version in.
+  //
+  // The divergence is built by giving the corpus a later version rather than by
+  // lowering the package's, because what the package claims is a value in src/
+  // and `test/instructions.test.ts` holds it equal to the vendored corpus's.
+  // A run of this package at its own version still attempts a case retired
+  // above that version, so a claim that omits those cases is short of what the
+  // run covers and must be refused. Scoping by the corpus's version instead
+  // filters them out and lets the same claim through.
+  //
+  // Sabotage: defaulting `claimed` to `corpusVersion`, which is the reading
+  // this test exists to refuse, turns this case red and leaves the rest of the
+  // file green. It was run and reverted.
+  it("refuses a claim short of what the version this package claims runs", () => {
+    const firstTier = cases.filter((item) => item.tier === 1);
+    const laterCorpus = isaVersion() + 1;
+    const entries = runnableCases(firstTier, "evaluator", laterCorpus, laterCorpus).map((item) => ({
+      case_id: item.id,
+      surface: "evaluator",
+      tier: item.tier,
+    }));
+    const claimed = withEntries(entries, [{ surface: "evaluator", tier: 1 }]);
+    expect(completenessProblems(claimed, cases, laterCorpus)).not.toEqual([]);
   });
 });
