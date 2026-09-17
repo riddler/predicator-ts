@@ -268,9 +268,15 @@ runs of one list under different options may legitimately differ.
 
 The request for the corpus's tagged encoding is not on that type. It belongs to
 `TaggedEvaluateOptions`, which the subpath exports and which extends the type
-above, so asking for it at the main entry point is refused by the compiler
-rather than at run time, and a host calling both entry points still passes one
-options object to both.
+above. Asking for it at the main entry point is refused by the compiler
+wherever the options object is written as a literal, which is the form a host
+normally writes and the form the negative test in `test/index.test.ts` pins.
+The split is a type-level boundary and adds no runtime check, so the refusal
+reaches exactly as far as that check does: because the subpath's type extends
+the one above, a host calling both entry points may pass one options object to
+both, and a `tagged` carried on such a shared object is ignored at the main
+entry point rather than refused, because the compiler's excess-property check
+reaches object literals only.
 
 ## Host functions
 
