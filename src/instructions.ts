@@ -55,21 +55,37 @@ export type Program = readonly Instruction[];
  * back as `unknown_instruction`. Naming the shape here is what lets the
  * evaluator apply that rule once instead of at each opcode.
  *
- * A shape here is sometimes wider than the set of operands its opcode will
- * actually take, and the rule for when is the reference's rather than a choice
- * made here: **a shape stops where the reference's own guard stops.** Where
- * section 5 gives an opcode its own named error for an operand it refuses, the
- * reference guards that opcode's clause loosely enough for the operand to
- * reach it, and the narrower judgment is then the opcode's own rather than the
- * catch-all's. Where section 5 gives it no such error, the guard is tight and
- * the catch-all is the whole answer.
+ * A shape is sometimes wider than the set of operands its opcode will take,
+ * and what decides how wide is section 5 rather than taste. Throughout, an
+ * OPERAND means the instruction operand - the value carried in the list beside
+ * the opcode name. Section 5 uses the same word for a value taken off the
+ * stack, the left operand of `contains` or a divisor, and none of what follows
+ * is about those.
  *
- * `duration_units` is checked as a list for exactly that reason: section 5
- * names a reason for a unit pair that is not an integer beside a string, so a
- * malformed PAIR is that error and not an unknown instruction, and a corpus
- * case pins the distinction. That is an instance and not the rule. Carry the
- * property forward instead of a list of which shapes have it, because the next
- * opcode added would falsify the list and leave the property untouched.
+ * At the tag `conformance/SOURCE.json` pins, the reference's guards and
+ * section 5 agree in both directions. An opcode that section 5 gives its own
+ * named error for an operand it refuses is guarded loosely enough for that
+ * operand to reach the clause and be named there. An opcode that section 5
+ * gives no such error is guarded tightly enough that such an operand never
+ * reaches the clause at all.
+ *
+ * The consequence is an OBLIGATION ON WHOEVER DECLARES A SHAPE HERE, not a
+ * description of the rows below:
+ *
+ * - where section 5 gives the opcode no error of its own, the shape must be
+ *   tight enough that an operand the opcode would refuse never reaches it;
+ * - where section 5 gives the opcode its own error, the shape must be loose
+ *   enough that the operand does reach the opcode, which then names it.
+ *
+ * `duration_units` is the worked instance of the second. Section 5 names a
+ * reason for a unit pair that is not an integer beside a string, so the shape
+ * here stops at the list, a malformed PAIR is that error rather than an
+ * unknown instruction, and a corpus case pins the distinction.
+ *
+ * An operand the first half keeps out falls to the catch-all and comes back as
+ * `unknown_instruction`. The one thing that does not is an opcode a version
+ * retired: it is intercepted before dispatch and answers a retired-opcode
+ * refusal instead, which is a property of its row and not of any operand.
  */
 export type OperandShape =
   | "value"
