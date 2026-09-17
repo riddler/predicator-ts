@@ -23,7 +23,7 @@ import { isaVersion } from "../../src/index.js";
 import { decodeCase, reportProblems, runEvaluator, writeReport } from "./runner.js";
 
 const manifest = loadManifest();
-const TIER = 6;
+const TIER = 9;
 const report = runEvaluator(TIER);
 
 describe("the evaluator surface at the tier this build claims", () => {

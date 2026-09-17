@@ -28,6 +28,7 @@
 import { EvaluationError } from "./errors.js";
 import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
 import type { Program } from "./instructions.js";
+import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
 import { Duration, Float, PDate, PDateTime, toHost, Undefined, type Value } from "./values.js";
 
 /** Why a text could not be decoded. */
@@ -133,21 +134,20 @@ function isDurationKey(key: string): key is DurationKey {
 }
 
 /**
- * Answers whether a year, month and day name a real civil date.
+ * Answers whether a year, a month and a day name a date this wire form
+ * carries.
  *
- * Calendar arithmetic that rolls `2026-02-30` forward into March is exactly
- * the kind of silent reinterpretation this codec exists to prevent, so the
- * components are read back from the instant they name and compared. A year
- * below 100 is refused rather than accepted, because the host's epoch
- * arithmetic reads such a year as nineteen-hundred-and-something.
+ * It is the calendar test plus one condition of the codec's own: a year below
+ * one hundred is refused here, where the cast's date parse accepts it. The
+ * value domain holds such a date and does arithmetic on it, so the refusal is
+ * this encoding's rather than the domain's, and it is stated here rather than
+ * in the shared calendar test because widening it would change what this codec
+ * accepts off the wire. A date in those years therefore writes to wire text
+ * that does not read back, which is a hole in this encoding and not in the
+ * cast.
  */
-function isCivilDate(year: number, month: number, day: number): boolean {
-  const instant = new Date(Date.UTC(year, month - 1, day));
-  return (
-    instant.getUTCFullYear() === year &&
-    instant.getUTCMonth() === month - 1 &&
-    instant.getUTCDate() === day
-  );
+function isWireDate(year: number, month: number, day: number): boolean {
+  return year >= 100 && isCivilDate(year, month, day);
 }
 
 /**
@@ -361,7 +361,7 @@ class Scanner {
     const year = Number(match[1]);
     const month = Number(match[2]);
     const day = Number(match[3]);
-    if (!isCivilDate(year, month, day)) return this.taggedFail(start);
+    if (!isWireDate(year, month, day)) return this.taggedFail(start);
     return new PDate(year, month, day);
   }
 
@@ -381,7 +381,7 @@ class Scanner {
     const hour = Number(match[4]);
     const minute = Number(match[5]);
     const second = Number(match[6]);
-    if (!isCivilDate(year, month, day)) return this.taggedFail(start);
+    if (!isWireDate(year, month, day)) return this.taggedFail(start);
     if (hour > 23 || minute > 59 || second > 59) return this.taggedFail(start);
     const microsecond = Number(`${match[7] ?? ""}000000`.slice(0, 6));
     const epochSeconds = Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
@@ -519,30 +519,6 @@ function encodeDuration(value: Duration): string {
     members.push(`"${key}":${encodeInteger(value[key])}`);
   }
   return `{"$type":"duration","value":{${members.join(",")}}}`;
-}
-
-function pad(magnitude: number, width: number): string {
-  return String(magnitude).padStart(width, "0");
-}
-
-function formatDate(value: PDate): string {
-  return `${pad(value.year, 4)}-${pad(value.month, 2)}-${pad(value.day, 2)}`;
-}
-
-/**
- * Writes a datetime in the corpus's normative shape: ISO 8601 in UTC, with the
- * fraction omitted entirely when the sub-second component is zero and exactly
- * six digits when it is not, never any other count and never a zero fraction
- * spelled out.
- */
-function formatDateTime(value: PDateTime): string {
-  const instant = new Date(value.epochSeconds * 1000);
-  const year = pad(instant.getUTCFullYear(), 4);
-  const date = `${year}-${pad(instant.getUTCMonth() + 1, 2)}-${pad(instant.getUTCDate(), 2)}`;
-  const hours = pad(instant.getUTCHours(), 2);
-  const time = `${hours}:${pad(instant.getUTCMinutes(), 2)}:${pad(instant.getUTCSeconds(), 2)}`;
-  const fraction = value.microsecond === 0 ? "" : `.${pad(value.microsecond, 6)}`;
-  return `${date}T${time}${fraction}Z`;
 }
 
 /**
