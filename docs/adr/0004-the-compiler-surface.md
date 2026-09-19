@@ -708,3 +708,210 @@ construct that refuses for its own reason, the refusal's message spells the
 number the way the host spells an infinity - a spelling no reference message
 contains. That is an artefact of the gap between this decision and its
 implementation, and it goes away with the implementation.
+
+## Amendment: a source nesting deeper than the walks will follow is refused, under a member this package authors (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+What this amends. This entry's decision falsifies two statements above, and
+each is named here rather than edited, so no line above is removed.
+
+In the amendment directly above, one: the sentence that closes its account of
+the member it added: "Twenty-three members: the six from the reference's lexer,
+the sixteen from its parser, and this one. The union admits no
+twenty-fourth." The union does now admit a twenty-fourth, and it is the
+member this entry adds. The enumeration that sentence rests on is unchanged
+and still counts what it counted; what falls is only its closing clause.
+
+In "The expression grammar only", one: the sentence that opens it,
+"`compile` compiles what the reference's `Predicator.compile/1` compiles: the
+expression grammar." It is stated universally over the expression grammar,
+and after this entry it is untrue of a source nesting past the bound: the
+reference compiles such a source and this package refuses it. The section
+headed "The bound diverges from the reference in what is accepted" below is
+where that is declared.
+
+Two statements, the two named above. One sentence nearby is NOT falsified and
+is named so a reader does not go looking: the Consequences sentence saying
+"the package compiles a strict subset of what the reference compiles" stays
+true, and this entry adds a second way it is a subset. What is no longer true
+of it is only the reason it gives, the statement grammar left out, which is no
+longer the only one.
+
+### The promise this entry keeps, rather than qualifies
+
+The section above says that `compile` never throws for any string input, that
+there is no input class reserved for a throw, and that a failure is a
+`ParseError` carrying a reason from the closed union. That sentence was not
+true of every string. It is now, and this entry is what makes it true.
+
+Two things are narrowed here and only one of them is that promise, so they
+are separated once rather than left to read as a contradiction. **The promise
+is not narrowed**: no input class is reserved for a throw, no bound is stated
+on it, and after this entry it holds of every string rather than of most of
+them. **The accepted language is narrowed**: a source past the bound used to
+compile and is now refused as a value. The Consequences below state that
+narrowing, and the section on the divergence states what it costs against the
+reference.
+
+What was untrue was narrow and it was always about depth. The scanner reads
+its source in a loop, but the grammar is a recursive descent and the emitter
+is a recursive walk, so a source nesting deeper than either would follow ran
+the host out of stack and raised where the contract said it answered. Run at
+`a46bac4`, on one machine and its host's default stack, a source of six
+hundred and eighty-four parentheses around an identifier raised from the
+grammar, and a conjunction of seven thousand seven hundred and forty-eight
+flags raised from the emitter while the grammar had already answered. Neither
+number is a property of this package: both are properties of that machine's
+stack and of what was already on it, which is the whole reason neither can be
+the bound and why this entry declares one instead.
+
+### The decision
+
+The package declares how deep a source may nest, the grammar and the emitter
+each count their own descent against it, and a source past it is refused as a
+value under one new member of the closed union.
+
+The limit is declared rather than measured, for the reason the value limit in
+ADR-0002's amendment on nesting is: how deep a descent may go before it
+exhausts a stack is a property of the engine, so left alone the same source
+compiles on one machine and raises on another. A declared limit makes the
+refusal a property of the source. The number is two hundred and fifty-six, the
+same number the value limit carries, and it is a second constant rather than a
+reuse of that one because the two bound different things - a value the host
+hands in, and the text a caller compiles. Nothing requires them to keep
+carrying the same number.
+
+Two hundred and fifty-six is far above authored source and far below the
+depths above. The deepest expression in the vendored corpus nests four levels,
+counted by walking the syntax tree of every source-bearing case.
+
+### Where the two walks count, and why a flat chain is deep
+
+They count different things, and a reader who expects one number to describe
+both will be surprised by the second.
+
+**Both count the whole expression as the first level**, the same convention
+ADR-0002's amendment on nesting states for a value where it counts "the
+outermost as level one". So the count is of levels and not of constructs a
+caller wrote, and the two differ by one: run at the tree this entry lands
+with, a source of two hundred and fifty-five written parentheses compiles and
+one of two hundred and fifty-six is refused, the two hundred and fifty-sixth
+pair being what opens the level past the limit. The refusal's message states
+the convention beside the limit for that reason: a number alone would read to
+whoever met it as a promise about the constructs they wrote.
+
+The grammar counts a level each time a production re-enters the expression
+production or itself: a parenthesis, a bracket, a brace, an index, a call's
+argument, a prefix operator's operand, a relative date's operand. So a source
+written one level inside another is one level deeper.
+
+The emitter counts a level for each syntax node it enters. A chain of
+operators is left-associative, so `a and b and c` is a tree three levels deep
+written on one line, and the grammar reads it in a loop without descending at
+all. That is why the bound is checked in both walks and not only in the
+grammar: a long chain is a deep tree that no descent of the grammar ever
+measured.
+
+Both refuse with the same reason, so a caller does not have to know which walk
+it met. Which one a source meets first is a property of how it is written.
+
+### The refusal
+
+It is an ordinary `ParseError`: the new reason, a message this package
+authors, and the position and span of the place the descent stopped - the
+innermost opener the source reached, which is the first place a reader can cut
+the nesting back. The message is authored here rather than quoted because
+there is no message to quote: a grep of the reference's `lib/` at `v9.4.1` for
+a nesting or depth limit finds only the location-segment depth the `store`
+instruction carries, which is a different thing entirely.
+
+### The bound diverges from the reference in what is accepted
+
+The member added by the amendment above diverges from the reference where the
+reference does not answer at all, and that entry could say there was nothing
+to diverge from. This one cannot. **The reference compiles the sources this
+entry refuses.** It is the first place this record narrows what is ACCEPTED
+rather than what is answered, and the divergence is declared here rather than
+inherited silently.
+
+Run against a detached export of `v9.4.1` (`mix.exs` `@version` reads `9.4.1`
+in that export) on 2026-09-19, `Predicator.compile/1` answers `{:ok, _}` for
+an integer wrapped in 256, 257, 300, 1000, 5000, 10000, 50000 and 100000
+parentheses. That is eight depths, and every one of them was answered. The run
+found no depth at which the reference stops, and it was not taken past a
+hundred thousand, so what it establishes is that the reference does not stop
+anywhere this package would reach rather than that it never stops. This
+package, run at the tree this entry lands with, compiles two hundred and
+fifty-five written parentheses and refuses two hundred and fifty-six, so the
+divergence begins at the first source past the bound and holds for every
+source past it.
+
+Nothing mechanical catches this, and nothing will. The deepest expression in
+the vendored corpus nests four levels, so no case reaches the bound and the
+conformance run is silent about it. This record is the only place it can be
+stated, which is why it is stated at length.
+
+Matching the reference was never one of the options. Before the bound, at
+`a46bac4`, this package's own descent raised at six hundred and eighty-four
+parentheses on one machine and its host's default stack, and that number is a
+property of the stack rather than of the package. The choice was between a
+refusal this package declares and a raise a host decides, and the promise
+above rules out the second. A declared bound diverges by a stated amount at a
+stated place; an undeclared stack diverges by an amount that changes with the
+machine, and cannot be written down here at all.
+
+What it costs is bounded and nameable. A caller that targets both
+implementations and generates its sources mechanically can write one the
+reference compiles and this package refuses, and is told which by
+`nesting_depth_exceeded` and a position rather than by a difference in
+results. A caller writing predicates by hand cannot reach it.
+
+### Typespecs
+
+The union in the Typespecs section above gains one member, appended after
+`number_out_of_range`:
+
+```typescript
+export type ParseReason =
+  // the twenty-three members above, unchanged, and:
+  | "nesting_depth_exceeded";
+```
+
+Nothing else in that section changes. `ParseError` keeps the same five members,
+and this member's instances carry a position and a span like every other.
+
+### What this does not decide
+
+It does not make the walks iterative. A source inside the limit is walked by
+recursion exactly as before, and the limit is what keeps that recursion inside
+any stack this package expects to run on rather than a proof that it is. If
+sources ever stop being authored and start being generated, the depth a
+generator reaches is the thing to measure, and an iterative walk - which would
+raise the bound rather than remove the need for one - is the change that
+follows. It is not this one.
+
+It declares no limit on the LENGTH of a source, on the number of instructions
+a program may hold, or on anything else the scanner reads in a loop. The
+scanner does not descend and has no limit of its own; a source far past the
+depth bound still scans.
+
+### Consequences
+
+The union is a compatibility surface and it gained a member, exactly as the
+Consequences of the amendment above say of the one before it. A caller that
+switches exhaustively is told by the typechecker.
+
+A source that compiled before now refuses, which is the narrowing this entry
+costs and the reason it is written down. A source reaches the bound two ways:
+by nesting two hundred and fifty-six constructs inside one another, or by
+chaining that many operators in a row. Neither is reachable by an authored
+predicate, and neither is reached by any case in the vendored corpus, whose
+deepest expression nests four levels. A caller that generates sources
+mechanically is the one to check. Those same sources compile under the
+reference, which is the divergence the section above declares and the half of
+this narrowing that is not about this package's own past.
+
+Where a source used to raise, it now answers. A caller that wrapped `compile`
+in a handler to catch the overflow finds that handler never fires, and reads
+the refusal out of the failing arm with every other one.

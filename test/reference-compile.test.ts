@@ -114,6 +114,7 @@ const PARSE_REASONS = [
   "duration_fraction",
   "duration_unit_twice",
   "number_out_of_range",
+  "nesting_depth_exceeded",
 ] as const satisfies readonly ParseReason[];
 
 /** Every member of the union the list above omits, of which there are none. */

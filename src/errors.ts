@@ -181,7 +181,13 @@ export type ParseReason =
   // Emission: what building the domain value for a literal refuses. The
   // reference raises here rather than answering, so this member's message is
   // this package's own and not one quoted from it.
-  | "number_out_of_range";
+  | "number_out_of_range"
+  // Depth: what a walk refuses before the host's stack decides for it. It is
+  // the one member two stages produce, because the grammar and the emitter
+  // both descend and either can meet the limit first depending on the shape
+  // of the source. Its message is this package's own; the reference has no
+  // such limit and so no message to quote.
+  | "nesting_depth_exceeded";
 
 /**
  * A source string the grammar refused.

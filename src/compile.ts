@@ -19,9 +19,13 @@
  * ADR-0004 states that compiling a source string has no input class reserved
  * for a throw. What this module contributes to that is narrow and worth stating
  * exactly: it introduces no throw of its own, and it converts no stage's
- * refusal into one. It does not and cannot make the stages below it total, and
- * the depth at which their recursion exhausts the host's stack is not a thing
- * this composition can measure or change.
+ * refusal into one. It does not and cannot make the stages below it total.
+ * Each of them is total on its own account, the depth of a source included:
+ * the grammar and the emitter count their own descent against the one
+ * declared source limit and refuse past it as a value, rather than leaving
+ * the host's stack to decide. So the composition adds nothing to the promise
+ * and takes nothing from it, which is the whole of what it has to say about
+ * it.
  */
 
 import { emit } from "./emitter.js";

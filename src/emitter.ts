@@ -9,7 +9,7 @@
  * an append is the short-circuiting pair: their jump sits BETWEEN the two
  * operands, because what it skips is the right operand.
  *
- * Three things about the shape are worth naming.
+ * Four things about the shape are worth naming.
  *
  * The first is that the operands are the VALUE DOMAIN's, not the tree's. A
  * decimal literal reaches here as an ordinary number, because the scanner and
@@ -19,7 +19,7 @@
  * program the evaluator already takes rather than the corpus's encoding of one.
  *
  * The second follows from the first and is the one place this package answers
- * where the reference raises. A numeric literal whose magnitude the domain
+ * where the reference does not. A numeric literal whose magnitude the domain
  * cannot represent - a decimal past the finite double range, an integer past
  * the safe-integer bound - is refused here as a value, with a message this
  * package authors because there is no reference message to reproduce. The two
@@ -36,6 +36,16 @@
  * emitted it, and a node's children keep their own - which is why an object's
  * `object_set` carries its KEY's position rather than the object's, the key
  * being the only thing that instruction is about.
+ *
+ * The fourth is a refusal the reference has no counterpart for - it compiles
+ * sources this walk turns away, so here this package is the narrower of the
+ * two - and it is why the promise that compiling a source string cannot throw
+ * holds through this stage at any depth rather than only at the depths a host
+ * stack happens to allow. The walk counts the nodes it is inside against
+ * `SOURCE_DEPTH_LIMIT` and refuses a tree deeper than that as a value. A tree
+ * gets deep two ways, and the second is the one worth knowing: a chain of
+ * operators is left-associative, so it nests once per operator, and a long
+ * chain is therefore a deep tree even though it is written flat.
  */
 
 import type {
@@ -49,6 +59,7 @@ import type {
 } from "./ast.js";
 import { ParseError, type Position, type Span } from "./errors.js";
 import type { Instruction, Program } from "./instructions.js";
+import { SOURCE_DEPTH_LIMIT } from "./nesting.js";
 import { Float, Undefined, type Value } from "./values.js";
 
 /** The message a numeric literal outside the domain's range is refused with. */
@@ -97,6 +108,7 @@ class EmitSignal extends Error {
  */
 export function emit(ast: Node): EmitResult {
   let annotated: readonly Annotated[];
+  depth = 0;
   try {
     annotated = visit(ast);
   } catch (signal) {
@@ -120,7 +132,49 @@ function own(node: Node, instruction: Instruction): Annotated {
   return { instruction, position: node.position, span: node.span };
 }
 
+/**
+ * How many nodes the walk is inside, counted so that a tree deeper than the
+ * walk can follow is refused rather than left to the host's stack.
+ *
+ * It is module state because the walk is a plain recursive function and
+ * threading a level through every one of its calls would say nothing the
+ * count does not. It cannot drift: `visit` brings it back down in a `finally`
+ * whatever the node answered, so an unwinding refusal restores it as an
+ * ordinary return does, and `emit` sets it to zero before it starts so that
+ * nothing a caller did earlier can carry into this walk.
+ */
+let depth = 0;
+
+/**
+ * Walks one node, one level deeper, or refuses because the tree nests past
+ * `SOURCE_DEPTH_LIMIT`.
+ *
+ * A tree is as deep as the source nests, and a left-associative chain of
+ * operators nests once per operator even though nothing in it is written
+ * inside anything else - which is why a long flat-looking chain is what
+ * reaches this limit first, and why it is checked here and not only in the
+ * grammar, whose own descent such a chain never deepens.
+ */
 function visit(node: Node): readonly Annotated[] {
+  if (depth >= SOURCE_DEPTH_LIMIT) {
+    throw new EmitSignal(
+      new ParseError(
+        "nesting_depth_exceeded",
+        `Expression nests past the depth limit of ${SOURCE_DEPTH_LIMIT} levels, the whole expression counting as the first`,
+        node.position,
+        node.span,
+      ),
+    );
+  }
+  depth += 1;
+  try {
+    return visitNode(node);
+  } finally {
+    depth -= 1;
+  }
+}
+
+function visitNode(node: Node): readonly Annotated[] {
   switch (node.kind) {
     case "integer":
     case "float":

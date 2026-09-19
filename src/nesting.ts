@@ -1,6 +1,12 @@
 /**
- * The one nesting limit this package declares, and the reasons it answers when
- * a value breaks it.
+ * The nesting limits this package declares, and the reasons a walk answers
+ * when something breaks one.
+ *
+ * There are two, and they bound different things: how deep a VALUE may nest,
+ * which the boundary walks check, and how deep a SOURCE may nest, which the
+ * grammar and the emitter check. Each is documented on its own constant
+ * below. The paragraphs that follow are about the value limit, which came
+ * first and whose argument the source limit reuses.
  *
  * Walking a value - normalizing a context or a function's answered value,
  * encoding and decoding the tagged wire text, comparing two values or testing
@@ -19,11 +25,13 @@
  * record below says why.
  *
  * This module is internal: neither entry point re-exports it. A walk that
- * lives elsewhere imports the constant from here rather than declaring its
- * own, so that the package has one limit and not several.
+ * lives elsewhere imports its limit from here rather than declaring one of
+ * its own, so that each limit is written once however many walks check it.
  *
  * See `docs/adr/0002-the-value-domain-and-the-host-boundary.md`, whose
- * amendment on nesting records the limit and why it is declared.
+ * amendment on nesting records the value limit and why it is declared, and
+ * the amendment on nesting depth at the end of
+ * `docs/adr/0004-the-compiler-surface.md` for the source limit.
  */
 
 /**
@@ -34,6 +42,38 @@
  * count as a level there.
  */
 export const DEPTH_LIMIT = 256;
+
+/**
+ * How deep a SOURCE may nest before the grammar and the emitter refuse it.
+ *
+ * It is a second constant rather than a reuse of the one above, because the
+ * two bound different things: that one bounds a value the host hands in or
+ * reads back, this one bounds the text a caller compiles. They carry the same
+ * number today, and nothing requires them to keep carrying it.
+ *
+ * Nesting here is what a walk descends into. The grammar counts a level each
+ * time a production re-enters itself - a parenthesis, a bracket, a brace, a
+ * call's argument, a prefix operator's operand - and the emitter counts a
+ * level for each syntax node it enters, so a left-associative chain of
+ * operators is as deep as it is long even though nothing in it is written
+ * inside anything else. A source at exactly this depth compiles; one level
+ * deeper is refused as a value.
+ *
+ * Why the bound is declared rather than left to the host, which is the same
+ * argument the value limit rests on: how deep a source may nest before the
+ * descent exhausts the call stack is a property of the engine and of whatever
+ * is already on the stack, so the same source would compile on one machine
+ * and raise on another. Declaring the depth makes the refusal a property of
+ * the source. The number is not a measurement of any engine's stack and must
+ * not be read as one; it is a limit chosen far below the shallowest descent
+ * this package has seen exhaust a stack, and far above anything authored
+ * source reaches - the deepest expression in the vendored corpus nests four
+ * levels.
+ *
+ * See the amendment on nesting depth at the end of
+ * `docs/adr/0004-the-compiler-surface.md`.
+ */
+export const SOURCE_DEPTH_LIMIT = 256;
 
 /**
  * Why a walk refused a value on its shape rather than its content: it contains
