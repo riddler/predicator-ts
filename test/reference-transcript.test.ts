@@ -160,7 +160,11 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   // A UTC offset whose two-character hour or minute field holds a sign where
   // its first digit belongs: the reference reads each field as a signed
   // integer and applies it, and this package reads digits only and answers
-  // undefined. Every other `datetime-offset/` row agrees.
+  // undefined. The rows put such a field to each offset clause that has
+  // one: to the hour and to the minute of the colon spelling, to the hour
+  // of the colonless spelling and to the hour of the hour-only spelling,
+  // all under a leading plus, and to the hour of the colon spelling under
+  // a leading minus. Every other `datetime-offset/` row agrees.
   [
     "datetime-offset/minus-in-hour-field",
     { reference: utc(15, 0), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
@@ -172,6 +176,22 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   [
     "datetime-offset/plus-in-minute-field",
     { reference: utc(5, 27), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  [
+    "datetime-offset/minus-in-minute-field",
+    { reference: utc(5, 33), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  [
+    "datetime-offset/minus-in-hour-field-colonless",
+    { reference: utc(15, 0), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  [
+    "datetime-offset/minus-in-hour-field-hour-only",
+    { reference: utc(15, 30), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  [
+    "datetime-offset/plus-in-hour-field-under-minus",
+    { reference: utc(16, 0), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
   ],
   // A value with no JSON form. This package refuses a temporal member and the
   // absence; the reference answers a text for each. Its encoder succeeded on
