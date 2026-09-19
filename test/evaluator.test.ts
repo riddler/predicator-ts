@@ -400,6 +400,85 @@ describe("a literal integer outside the safe range", () => {
     expect(past.error.reason).toBe("depth_limit_exceeded");
     expect(past.error.position).toBe(0);
   });
+
+  // A proxy's traps are the one host code the literal's check runs, and a trap
+  // can answer a new container every time it is asked. This one answers two
+  // new steps under every step, down to a hundred levels - never past the
+  // depth limit, and more steps than any walk could finish. The check stops
+  // at its own count of containers and refuses the operand by name. The proxy
+  // gives up by throwing after a million trap calls, which is how a check
+  // that never stops shows up here instead of hanging the suite.
+  //
+  // Sabotage: dropping the count from the literal's walk falsifies the rule
+  // that the check does bounded work on any operand, and turns this test red
+  // with the proxy's own error. It was run and reverted.
+  it("answers an operand whose traps mint containers, in bounded work", () => {
+    let traps = 0;
+    const spend = () => {
+      traps += 1;
+      if (traps > 1_000_000) throw new Error("the proxy's trap budget is spent");
+    };
+    const step = (level: number): object =>
+      new Proxy(
+        {},
+        {
+          ownKeys: () => {
+            spend();
+            return level < 100 ? ["variant", "control"] : [];
+          },
+          getOwnPropertyDescriptor: () => {
+            spend();
+            return { value: step(level + 1), enumerable: false, configurable: true };
+          },
+        },
+      );
+    const outcome = evaluateToValue([["lit", step(1) as unknown as Value]]);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("depth_limit_exceeded");
+    expect(outcome.error.position).toBe(0);
+  });
+
+  // The count is of distinct containers: one map reached from every slot of a
+  // list is counted once, so a list repeating it more times than the count
+  // allows is admitted. Distinct containers past the count are refused, and a
+  // literal at exactly the count is admitted.
+  //
+  // Sabotage: letting the count admit one container more falsifies the rule
+  // that the count is the most the check visits, and turns this test red. It
+  // was run and reverted.
+  it("counts distinct containers against its limit", () => {
+    const limit = 65536;
+    const card = { network: "visa" };
+    const repeated = Array.from({ length: limit + 10 }, () => card);
+    expect(evaluateToValue([["lit", repeated]]).ok).toBe(true);
+    const distinct = (count: number) => Array.from({ length: count }, () => ({ network: "visa" }));
+    expect(evaluateToValue([["lit", distinct(limit - 1)]]).ok).toBe(true);
+    const past = evaluateToValue([["lit", distinct(limit)]]);
+    expect(past.ok).toBe(false);
+    if (past.ok) return;
+    expect(past.error.reason).toBe("depth_limit_exceeded");
+  });
+
+  // A container is visited once, so a hidden property that refers back to the
+  // map holding it ends that path rather than being followed round again. The
+  // nesting check does not follow a hidden property, so it does not refuse
+  // this cycle either.
+  //
+  // Sabotage: dropping the literal walk's test for a container it has already
+  // visited falsifies the rule that a cycle ends the path it closes, and turns
+  // this test red, the walk following the cycle to the depth limit. It was run
+  // and reverted.
+  it("admits an operand whose hidden property refers back to it", () => {
+    const signup: Record<string, unknown> = { variant: "treatment" };
+    Object.defineProperty(signup, "self", { value: signup, enumerable: false });
+    expect(
+      evaluateToValue([
+        ["lit", signup as unknown as Value],
+        ["access", "variant"],
+      ]),
+    ).toEqual({ ok: true, value: "treatment" });
+  });
 });
 
 describe("the errors that belong to the machine rather than to an opcode", () => {

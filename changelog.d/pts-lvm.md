@@ -8,3 +8,6 @@
   prototype, that contains itself or nests past the depth limit is refused
   with `cyclic_value` or `depth_limit_exceeded` instead of raising a stack
   overflow when it is compared or handed back.
+- A `lit` operand holding more than 65536 distinct lists and maps is refused
+  with `depth_limit_exceeded`, so the check on a literal does bounded work
+  even on a proxy that answers a new container every time it is read.

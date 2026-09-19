@@ -538,27 +538,45 @@ function isIntegral(value: Value): value is number {
 }
 
 /**
+ * How many distinct lists and maps the literal's own check visits before it
+ * refuses the operand.
+ *
+ * The check reads a proxy's traps, and a trap can hand back a new container
+ * every time it is asked, so without a count a hand-built operand could keep
+ * the check busy without end while never nesting past the depth limit. The
+ * number is this package's own and far above what an instruction list a
+ * compiler writes carries; an operand past it is refused with the reason the
+ * depth limit uses, since both bound how much of a value the machine will
+ * walk. A container reached by more than one path counts once.
+ */
+const LITERAL_CONTAINER_LIMIT = 65536;
+
+/**
  * Why a literal operand's own properties refuse it, beyond its shape: it
- * carries an integral number outside the safe range, or its properties nest
- * past the depth limit. `undefined` when neither.
+ * carries an integral number outside the safe range, a container the walk
+ * first reaches past the depth limit, or more containers than
+ * `LITERAL_CONTAINER_LIMIT`. `undefined` when none of those.
  *
  * Only an integral number is tested: a number the domain would hold as an
  * integer if it were in range. The walk descends every list and every object
  * `isPlainMap` reads as a map, and treats every other member as a leaf. It
  * follows each own string-keyed DATA property of a container, enumerable or
- * not, because a member access reads any own property; it reads a property's
- * value from its descriptor and never calls a getter, so no host code runs
- * here and no getter can hand it a new object to visit. A container is
- * visited once however many paths reach it, so a cycle ends the path it
- * closes. The outermost container is level one, as in the nesting check, and
- * a container past `DEPTH_LIMIT` refuses the operand, so the recursion is
- * never deeper than one level past the limit.
+ * not, because a member access reads any own string-keyed property. It reads
+ * a property's value from its descriptor and never calls a getter; the only
+ * host code it can run is a proxy's traps. It visits a container once, at the
+ * level of the first path that reaches it, so a cycle ends the path it closes
+ * and shared containers cost nothing extra. The outermost container is level
+ * one, and a container first reached past `DEPTH_LIMIT` refuses the operand.
+ * Because a container is visited once, a deeper path to one already visited
+ * is not measured: which path reaches a shared container first follows the
+ * order of the properties. The recursion is never deeper than one level past
+ * the limit, and the count bounds the whole walk.
  */
 function literalFault(
   value: unknown,
   depth: number,
   visited: Set<object>,
-): "integer_out_of_range" | "depth_limit_exceeded" | undefined {
+): "integer_out_of_range" | "depth_limit_exceeded" | "too_many_containers" | undefined {
   if (typeof value === "number") {
     return Number.isInteger(value) && !Number.isSafeInteger(value)
       ? "integer_out_of_range"
@@ -568,6 +586,7 @@ function literalFault(
   if (!Array.isArray(value) && !isPlainMap(value)) return undefined;
   if (visited.has(value)) return undefined;
   if (depth > DEPTH_LIMIT) return "depth_limit_exceeded";
+  if (visited.size >= LITERAL_CONTAINER_LIMIT) return "too_many_containers";
   visited.add(value);
   for (const name of Object.getOwnPropertyNames(value)) {
     const property = Object.getOwnPropertyDescriptor(value, name);
@@ -1224,10 +1243,11 @@ class Machine {
    * it, rather than rounded - the rule the value boundary applies to a host's
    * context. The shape is checked first, so an operand that fails both
    * answers the shape's reason. The walk that looks for such an integer also
-   * follows the non-enumerable data properties the shape check passes over,
-   * and an operand whose properties nest past the depth limit there is
-   * refused with the shape's reason too. Nothing else about the operand is
-   * checked here.
+   * follows the non-enumerable data properties the shape check passes over.
+   * It refuses, with the depth limit's reason, an operand in which it first
+   * reaches a container past the depth limit, or in which it finds more
+   * containers than it will visit. Nothing else about the operand is checked
+   * here.
    */
   private lit(operand: Value, at: number): Step {
     const fault = nestingFault(operand, isPlainMap);
@@ -1235,6 +1255,16 @@ class Machine {
     const carried = literalFault(operand, 1, new Set());
     if (carried === "depth_limit_exceeded") {
       return { ok: false, error: nestingError(carried, "the literal", at) };
+    }
+    if (carried === "too_many_containers") {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          "depth_limit_exceeded",
+          `the literal holds more than ${LITERAL_CONTAINER_LIMIT} lists and maps`,
+          at,
+        ),
+      };
     }
     if (carried === "integer_out_of_range") {
       return {
