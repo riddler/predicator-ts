@@ -66,6 +66,7 @@
  */
 
 import type { HostFunction } from "../evaluator.js";
+import { DEPTH_LIMIT } from "../nesting.js";
 import { Float, typeName, Undefined, type Value } from "../values.js";
 import { builtin, isString, refuse } from "./support.js";
 
@@ -136,11 +137,14 @@ function serialize(value: Value): string {
 
 type Fault =
   | { readonly kind: "byte"; readonly byte: number; readonly position: number }
-  | { readonly kind: "end"; readonly position: number };
+  | { readonly kind: "end"; readonly position: number }
+  | { readonly kind: "depth"; readonly position: number };
 
 interface Scan {
   readonly bytes: readonly number[];
   at: number;
+  /** How many arrays and objects enclose the current position. */
+  depth: number;
 }
 
 const QUOTE = 0x22;
@@ -205,6 +209,23 @@ function byteFault(scan: Scan): Fault {
 
 function endFault(scan: Scan): Fault {
   return { kind: "end", position: scan.bytes.length };
+}
+
+/**
+ * Enters an array or an object at the current position, or answers the fault
+ * when doing so would nest past `DEPTH_LIMIT`.
+ *
+ * The outermost array or object is level one, as it is for a value, so a text
+ * that reads back as a value at the limit is located in full and one level
+ * deeper is refused at the bracket or brace that breaks it. Refusing there
+ * also bounds this scanner's own recursion, which otherwise descends once per
+ * level and exhausts the call stack long before the host parser would.
+ */
+function enter(scan: Scan): Fault | undefined {
+  if (scan.depth >= DEPTH_LIMIT) return { kind: "depth", position: scan.at };
+  scan.depth += 1;
+  scan.at += 1;
+  return undefined;
 }
 
 function isDigit(byte: number): boolean {
@@ -305,10 +326,12 @@ function scanNumber(scan: Scan): Fault | undefined {
 }
 
 function scanArray(scan: Scan): Fault | undefined {
-  scan.at += 1;
+  const entered = enter(scan);
+  if (entered !== undefined) return entered;
   skipSpace(scan);
   if (here(scan) === CLOSE_BRACKET) {
     scan.at += 1;
+    scan.depth -= 1;
     return undefined;
   }
   for (;;) {
@@ -319,6 +342,7 @@ function scanArray(scan: Scan): Fault | undefined {
     if (byte === -1) return endFault(scan);
     if (byte === CLOSE_BRACKET) {
       scan.at += 1;
+      scan.depth -= 1;
       return undefined;
     }
     if (byte !== COMMA) return byteFault(scan);
@@ -328,10 +352,12 @@ function scanArray(scan: Scan): Fault | undefined {
 }
 
 function scanObject(scan: Scan): Fault | undefined {
-  scan.at += 1;
+  const entered = enter(scan);
+  if (entered !== undefined) return entered;
   skipSpace(scan);
   if (here(scan) === CLOSE_BRACE) {
     scan.at += 1;
+    scan.depth -= 1;
     return undefined;
   }
   for (;;) {
@@ -353,6 +379,7 @@ function scanObject(scan: Scan): Fault | undefined {
     if (byte === -1) return endFault(scan);
     if (byte === CLOSE_BRACE) {
       scan.at += 1;
+      scan.depth -= 1;
       return undefined;
     }
     if (byte !== COMMA) return byteFault(scan);
@@ -377,11 +404,17 @@ function scanValue(scan: Scan): Fault | undefined {
 /**
  * The first fault in a JSON text, or nothing when it is well formed.
  *
+ * A text nesting past `DEPTH_LIMIT` is a fault of its own kind, found at the
+ * first bracket or brace past the limit, even when the text is otherwise well
+ * formed: the value it would read back as is one the value boundary refuses
+ * anyway, and locating the fault here is what keeps a text nested thousands of
+ * levels deep from exhausting the stack before that boundary is reached.
+ *
  * Exported for the suite, which pins the offsets and the bytes this reports
  * rather than reaching them only through a call.
  */
 export function jsonFault(text: string): Fault | undefined {
-  const scan: Scan = { bytes: utf8Bytes(text), at: 0 };
+  const scan: Scan = { bytes: utf8Bytes(text), at: 0, depth: 0 };
   skipSpace(scan);
   const fault = scanValue(scan);
   if (fault !== undefined) return fault;
@@ -398,6 +431,9 @@ function hex(byte: number): string {
 /** How a fault reads inside the reason. */
 export function describeFault(fault: Fault): string {
   if (fault.kind === "end") return `unexpected end of input at position ${fault.position}`;
+  if (fault.kind === "depth") {
+    return `nesting past the depth limit of ${DEPTH_LIMIT} at position ${fault.position}`;
+  }
   return `unexpected byte 0x${hex(fault.byte)} at position ${fault.position}`;
 }
 
@@ -411,6 +447,10 @@ const parse = builtin("JSON.parse", [1], (args) => {
   const [text] = args;
   if (!isString(text)) refuse("JSON.parse expects a string argument");
   const fault = jsonFault(text);
+  // A text nested past the limit is refused with the reason the value
+  // boundary gives a value of the same shape, rather than as invalid JSON:
+  // what it breaks is the limit, which a well-formed text can break too.
+  if (fault?.kind === "depth") refuse("depth_limit_exceeded");
   if (fault !== undefined) refuse(`Invalid JSON: ${describeFault(fault)}`);
   return JSON.parse(text) as Value;
 });

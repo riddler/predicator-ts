@@ -1574,3 +1574,41 @@ return type has no failing arm, and every entry point above checks what it
 hands to the projection before projecting it. A host calling `toHost`
 directly on a value it built by hand, outside the domain's tree shape, is
 outside this amendment.
+
+## Note: the JSON parse builtin's fault locator counts against the limit (2026-09-18)
+
+Status: proposed (2026-09-18)
+
+Recorded for `pts-rf2`. It is appended, and removes no line above.
+
+What this changes. Under "What does not count against it", the nesting
+amendment above says the two JSON builtins in `src/functions/json.ts` walk
+their own argument without the limit. That is no longer true of the parse
+builtin, `JSON.parse`, and still true of the serializer, `JSON.stringify`.
+Read that sentence as scoped by this note.
+
+**The parse builtin's fault locator counts against `DEPTH_LIMIT`.** The
+locator, `jsonFault` in `src/functions/json.ts`, counts the arrays and objects
+around its position with the outermost as level one, the same count as for a
+value, and answers a fault of its own kind at the first bracket or brace that
+would nest past the limit. The count is taken in `enter` in the same file. A
+text at the limit is located in full, and its value reads back.
+
+**That fault is answered with the reason `"depth_limit_exceeded"`**, the
+reason the value boundary gives a value of the same shape, and not with an
+invalid-JSON reason. The refusal is in the `parse` builtin in the same file.
+So that token is now also a reason a builtin's failing arm can carry, beside
+the value boundary and the codec named in the reason-token paragraph above.
+
+**Why the locator counts.** It recursed once per level with no guard. Measured
+on 2026-09-18 on one machine under node 24.21.0, before this change: a text
+nested twenty thousand levels deep exhausted the stack inside the locator, and
+the parse builtin answered the engine's stack-overflow message as its reason.
+A text nested past the limit but not that deep already reached the value
+boundary, which refused the value the host parser answered; the locator now
+refuses it first, with the same reason.
+
+**The serializer is unchanged.** `serialize` in `src/functions/json.ts` walks
+its argument without the limit, and what the amendment above says of a stack
+overflow inside a JSON builtin still holds for it. That is recorded as an open
+issue, `pts-8di`, and is out of scope for this note.

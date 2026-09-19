@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { describeFault, jsonFault } from "../src/functions/json.js";
 import { evaluate, execute, executeValue, type Program } from "../src/index.js";
 import { DEPTH_LIMIT } from "../src/nesting.js";
 import { decodeTagged, encodeTagged, evaluateTagged } from "../src/tagged.js";
@@ -482,6 +483,102 @@ describe("a value the program built past the limit", () => {
     const past = execute(deepStore(DEPTH_LIMIT + 1));
     expect(reasonOf(past)).toBe("depth_limit_exceeded");
     expect(reasonOf(execute(deepStore(20_000)))).toBe("depth_limit_exceeded");
+  });
+});
+
+describe("the JSON parse builtin", () => {
+  // The normalization half of this guard is not repeated here: the value the
+  // host parser answers crosses the value boundary like any function's answer,
+  // and "refuses a host function's answer past the limit and answers one at
+  // it" under evaluate above pins that entrance. What is pinned here is the
+  // fault locator the builtin runs first, which counts against the same limit.
+
+  /** Parses a text through the builtin, the text travelling in the context. */
+  function parse(text: string) {
+    return evaluate(
+      [
+        ["load", "text"],
+        ["call", "JSON.parse", 1],
+      ],
+      { text },
+    );
+  }
+
+  /** A signup step chain nested `depth` objects deep, as JSON text. */
+  function stepsText(depth: number): string {
+    return `${'{"next":'.repeat(depth)}"plan"${"}".repeat(depth)}`;
+  }
+
+  /** The same chain as a value. */
+  function steps(depth: number): unknown {
+    let value: unknown = "plan";
+    for (let level = 0; level < depth; level += 1) value = { next: value };
+    return value;
+  }
+
+  // Sabotage: refusing one level early in the locator (testing against the
+  // limit less one) turns the at-the-limit assertions red. It was run and
+  // reverted.
+  it("reads a text at the limit, and one below it, back as a value", () => {
+    expect(parse(nestedText(DEPTH_LIMIT - 1))).toEqual({
+      ok: true,
+      value: nested(DEPTH_LIMIT - 1),
+    });
+    expect(parse(nestedText(DEPTH_LIMIT))).toEqual({ ok: true, value: nested(DEPTH_LIMIT) });
+    expect(parse(stepsText(DEPTH_LIMIT))).toEqual({ ok: true, value: steps(DEPTH_LIMIT) });
+    expect(jsonFault(nestedText(DEPTH_LIMIT))).toBeUndefined();
+  });
+
+  // One level past is refused by the locator itself, at the offset of the
+  // bracket or brace that breaks the limit, and not left to the value
+  // boundary: the boundary's refusal carries the same reason but a message
+  // naming the function's answer, so the message is what tells the two apart.
+  //
+  // Sabotage: two mutations, each run and reverted. Testing the depth with >
+  // rather than >= lets one level past through the locator, so the message
+  // becomes the boundary's and no fault is located. Dropping the builtin's own
+  // depth refusal turns the reason into an invalid-JSON sentence.
+  it("refuses a text one level past the limit by name", () => {
+    const past = parse(nestedText(DEPTH_LIMIT + 1));
+    expect(past.ok).toBe(false);
+    if (past.ok) return;
+    expect(past.error.reason).toBe("depth_limit_exceeded");
+    expect(past.error.message).toBe("depth_limit_exceeded");
+    expect(reasonOf(parse(stepsText(DEPTH_LIMIT + 1)))).toBe("depth_limit_exceeded");
+    expect(jsonFault(nestedText(DEPTH_LIMIT + 1))).toEqual({
+      kind: "depth",
+      position: DEPTH_LIMIT,
+    });
+    const found = jsonFault(stepsText(DEPTH_LIMIT + 1));
+    expect(found).toEqual({ kind: "depth", position: DEPTH_LIMIT * '{"next":'.length });
+    expect(describeFault(found as NonNullable<typeof found>)).toBe(
+      `nesting past the depth limit of ${DEPTH_LIMIT} at position ${DEPTH_LIMIT * 8}`,
+    );
+  });
+
+  // Sabotage: removing the depth test from the locator lets it recurse until
+  // the stack runs out, and the reason becomes the engine's stack-overflow
+  // message. It was run and reverted.
+  it("refuses a text far past the limit rather than exhausting the stack", () => {
+    expect(reasonOf(parse(nestedText(20_000)))).toBe("depth_limit_exceeded");
+    expect(reasonOf(parse(stepsText(20_000)))).toBe("depth_limit_exceeded");
+    expect(reasonOf(parse(`${'[{"card":'.repeat(10_000)}`))).toBe("depth_limit_exceeded");
+  });
+
+  // Leaving a container gives its level back, so a wide text that never nests
+  // deep is read in full however many containers it holds. Sabotage: dropping
+  // the level's release at any one of the four places the locator leaves an
+  // array or an object turns this red; each of the four was run and reverted.
+  it("counts nesting rather than containers", () => {
+    const wide = DEPTH_LIMIT * 2;
+    const arrays = `[${Array.from({ length: wide }, () => "[]").join(",")}]`;
+    const filled = `[${Array.from({ length: wide }, () => "[4200]").join(",")}]`;
+    const maps = `[${Array.from({ length: wide }, () => "{}").join(",")}]`;
+    const members = `[${Array.from({ length: wide }, () => '{"step":"plan"}').join(",")}]`;
+    for (const text of [arrays, filled, maps, members]) {
+      expect(jsonFault(text)).toBeUndefined();
+      expect(parse(text).ok).toBe(true);
+    }
   });
 });
 
