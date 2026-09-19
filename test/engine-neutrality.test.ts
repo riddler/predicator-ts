@@ -135,9 +135,10 @@ const prosePreviouslyTripping: readonly string[] = [
 // Forbidden names as the last word of a sentence. A full stop with no word
 // character after it is not a member access, so none of these fires,
 // whichever name ends the sentence. The list is every name in the script's
-// DOM and Node global lists, the members of the toLocale family, and each
-// other forbidden name the rules spell out. The module-path globals are
-// absent because they have no anchor and fire on every mention.
+// DOM global, Node global and bare builtin specifier lists, the members of
+// the toLocale family, and each other forbidden name the rules spell out,
+// the two URL schemes included. The module-path globals are absent because
+// they have no anchor and fire on every mention.
 const namesEndingASentence: readonly string[] = [
   // The DOM global list.
   "window",
@@ -158,11 +159,55 @@ const namesEndingASentence: readonly string[] = [
   "module",
   "exports",
   "require",
-  // The import forms, the data URL scheme and the resolution accessor.
+  // The import forms, the two URL schemes and the resolution accessor.
   "import",
+  "node",
   "data",
   "meta",
   "resolve",
+  // The bare builtin specifier list.
+  "assert",
+  "async_hooks",
+  "buffer",
+  "child_process",
+  "cluster",
+  "console",
+  "constants",
+  "crypto",
+  "dgram",
+  "diagnostics_channel",
+  "dns",
+  "domain",
+  "events",
+  "fs",
+  "http",
+  "http2",
+  "https",
+  "inspector",
+  "module",
+  "net",
+  "os",
+  "path",
+  "perf_hooks",
+  "process",
+  "punycode",
+  "querystring",
+  "readline",
+  "repl",
+  "stream",
+  "string_decoder",
+  "sys",
+  "timers",
+  "tls",
+  "trace_events",
+  "tty",
+  "url",
+  "util",
+  "v8",
+  "vm",
+  "wasi",
+  "worker_threads",
+  "zlib",
   // Dynamic code and its aliases.
   "eval",
   "Function",
