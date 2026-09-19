@@ -230,6 +230,12 @@ function putIn(container: Container, path: readonly PathSegment[], value: Value)
     if (typeof segment === "string") return { ok: false, reason: NOT_A_CONTAINER };
     if (segment < 0) return { ok: false, reason: INVALID_INDEX };
     const next = padded(container, segment);
+    // The padding guarantees the index exists, but not that it holds a value
+    // of the domain. A list pushed by `lit` is the operand as the program
+    // carried it, so it can hold a hole or the language's undefined, and the
+    // copy `padded` makes turns a hole into undefined too. The coalesce reads
+    // either as the absence, the value a slot the padding added holds, and a test in
+    // `test/evaluator.test.ts` writes through such a slot.
     const written = descend(next[segment] ?? Undefined, rest, value);
     if (!written.ok) return written;
     next[segment] = written.value;
