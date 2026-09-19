@@ -10,8 +10,14 @@
 // because that module - not a reader - is where the check now sits.
 //
 // The last case is the part that keeps this true for readers that do not exist
-// yet: it fails when any other file under `test/` reaches for the transcript
-// file itself rather than asking this module for its lines.
+// yet, and it is worth being exact about what it can do. It fails when a file
+// under `test/` names the transcript outside a comment, which is what a reader
+// added by someone who has not read this would do. It cannot see a filename
+// assembled from pieces or held in a variable, and it does not look outside
+// `test/`; `compile-transcript.ts` records both limits beside the check
+// itself. What closes the larger hole is not this case but that module
+// exposing neither the transcript's bytes nor its text, so that reaching a row
+// without the check means naming the file.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -20,22 +26,26 @@ import { describe, expect, it } from "vitest";
 import {
   type CompileTranscriptStamp,
   type CorpusStamp,
-  compileTranscriptBytes,
   compileTranscriptHash,
+  compileTranscriptLines,
   compileTranscriptStamp,
   compileTranscriptStampFaults,
   corpusStamp,
-  transcriptLinesFrom,
+  stampedLinesOfText,
 } from "./compile-transcript.js";
 
 const testRoot = fileURLToPath(new URL("../", import.meta.url));
 
-/** Every TypeScript file under `test/`, as paths relative to `test/`. */
+/** The extensions a module under `test/` can be written in. */
+const MODULE_EXTENSIONS = [".ts", ".mts", ".cts"] as const;
+
+/** Every TypeScript module under `test/`, as paths relative to `test/`. */
 function testFiles(directory: string): readonly string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const full = join(directory, entry.name);
     if (entry.isDirectory()) return testFiles(full);
-    return entry.isFile() && entry.name.endsWith(".ts") ? [relative(testRoot, full)] : [];
+    const isModule = MODULE_EXTENSIONS.some((extension) => entry.name.endsWith(extension));
+    return entry.isFile() && isModule ? [relative(testRoot, full)] : [];
   });
 }
 
@@ -79,30 +89,28 @@ describe("the compile transcript's stamp", () => {
     ]).toEqual([4, true, true, true, true]);
   });
 
-  // Sabotage: splitting the bytes and answering them before the fault list is
-  // consulted turns this red. It was run and reverted.
+  // Sabotage: splitting the text and answering it before the fault list is
+  // consulted turns this red. It was run and reverted. The text here is
+  // fabricated rather than the vendored transcript's, which is the point of
+  // the function taking it as an argument.
   it("hands out no line while a stamp disagrees", () => {
-    expect(() =>
-      transcriptLinesFrom(
-        compileTranscriptBytes,
-        "sha256:not-the-file",
-        compileTranscriptStamp,
-        corpusStamp,
-      ),
-    ).toThrow(/not the file its SOURCE.json records/);
-    expect(
-      transcriptLinesFrom(
-        compileTranscriptBytes,
-        compileTranscriptHash,
-        compileTranscriptStamp,
-        corpusStamp,
-      ).length,
-    ).toBeGreaterThan(0);
+    const corpus: CorpusStamp = { tag: "v9.4.1", sha: "a", corpus_hash: "sha256:b" };
+    const agreeing: CompileTranscriptStamp = { ...corpus, transcript_hash: "sha256:text" };
+
+    expect(() => stampedLinesOfText("one\ntwo\n", "sha256:not-the-text", agreeing, corpus)).toThrow(
+      /not the file its SOURCE.json records/,
+    );
+    expect(stampedLinesOfText("one\ntwo\n", "sha256:text", agreeing, corpus)).toEqual([
+      "one",
+      "two",
+    ]);
+    expect(compileTranscriptLines().length).toBeGreaterThan(0);
   });
 
-  // Sabotage: a direct read of the transcript file added to test/emitter.test.ts
-  // turns this red, naming that file. It was run and reverted.
-  it("is what every reader under test/ goes through", () => {
+  // Sabotage: a direct read of the transcript added to test/emitter.test.ts
+  // turns this red, naming that file; so does the same read placed in a `.mts`
+  // module beside it. Both were run and reverted.
+  it("is named by no reader under test/ but the module that checks it", () => {
     const needle = ["compile", "json"].join(".");
     const sanctioned = join("conformance", "compile-transcript.ts");
     const direct = testFiles(testRoot)
