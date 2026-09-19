@@ -1979,10 +1979,13 @@ answers at that bound. This amendment decides it, and extends the exemption to
 it.
 
 **A `::float` cast of a string whose parse is not finite answers undefined,
-not a refusal.** A text the float grammar accepts can name a number past the
-largest finite double, and its parse is then an infinity, from which no float
-of this domain can be built. That is a conversion that cannot produce a value
-of the target type, so under the same totality rule the cast answers undefined.
+not a refusal.** The parse rounds the text's magnitude to the nearest double.
+A magnitude at or above the midpoint between the largest finite double and two
+to the 1024th power rounds to an infinity, from which no float of this domain
+can be built. That is a conversion that cannot produce a value of the target
+type, so under the same totality rule the cast answers undefined. A magnitude
+past the largest finite double but below that midpoint rounds down to it, and
+the cast answers that float.
 The anchor is `toFloat` in `src/cast.ts`, read at `3c76eb8`. The obligation the
 out-of-range amendment states binds a site that admits a number as an integer,
 and this amendment does not widen it: it adds no obligation at the non-finite
@@ -2006,11 +2009,11 @@ evaluation.
 
 **This is this package's reading of the totality rule, and the reference does
 not answer the case.** Unlike the safe-integer bound, the reference meets this
-bound too, since its floats are doubles. Run at `v9.4.1` on two texts its float
-grammar accepts, one naming ten to the 309th power and one of four hundred nines
-and a fraction, its `::float` cast raises an argument error out of the evaluation
-rather than answering undefined or an error value; the text naming ten to the
-308th power answers that float. So no reference run confirms the reading, and
+bound too. Run at `v9.4.1` on two texts its float grammar accepts, one naming
+ten to the 309th power and one of four hundred nines and a fraction, its
+`::float` cast raises an argument error out of the evaluation rather than
+answering undefined or an error value; the text naming ten to the 308th power
+answers that float. So no reference run confirms the reading, and
 what the reference does there contradicts the totality rule it states. No case
 in the vendored corpus decides it. If the corpus later carries one, the case
 wins over the reading, as the exemption above says of its own.
@@ -2020,7 +2023,9 @@ has no member for" in `test/cast.test.ts`, which casts a text of four hundred
 nines and a fraction to a float and expects undefined.
 
 Consequences. A host casting such a text gets undefined, which is quiet where
-normalization and an arithmetic result refuse loudly at the same bound; that
-is the asymmetry the exemption above already accepts at the safe-integer
-bound, for the same reason. The conformance run is unchanged. Nothing in this
-amendment adds an opcode, a reason token or a wire-format change.
+normalization and an arithmetic result refuse loudly at the same bound, the
+latter with `"non_finite_number"` (`numericResult` in `src/evaluator.ts`,
+read at `3e002ef`); that is the asymmetry the exemption above already accepts
+at the safe-integer bound, for the same reason. The conformance run is
+unchanged. Nothing in this amendment adds an opcode, a reason token or a
+wire-format change.
