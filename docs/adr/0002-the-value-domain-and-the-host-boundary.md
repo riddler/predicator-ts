@@ -1,6 +1,6 @@
 # ADR-0002: The value domain in TypeScript, and the host boundary
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
+Status: accepted (2026-09-17; proposed 2026-09-16)
 
 ## Context
 
@@ -519,7 +519,7 @@ no test could have pinned more than that the option is not honored there.
 
 ## Amendment: two options types, and `tagged` on the subpath's only (2026-09-16)
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
+Status: accepted (2026-09-17; proposed 2026-09-16)
 
 What this amends. The Typespecs section above declares one `EvaluateOptions`
 interface serving both entry points, carrying `tagged` as an optional member
@@ -584,7 +584,7 @@ defined, and not this record's.
 
 ## Amendment: the out-of-range rule's sites, and the cast exemption (2026-09-17)
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
+Status: accepted (2026-09-17; proposed 2026-09-17)
 
 Recorded for `pts-brv`, which asked whether a cast result belongs among the
 places the out-of-range rule refuses at.
@@ -750,7 +750,7 @@ amendment adds an opcode, a reason token or a wire-format change.
 
 ## Note: statement mode, the two program entry points, and the store write (2026-09-17)
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
+Status: accepted (2026-09-17; proposed 2026-09-17)
 
 Recorded for `pts-mqm`, ahead of the change that implements the statement
 layer. This record governs the value domain, the host boundary and the
@@ -1117,7 +1117,7 @@ from the projection this record chose rather than being a new loss.
 
 ## Amendment: an integer bracket key reads its string spelling (2026-09-17)
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
+Status: accepted (2026-09-17; proposed 2026-09-17)
 
 Recorded under the ruling on the question this record held about a store whose
 path segment is an integer landing on a map that already exists. The ruling
@@ -1238,7 +1238,7 @@ deciding it, and why nothing it pins moves now that the question is answered.
 
 ## Amendment: the three questions the statement-mode note holds (2026-09-17)
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-17)
+Status: accepted (2026-09-17; proposed 2026-09-17)
 
 Recorded for `pts-5h8`, under rulings taken on all three of the questions the
 note above holds in its "what this note does not decide" section. Each is
@@ -1442,7 +1442,7 @@ implements it rather than a description of live code.
 
 ## Amendment: cycles, nesting, and the one depth limit (2026-09-18)
 
-Status: proposed (2026-09-18)
+Status: accepted (2026-09-19; proposed 2026-09-18)
 
 Recorded for `pts-yop`, under the ruling that a cyclic or over-deep value is
 fixed with guards and a declared depth limit rather than by narrowing the
@@ -1577,7 +1577,7 @@ outside this amendment.
 
 ## Amendment: the JSON parse builtin's fault locator counts against the limit (2026-09-18)
 
-Status: proposed (2026-09-18)
+Status: accepted (2026-09-19; proposed 2026-09-18)
 
 Recorded for `pts-rf2`. This amendment is appended, and removes no line above.
 
@@ -1615,7 +1615,7 @@ issue, `pts-8di`, and is out of scope for this amendment.
 
 ## Amendment: a `lit` operand refuses an integer outside the safe range (2026-09-18)
 
-Status: proposed (2026-09-18)
+Status: accepted (2026-09-19; proposed 2026-09-18)
 
 Recorded for `pts-lvm`. This amendment is appended, and removes no line above.
 
@@ -1795,7 +1795,7 @@ records.
 
 ## Amendment: the value classes across copies, and what the codec writes (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-f9x`, which collected the value-domain items left after the
 first review of this record's implementation. This amendment is appended, and
@@ -1962,7 +1962,7 @@ this record adds lines and removes none.
 
 ## Amendment: the cast exemption reaches the non-finite bound (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-08d`. This amendment is appended, and removes no line above.
 
@@ -2032,7 +2032,7 @@ wire-format change.
 
 ## Amendment: one spelling of a float, negative zero included (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-74l`. This amendment is appended, and removes no line above.
 
@@ -2215,7 +2215,7 @@ is unchanged.
 
 ## Amendment: what a store writes at the path's root (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-23y`. This amendment is appended, and removes no line above.
 

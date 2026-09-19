@@ -1,6 +1,6 @@
 # ADR-0001: A conformant sibling, not a second reference implementation
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
+Status: accepted (2026-09-17; proposed 2026-09-16)
 
 ## Context
 
