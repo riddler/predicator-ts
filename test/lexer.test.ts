@@ -226,6 +226,30 @@ describe("date and datetime literals", () => {
     expect(instant.message).toBe("Unterminated date literal");
   });
 
+  // The declared accept-versus-refuse divergence, pinned so that closing it
+  // has to be a decision rather than a drift. Run at the vendored tag, the
+  // reference answers a date token for the first row, a datetime token for the
+  // second and a date token for the third.
+  //
+  // Sabotage: letting the calendar and instant readers admit a leading sign
+  // answers tokens instead of refusals and turns the first three rows red. It
+  // was run and reverted.
+  it("refuses a signed body where the reference answers a token", () => {
+    const negative = refusalOf("#-0001-01-01#");
+    expect(negative.reason).toBe("invalid_date");
+    expect(negative.message).toBe("Invalid date format: -0001-01-01");
+
+    const instant = refusalOf("#-0001-01-01T00:00:00Z#");
+    expect(instant.reason).toBe("invalid_datetime");
+    expect(instant.message).toBe("Invalid datetime format: -0001-01-01T00:00:00Z");
+
+    expect(refusalOf("#+2024-01-15#").reason).toBe("invalid_date");
+
+    // The same year written unsigned is admitted, so what is refused is the
+    // sign and not the year it would name.
+    expect(shapesOf("#0000-01-01#")[0]).toEqual(["date", 1, 1, 12, readDate("0000-01-01")]);
+  });
+
   // Sabotage: resetting neither the line nor the column on a newline inside a
   // literal leaves the span's end on line 1. It was run and reverted.
   it("moves a literal's span onto a later line when it holds a raw newline", () => {
