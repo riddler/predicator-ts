@@ -1,11 +1,12 @@
 // The registry's on-disk encoding, in one place.
 //
 // The upstream ratchet document states the encoding as normative and binding
-// on the writer. It is written here once because two things depend on it: the
-// ratchet script, which writes the file, and the registry check, which
-// re-encodes what it parsed and compares bytes against the file on disk. Two
-// implementations of one encoding would make that comparison a test of whether
-// the two agree rather than a test of whether the file was hand-edited.
+// on the writer. It is written here once because the file's writer and its
+// check have to encode through one function: the ratchet script writes the
+// file with it, and the registry check re-encodes what it parsed with it and
+// compares bytes against the file on disk. Two implementations of one encoding
+// would make that comparison a test of whether the two agree rather than a
+// test of whether the file was hand-edited.
 //
 // The rules, restated only as far as this module implements them: UTF-8, LF,
 // exactly one trailing newline; top-level keys in codepoint order; no
