@@ -26,9 +26,10 @@ which is why a tag is what is recorded.
   on which surface. It is written by the ratchet script from an observed run
   and is never hand-edited.
 - `transcript/` - what the reference answered, run at the same tag, over
-  values chosen for what this package declares it answers differently where
-  no case reaches: how a float is written as text, the unit a string position
-  is counted in, and what trimming removes. `transcript/transcript.json` holds
+  values chosen where no case reaches and this package states how its answer
+  compares with the reference's: how a float is written as text, the unit a
+  string position is counted in, what trimming removes, and which spellings
+  of a UTC offset the datetime cast reads. `transcript/transcript.json` holds
   the rows, one per line in the shape of a case; `transcript/SOURCE.json`
   records the tag, the toolchain the reference ran on, the command that wrote
   the file and the file's sha256. It is written only by

@@ -18,11 +18,12 @@
 # one line. So a row of the transcript has the shape of a vendored case and
 # the answer the reference gives at the export's tag.
 #
-# WHAT IT COVERS is what this package declares it answers differently from the
-# reference, where no vendored case reaches: how a float is written as text,
-# through the string cast and through `JSON.stringify`, and the unit a string
-# position is counted in, through the length, index and slice builtins, and
-# the set of characters trimming removes. The values are chosen to show the
+# WHAT IT COVERS is where this package states how its answer compares with the
+# reference's and no vendored case reaches: how a float is written as text,
+# through the string cast and through `JSON.stringify`; the unit a string
+# position is counted in, through the length, index and slice builtins; the
+# set of characters trimming removes; and which spellings of a UTC offset the
+# datetime cast reads. The values are chosen to show the
 # reference's own behaviour rather than to agree with this package's: a
 # rendering is a function of significant digits against decimal exponent
 # there, so neighbouring values that land on opposite sides of it are both
@@ -111,7 +112,59 @@ string_cases =
     %{"id" => id, "source" => source, "context" => %{"name" => name}}
   end
 
-authored = float_cases ++ string_cases
+# The offset position of the datetime cast. Every text the vendored corpus
+# casts to a datetime with an offset writes that offset as `Z`, and the
+# reference reads the text with its host language's ISO parser, whose offset
+# clauses are what these exercise: each spelling a clause names, the one a
+# clause singles out for refusal, spellings that fall through every clause
+# or fail its range check, and a field holding a sign where its first digit
+# belongs, which the parser's integer read of each field lets through. The
+# local time is the same on every row, so rows that name the same offset
+# answer the same instant.
+stamp = "2026-09-19T10:30:00"
+
+offsets = [
+  {"z-upper", "Z"},
+  {"z-lower", "z"},
+  {"plus-colon", "+05:30"},
+  {"minus-colon", "-05:30"},
+  {"plus-colonless", "+0530"},
+  {"minus-colonless", "-0530"},
+  {"plus-hour", "+05"},
+  {"minus-hour", "-05"},
+  {"plus-zero-colon", "+00:00"},
+  {"minus-zero-colon", "-00:00"},
+  {"minus-zero-colonless", "-0000"},
+  {"minus-zero-hour", "-00"},
+  {"space-before", " +05:30"},
+  {"space-before-z", " Z"},
+  {"trailing-space", "+05:30 "},
+  {"with-seconds", "+05:30:00"},
+  {"colonless-with-seconds", "+053000"},
+  {"three-digits", "+053"},
+  {"one-digit-hour", "+5:30"},
+  {"hour-out-of-range", "+24:00"},
+  {"minute-out-of-range", "+05:60"},
+  {"space-in-hour-field", "+ 5:30"},
+  {"minus-in-hour-field", "+-5:30"},
+  {"plus-in-hour-field", "++5:30"},
+  {"plus-in-minute-field", "+05:+3"},
+  {"minus-sign-character", "−0530"},
+  {"zone-name", "UTC"},
+  {"missing", ""},
+  {"after-fraction", ".5+05:30"}
+]
+
+offset_cases =
+  for {label, offset} <- offsets do
+    %{
+      "id" => "datetime-offset/#{label}",
+      "source" => "authorized_at::datetime",
+      "context" => %{"authorized_at" => stamp <> offset}
+    }
+  end
+
+authored = float_cases ++ string_cases ++ offset_cases
 
 completed =
   case Predicator.Conformance.Generator.generate(authored) do

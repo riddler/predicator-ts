@@ -35,7 +35,7 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
  *
  * The offset is required, which is the instruction set's own wording, and it
  * is what makes a date-only string unconvertible to a datetime. The rest of
- * the shape follows the reference's, with the one exception declared below,
+ * the shape follows the reference's, with the two exceptions declared below,
  * and was read off the clauses of the host ISO parser it routes through: the
  * date and the time may be separated by `T` or by a space,
  * the fraction may be introduced by a full stop or by a comma, and the offset
@@ -48,7 +48,12 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
  * them to this parse. The spellings beyond those were read off the reference:
  * it hands the text to its host language's ISO parser, and that parser's own
  * clauses are what the set here follows - Elixir 1.18.3, the offset clauses
- * and the date-time separator list in its calendar module.
+ * and the date-time separator list in its calendar module. The offset
+ * position has since been run against the reference at the vendored tag, not
+ * only read: the `datetime-offset/` rows of the reference transcript in
+ * `conformance/transcript/` put each of those offset clauses to it, together
+ * with spellings no clause admits, and this parse answers what the reference
+ * answers on every one of those rows except the ones declared below.
  *
  * What this shape does NOT admit, and the reference does: a leading sign on
  * the whole text, which the reference reads as the sign of the year. The
@@ -59,6 +64,14 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
  * refused beside the negative year so that the sign is one rule rather than
  * two.
  * That divergence is declared rather than closed.
+ *
+ * Nor does it admit an offset whose hour or minute field holds a sign where
+ * the field's first digit belongs, and the reference does: its parser reads
+ * each two-character field as an integer that may carry its own sign, so it
+ * reads `+-5:30` as four and a half hours west of UTC. This shape requires
+ * two digits in each field, and the parse answers nothing. The transcript's
+ * `datetime-offset/` rows named for a sign in a field hold both answers. That
+ * divergence is declared rather than closed too.
  */
 const DATETIME_TEXT =
   /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:[.,](\d+))?(Z|[+-]\d{2}(?::?\d{2})?)$/;
