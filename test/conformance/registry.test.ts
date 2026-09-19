@@ -17,9 +17,12 @@
 // Each check is written as a function answering the problems it found, and
 // each is exercised twice: once against the registry this repository actually
 // ships, and once against a registry constructed to break it. A check that has
-// only ever seen a passing input is not a check yet, and the registry here is
-// empty, so without the constructed halves every assertion below would hold
-// just as well if the checks did nothing at all.
+// only ever seen a passing input is not a check yet. The shipped registry is
+// meant to pass every check, so its half would hold just as well if the checks
+// did nothing at all, whatever that registry holds. The constructed halves are
+// what show each check can fail: each builds the input its check is asked
+// about - a pin, entries, claims, or a file's bytes - so what it asserts does
+// not rest on what the shipped registry holds.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
