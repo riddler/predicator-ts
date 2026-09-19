@@ -28,6 +28,7 @@
 
 import { describe, expect, it } from "vitest";
 import { loadCases, loadManifest } from "../scripts/lib/corpus.mjs";
+import type { Node } from "../src/ast.js";
 import { type Ast, compile, decompile, parse } from "../src/index.js";
 
 const MATRIX: readonly (readonly [string, Readonly<Record<string, string>>])[] = [
@@ -207,6 +208,33 @@ const KINDS: readonly (readonly [string, string])[] = [
   ["not enrolled or not invited", "NOT enrolled OR NOT invited"],
 ];
 
+/**
+ * `true` when a value of type `T` can be handed to the renderer as a tree.
+ *
+ * The tuple wrapper stops a naked union or `never` from distributing, so the
+ * answer is about the whole type rather than about each of its members.
+ */
+type Admits<T> = [T] extends [Ast] ? true : false;
+
+/** `true` when the tree type carries a discriminant a caller could switch on. */
+type Narrows = "kind" extends keyof Ast ? true : false;
+
+/** What a caller would write if it set out to build a tree of its own. */
+interface BuiltNode {
+  readonly kind: "integer";
+  readonly value: number;
+  readonly position: { readonly line: number; readonly column: number };
+  readonly span: {
+    readonly start: { readonly line: number; readonly column: number };
+    readonly end: { readonly line: number; readonly column: number };
+  };
+}
+
+const admitsANumber: Admits<number> = false;
+const admitsAnUnknown: Admits<unknown> = false;
+const admitsANodeACallerBuilds: Admits<BuiltNode> = false;
+const narrowsOnANodeKind: Narrows = false;
+
 /** The tree a source parses to, or a failure naming the source that refused. */
 function treeOf(source: string) {
   const parsed = parse(source);
@@ -348,12 +376,15 @@ describe("the round trip over the corpus", () => {
 });
 
 describe("a hand-built node", () => {
-  // The tree type is public, so a value the grammar cannot produce can still
-  // reach the renderer. A negative decimal is the case that matters: the
-  // grammar reads a leading `-` as a unary operator over a positive literal,
-  // so a parsed tree never carries a negative value, and the reference is
-  // nonetheless written to render one. Each expectation below is a run of
-  // `Predicator.decompile/2` at the tag over the hand-built literal.
+  // A value the grammar cannot produce can still reach the renderer from
+  // inside the package, which is where this test stands: the handle a caller
+  // holds is opaque and cannot be built, so the node is built here as the
+  // node type the grammar uses and sealed the way the entry point seals one.
+  // A negative decimal is the case that matters: the grammar reads a leading
+  // `-` as a unary operator over a positive literal, so a parsed tree never
+  // carries a negative value, and the reference is nonetheless written to
+  // render one. Each expectation below is a run of `Predicator.decompile/2`
+  // at the tag over the hand-built literal.
   //
   // Sabotage, run and reverted from a copy: dropping the sign from the
   // expansion, so that a negative magnitude in exponent form lost its `-`,
@@ -369,13 +400,13 @@ describe("a hand-built node", () => {
     [0, "0.0"],
     [-0, "-0.0"],
   ])("renders the decimal %s as the tag does", (value, expected) => {
-    const node: Ast = {
+    const node: Node = {
       kind: "float",
       value,
       position: { line: 1, column: 1 },
       span: { start: { line: 1, column: 1 }, end: { line: 1, column: 1 } },
     };
-    expect(decompile(node)).toBe(expected);
+    expect(decompile(node as unknown as Ast)).toBe(expected);
   });
 });
 
@@ -403,5 +434,41 @@ describe("the one rendering that is not the tag's", () => {
     expect(original.ok && again.ok).toBe(true);
     if (!original.ok || !again.ok) return;
     expect(again.instructions).toEqual(original.instructions);
+  });
+});
+
+describe("the tree type is opaque", () => {
+  // THE ASSERTIONS HERE ARE THE FOUR ANNOTATIONS ABOVE, NOT THE EXPECTATIONS
+  // BELOW. Each names a property of the tree type and then writes `false`
+  // into it, so the checker refuses the file the moment that property starts
+  // holding. `tsc` runs ahead of this suite in the gate, which is where they
+  // bite; the expectations below restate them at run time so a reader of the
+  // failure sees which one moved, and the last of them is the thing the
+  // opacity has to leave working.
+  //
+  // This is a property a comment cannot carry. ADR-0004 keeps the widening to
+  // one opaque type with no promise about its nodes, and a type that resolved
+  // to the node union would hand a consumer full narrowing whatever the doc
+  // comments said. The direction is also the reversible one: widening this
+  // later is not a breaking change, and narrowing it once a consumer has
+  // switched on a node kind would be.
+  //
+  // Sabotage, both run and reverted from a copy of src/decompile.ts taken
+  // first, and the two rival designs answer differently, which is the useful
+  // part. Restoring `export type Ast = Node` turned the typecheck red at
+  // `admitsANodeACallerBuilds` and at `narrowsOnANodeKind` and left the other
+  // two green: an alias of the node union gives away both the building and
+  // the narrowing. Writing `export type Ast = unknown` instead turned it red
+  // at `admitsANumber`, at `admitsAnUnknown` and at `admitsANodeACallerBuilds`
+  // and left `narrowsOnANodeKind` green: `unknown` hides the node kinds and
+  // admits everything, the number among them, which is what made that reading
+  // the wrong one. Only `narrowsOnANodeKind` separates the two mutations, and
+  // only the opaque handle answers as this file asserts on every line.
+  it("admits no number, no tree a caller builds, and no narrowing", () => {
+    expect(admitsANumber).toBe(false);
+    expect(admitsAnUnknown).toBe(false);
+    expect(admitsANodeACallerBuilds).toBe(false);
+    expect(narrowsOnANodeKind).toBe(false);
+    expect(decompile(treeOf("amount > 500"))).toBe("amount > 500");
   });
 });
