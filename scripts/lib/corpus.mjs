@@ -8,14 +8,16 @@
 // than restate. Which files import them is the import graph's to say, not
 // this header's.
 //
-// THE RULES. Tiers are cumulative: the cases for tier N are the case files for
-// tiers 1 through N. A surface's case set is every case for the evaluator, and
-// the source-bearing cases for the compiler - a null-source case is absent
-// from the compiler's set, not skipped by it. And a run claiming the corpus's
-// own instruction-set version does not attempt a case tagged `retired`, while
-// a run claiming an earlier version does; either way the case stays a member
-// of the evaluator surface's case set, because the filter scopes a run and not
-// the registry.
+// THE RULES. Tiers are cumulative: tier N means tiers 1 through N, of the case
+// files the manifest lists and of the cases they hold alike, so a reader
+// narrowing a loaded case set to a claimed tier asks the same question the
+// loader asks of the manifest. A surface's case set is every case for the
+// evaluator, and the source-bearing cases for the compiler - a null-source
+// case is absent from the compiler's set, not skipped by it. And a run
+// claiming the corpus's own instruction-set version does not attempt a case
+// tagged `retired`, while a run claiming an earlier version does; either way
+// the case stays a member of the evaluator surface's case set, because the
+// filter scopes a run and not the registry.
 //
 // WHAT THIS MODULE DELIBERATELY DOES NOT READ. A case's instructions, context
 // and expectation are values, and reading those correctly needs the corpus's
@@ -36,6 +38,24 @@ export function loadManifest() {
 }
 
 /**
+ * The members of `items` in tiers 1 through `tier`.
+ *
+ * The cumulative rule, in the one form both things that need it can use: the
+ * loader asks it of the manifest's tier files, and a reader narrowing an
+ * already-loaded case set to a claimed tier asks it of the cases. `items` is
+ * anything carrying a tier, because the rule is about the number and not about
+ * what carries it.
+ *
+ * Sabotage: narrowing this to a strict comparison turns the suite red on both
+ * readers at once - the ratchet check and the registry check each fail, which
+ * is what says neither of them still decides the cumulative rule for itself.
+ * It was run and reverted.
+ */
+export function throughTier(items, tier) {
+  return items.filter((item) => item.tier <= tier);
+}
+
+/**
  * The cases for tiers 1 through `tier`, in ascending tier order.
  *
  * The manifest says which files exist and what tier each one carries, so
@@ -43,9 +63,7 @@ export function loadManifest() {
  * drift, and the corpus check is where drift is caught.
  */
 export function loadCases(tier, manifest = loadManifest()) {
-  const files = [...manifest.tiers]
-    .filter((entry) => entry.tier <= tier)
-    .sort((left, right) => left.tier - right.tier);
+  const files = throughTier(manifest.tiers, tier).sort((left, right) => left.tier - right.tier);
   const cases = [];
   for (const entry of files) {
     const text = readFileSync(join(conformanceRoot, entry.file), "utf8");
