@@ -110,6 +110,25 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
       declaredBy: "the header of src/functions/string.ts",
     },
   ],
+  // A grapheme of more than one code point with no combining mark in it: a
+  // carriage return and line feed, which are both ASCII, and a flag made of
+  // two regional indicator symbols.
+  [
+    "string-unit/len-crlf",
+    { reference: 9, ours: 10, declaredBy: "the header of src/functions/string.ts" },
+  ],
+  [
+    "string-unit/slice-after-crlf",
+    { reference: "gold", ours: "\ngold", declaredBy: "the header of src/functions/string.ts" },
+  ],
+  [
+    "string-unit/len-flag",
+    { reference: 6, ours: 7, declaredBy: "the header of src/functions/string.ts" },
+  ],
+  [
+    "string-unit/slice-after-flag",
+    { reference: "visa", ours: " visa", declaredBy: "the header of src/functions/string.ts" },
+  ],
   // Trimming: the host's white-space set against the Unicode property, which
   // differ in both directions.
   [

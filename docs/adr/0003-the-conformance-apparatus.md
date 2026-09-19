@@ -465,13 +465,15 @@ sections read differently, the Context reading governs.
 Status: proposed (2026-09-19)
 
 Recorded for `pts-bx8`. This amendment is appended, and removes no line above.
-Code is cited as this change leaves it.
+A file this change does not touch is cited as read at commit `7821532`; a file
+it adds or edits is cited as this change leaves it; the reference is cited as
+read at its tag `v9.4.1`.
 
 What this amends. The decision above makes the vendored corpus the one record
 here of what the reference answers. Where this package declares that it
 answers differently from the reference and no vendored case reaches the
-difference, the reference's half of that declaration was prose, read off a run
-of the reference, and nothing in this repository executed against it. This
+difference, the reference's half of that declaration was prose about the
+reference, and nothing in this repository executed against it. This
 amendment adds a second record beside the corpus: a transcript of the
 reference's own answers, generated at the vendored tag and diffed in the suite.
 
@@ -480,8 +482,8 @@ reference's own answers, generated at the vendored tag and diffed in the suite.
 shape of a corpus case, whose `expected_result` is what the reference answered.
 `conformance/transcript/SOURCE.json` records the upstream repository, the tag,
 the commit `conformance/SOURCE.json` names for that tag, the corpus hash, the
-toolchain the reference ran on, the command that wrote the file, and the file's
-sha256.
+toolchain the reference ran on, the instruction-set version the reference
+reported, the command that wrote the file, and the file's sha256.
 
 **This repository writes the questions and the reference answers them.** Each
 row is authored as a source and a context in
@@ -513,11 +515,14 @@ entry's, and when the two answers agree.
 edited to make a row agree, and the table is where a difference is recorded.
 Each entry names the place in `src/` where the difference is declared.
 
-**A declaration of how this package differs from the reference cites the
-transcript rows that show it**, where the transcript carries any. The comments
-declaring how a float is written (`floatText` in `src/floats.ts`, and the
-header of `src/functions/json.ts`) and the unit of a string position and the
-set trimming removes (the header of `src/functions/string.ts`) cite them.
+**The code and test comments that declare the divergences the transcript
+covers cite its rows.** Those are the comments declaring how a float is written
+(`floatText` in `src/floats.ts`, and the header of `src/functions/json.ts`),
+the unit of a string position and the set trimming removes (the header of
+`src/functions/string.ts`), and the block of declared divergences in
+`test/functions.test.ts`. No other declaration cites the transcript. The
+declarations in the records, this package's ADR-0002 among them, and every
+declaration no row covers still cite a reading of the reference.
 
 **The transcript is not a conformance record.** It is outside the hash rule,
 the registry names none of its rows, and a row that agrees is not a claim of
@@ -527,6 +532,15 @@ the reference answered to questions the corpus does not ask.
 What was observed, on 2026-09-19, by running it: the script, run on an export
 of predicator-ex `v9.4.1` under Elixir 1.18.3 and OTP 27, wrote the transcript
 this change vendors, and a second run wrote the same bytes.
+
+### What this does not decide
+
+**Whether this package matches the reference's float form stays open under
+ADR-0002.** The transcript records the reference's spelling and the test
+declares each row where this package's differs; neither makes that spelling
+the one this package must write. Nor does the transcript decide which unit a
+string position is counted in: that question belongs upstream, as the header
+of `src/functions/string.ts` says.
 
 Consequences. A sentence about the reference's half of a declared divergence
 can now go red: a regeneration at a later tag that moves the reference's

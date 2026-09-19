@@ -23,9 +23,10 @@ import type { Float } from "./values.js";
  * exponent, and a point glued onto that would make text no JSON parser reads
  * back.
  *
- * THE DIGITS ARE THE HOST'S, AND THE REFERENCE'S DIFFER. Apart from the sign of
- * negative zero this spelling is the host's own, and the reference writes many
- * floats otherwise. What the reference writes through the string cast and
+ * THE DIGITS ARE THE HOST'S, AND THE REFERENCE'S DIFFER. Apart from the two
+ * departures above - the sign of negative zero written, and a `.0` appended to
+ * a spelling with neither a point nor an exponent - this spelling is the
+ * host's own, and the reference writes many floats otherwise. What the reference writes through the string cast and
  * through `JSON.stringify` is vendored in `conformance/transcript/`, the rows
  * whose ids begin `float-cast/` and `float-json/`, and
  * `test/reference-transcript.test.ts` declares each row where this spelling
