@@ -30,6 +30,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { compile } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
 import { decodeTagged, evaluateTagged } from "../src/tagged.js";
 import { PDate, PDateTime, Undefined, type Value } from "../src/values.js";
@@ -323,6 +324,26 @@ function answer(row: DecodedCase): Value {
 
 const ROWS = rows();
 
+/**
+ * The source each row was written from, by row id.
+ *
+ * Read off the same bytes `rows` reads, rather than through a second read of
+ * the file: the transcript carries a source on every row, and the cases below
+ * ask what this package compiles it to. `decodeCase` answers a case's
+ * instructions, context and expectation and has no place for the source, so
+ * the sources are collected here beside it instead of widening that type.
+ */
+const SOURCES: ReadonlyMap<string, string> = new Map(
+  transcriptBytes
+    .toString("utf8")
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => {
+      const record = JSON.parse(line) as { id: string; source: string };
+      return [record.id, record.source] as const;
+    }),
+);
+
 describe("the reference transcript", () => {
   // Sabotage, through scripts/sabotage.mjs: one row's answer changed in the
   // transcript turns the hash assertion red; the tag respelled in the
@@ -378,5 +399,40 @@ describe("the reference transcript", () => {
       sameValue(value, declared.ours),
     );
     expect(sameValue(reference, ours), `${id}: the two now agree`).toBe(false);
+  });
+});
+
+describe("what the reference compiled, this package compiles", () => {
+  // Every row of this transcript carries the source it was written from and
+  // the instruction list the reference emitted for it, and until now the
+  // suite only ran the instructions. These cases compile the source here and
+  // hold the answer against the reference's, which makes every row of the
+  // file evidence about the compiler as well as about the evaluator. The
+  // comparison is the runner's `sameValue` for the same reason the compiler
+  // surface uses it: an integer operand and an integral float operand are
+  // different programs, and a date operand is a date.
+  //
+  // A row declared above is declared about the ANSWER a program computes, not
+  // about the program: the declarations are differences in evaluation, and
+  // the reference's own instruction list is what this compares against. So no
+  // row is exempt here.
+
+  // Sabotage: the comparison opcode respelled in src/emitter.ts turns the
+  // instruction assertion red on the row whose source compares, naming it. It
+  // was run and reverted.
+  it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
+    const source = SOURCES.get(id);
+    expect(source, `${id}: the row carries no source`).toBeTypeOf("string");
+    if (source === undefined) return;
+    const compiled = compile(source);
+    expect(compiled.ok, `${id}: the reference compiled this source and this package refused`).toBe(
+      true,
+    );
+    if (!compiled.ok) return;
+    const ours: Value = compiled.instructions.map((instruction) => [...instruction]);
+    expect(
+      sameValue(ours, row.instructions),
+      `${id}: this package and the reference emit different programs`,
+    ).toBe(true);
   });
 });
