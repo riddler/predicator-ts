@@ -27,10 +27,20 @@
 // Every copy is byte-for-byte. No reformat, no trailing-newline fix, no key
 // reordering. The hash rule in scripts/corpus-check.mjs is what makes that a
 // fact rather than an intention.
+//
+// A TIER FILE THE NEW MANIFEST DOES NOT LIST IS REMOVED. Refreshing to a tag
+// that carries fewer tiers than the vendored copy would otherwise leave the
+// dropped file in `conformance/corpus/`, where it contributes nothing to the
+// hash and the check rejects the tree on its next run. So once the copied
+// tier files are shown to hash to the manifest's value, every regular file
+// in `conformance/corpus/` that the manifest does not list is deleted, each
+// deletion printed. That directory is the one the check scans for unlisted
+// files, and it is the only one pruned; the check stays the backstop for
+// anything this leaves.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -129,6 +139,19 @@ const observed = `sha256:${digest.digest("hex")}`;
 if (observed !== manifest.corpus_hash) {
   die(
     `the tier files at ${tag} hash to ${observed}, which is not the manifest's ${manifest.corpus_hash}`,
+  );
+}
+
+// Only after the hash holds, so a refresh whose tier files do not hash to the
+// manifest's value stops having deleted nothing.
+const listed = new Set(tiers.map((tier) => tier.file));
+const corpusRoot = join(conformanceRoot, "corpus");
+for (const entry of readdirSync(corpusRoot, { withFileTypes: true })) {
+  const relativePath = `corpus/${entry.name}`;
+  if (!entry.isFile() || listed.has(relativePath)) continue;
+  unlinkSync(join(corpusRoot, entry.name));
+  console.log(
+    `corpus:refresh: removed conformance/${relativePath}, which the manifest at ${tag} does not list`,
   );
 }
 
