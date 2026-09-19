@@ -161,6 +161,39 @@ describe("evaluate", () => {
     expect(cyclic.error.position).toBe(1);
   });
 
+  // The machine reads an object of a class this package did not define as a
+  // map, and walks it as one when it compares it or hands it back, so the
+  // literal's nesting check walks it too.
+  //
+  // Sabotage: making the nesting walk descend only an object whose prototype
+  // is the plain one falsifies the rule that the walk counts as a map every
+  // object the machine reads as one; the cyclic operand then exhausts the
+  // stack in the comparison. It was run and reverted.
+  it("refuses a class-built literal operand past the limit, or cyclic", () => {
+    class Visitor {
+      self: unknown = 1;
+    }
+    let deep: unknown = 4200;
+    for (let level = 0; level <= DEPTH_LIMIT; level += 1) {
+      const visitor = new Visitor();
+      visitor.self = deep;
+      deep = visitor;
+    }
+    const past = evaluate([["lit", deep as Value]]);
+    expect(reasonOf(past)).toBe("depth_limit_exceeded");
+    const cyclic = new Visitor();
+    cyclic.self = cyclic;
+    const compared = evaluate([
+      ["lit", cyclic as unknown as Value],
+      ["lit", cyclic as unknown as Value],
+      ["compare", "EQ"],
+    ]);
+    expect(compared.ok).toBe(false);
+    if (compared.ok) return;
+    expect(compared.error.reason).toBe("cyclic_value");
+    expect(compared.error.position).toBe(0);
+  });
+
   // The result path back to the host, where the value was built by a host
   // function. Sabotage: skipping the nesting guard in the value boundary lets
   // the answered value exhaust the stack. It was run and reverted.

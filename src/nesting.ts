@@ -68,26 +68,36 @@ export function enterContainer(
  *
  * `level` is the level the value itself sits at: one for a value standing on
  * its own, deeper for one about to be placed inside other containers. It
- * descends only lists and plain maps, which are the domain's two containers;
- * every other member is a leaf. It stops at the first fault, so its own
+ * descends lists, and every object `isMap` answers true for; every other
+ * member is a leaf. The caller supplies `isMap` so that the walk counts as a
+ * map exactly what the code that will read the value treats as one: the
+ * machine passes its own map test, which reads an object of a class this
+ * package did not define as a map, so such an object is walked here too
+ * rather than passed over as a leaf. It stops at the first fault, so its own
  * recursion never goes deeper than one level past the limit.
  */
-export function nestingFault(value: unknown, level = 1): NestingReason | undefined {
-  return walk(value, level, new Set());
+export function nestingFault(
+  value: unknown,
+  isMap: (value: object) => boolean,
+  level = 1,
+): NestingReason | undefined {
+  return walk(value, level, new Set(), isMap);
 }
 
-function walk(value: unknown, depth: number, ancestors: Set<object>): NestingReason | undefined {
+function walk(
+  value: unknown,
+  depth: number,
+  ancestors: Set<object>,
+  isMap: (value: object) => boolean,
+): NestingReason | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const isList = Array.isArray(value);
-  if (!isList) {
-    const proto = Object.getPrototypeOf(value) as unknown;
-    if (proto !== null && proto !== Object.prototype) return undefined;
-  }
+  if (!isList && !isMap(value)) return undefined;
   const fault = enterContainer(value, depth, ancestors);
   if (fault !== undefined) return fault;
   const members: unknown[] = isList ? Array.from(value as unknown[]) : Object.values(value);
   for (const member of members) {
-    const inner = walk(member, depth + 1, ancestors);
+    const inner = walk(member, depth + 1, ancestors, isMap);
     if (inner !== undefined) return inner;
   }
   ancestors.delete(value);
