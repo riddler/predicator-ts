@@ -10,14 +10,14 @@
 //
 // What the rest of the gate already catches, and what it does not: `window`
 // and `document` fail `tsc` because the `dom` lib is not in tsconfig, and a
-// bare `eval()` is a Biome error. Everything else this file refuses -
-// locale-sensitive comparison and formatting, `bigint` in every literal base,
-// `new Function()`, a builtin import in every specifier form, and the builtin
-// globals - typechecks and lints clean. That is the reason this stage exists;
-// the overlap with the other two is deliberate, because a stage that states
-// the whole rule survives a tsconfig or Biome change that quietly drops half
-// of it. Biome's builtin-import rule is a WARNING and does not fail the lint
-// stage, so it is not a backstop for anything here.
+// bare `eval()` is a Biome error. Everything else this file refuses
+// typechecks and lints clean - locale-sensitive comparison and formatting,
+// `bigint` in every literal base, `new Function()`, a builtin import in every
+// specifier form and the builtin globals, for example. That is the reason
+// this stage exists; the overlap with the other two is deliberate, because a
+// stage that states the whole rule survives a tsconfig or Biome change that
+// quietly drops half of it. Biome's builtin-import rule is a WARNING and does
+// not fail the lint stage, so it is not a backstop for anything here.
 //
 // ---------------------------------------------------------------------------
 // EVERY RULE CARRIES THE SENTENCE THAT DOCUMENTS IT, AND THAT SENTENCE IS A
@@ -47,22 +47,24 @@
 // ANCHORING. One property governs every rule here, and it is the thing to
 // learn rather than a list of cases.
 //
-// Each pattern matches a forbidden NAME together with the PUNCTUATION that
-// turns that name into a use of the thing: an opening parenthesis after a
-// dynamic-evaluation name, a dot or parenthesis after a capitalised
-// constructor, a dotted member or an opening bracket after a global, the type
-// punctuation around a type name, a quoted specifier after an import keyword.
-// This file reads text and does not parse it, so it CANNOT TELL THAT
-// PUNCTUATION IN A COMMENT FROM THE SAME PUNCTUATION IN CODE. Therefore:
+// Each pattern matches a forbidden NAME together with an ANCHOR: whatever is
+// written beside the name to turn it into a use of the thing, most often
+// punctuation. The anchors differ from rule to rule, and these are examples,
+// not a list: an opening parenthesis after a dynamic-evaluation name, a
+// dotted member or a parenthesis after a capitalised constructor, a dotted
+// member or an opening bracket after a global, the type punctuation around a
+// type name, a quoted specifier after an import keyword. This file reads text
+// and does not parse it, so it CANNOT TELL AN ANCHOR IN A COMMENT FROM THE
+// SAME ANCHOR IN CODE. Therefore:
 //
 //     A forbidden name is quiet in prose exactly when its anchor is absent,
 //     and fires in prose exactly when its anchor is present.
 //
-// `eval` reads clean and `eval (` does not. `BigInt` reads clean and `BigInt.`
-// does not. `Intl` reads clean and `Intl.DateTimeFormat` does not. A name with
-// no anchor at all - the two module-path globals in the bare rule below are
-// the only ones - fires on every mention, which is why this comment describes
-// them rather than spelling them.
+// `eval` reads clean and `eval (` does not. `BigInt` reads clean and
+// `BigInt.asIntN` does not. `Intl` reads clean and `Intl.DateTimeFormat` does
+// not. A name with no anchor at all - the two module-path globals in the bare
+// rule below are the only ones - fires on every mention, which is why this
+// comment describes them rather than spelling them.
 //
 // THAT IS A RULE, NOT A CENSUS, AND IT HAS TO STAY ONE. Every previous version
 // of this paragraph tried to enumerate the cases where prose trips the check,
@@ -77,7 +79,7 @@
 // "documentation" - is never matched at all, because a longer word supplies no
 // anchor. Second, the full stop ending an English sentence is the same
 // character as a member access, so A FORBIDDEN NAME SHOULD NEVER BE THE LAST
-// WORD OF A SENTENCE - there it supplies its own anchor. Put a word after it.
+// WORD OF A SENTENCE - there it can supply its own anchor. Put a word after it.
 // Whether a particular rule is fooled by a trailing stop depends on whether
 // that rule demands a word character after the dot, which is why this is
 // stated as an always-do and not as a list of the rules that care. This
@@ -89,11 +91,14 @@
 // value: a reference captured into a variable and called later through that
 // variable, a constructor reached through a computed member access
 // (`host[key](source)`), a function pulled out of a data structure, or
-// anything arriving from a caller is invisible to it. A `require` whose
-// argument is not a literal is invisible for the same reason. The written
-// aliases below - assigning `eval` or `Function` to a name, the `(0, eval)`
-// indirect call, reaching either through `globalThis`, and calling
-// `.constructor()` - ARE caught, because those are the shapes a developer
+// anything arriving from a caller is invisible to it. A `require` or an
+// import whose specifier is not a literal is invisible for the same reason,
+// and so is source text turned into a URL at run time rather than written
+// out as a data URL. The written aliases below - assigning `eval` or
+// `Function` to a name, the `(0, eval)` indirect call, reaching either
+// through `globalThis`, and calling `.constructor()` - ARE caught, and so are
+// a script data URL written as a string and the module-resolution accessor
+// written as a member chain, because those are the shapes a developer
 // actually writes. The rest is what code review and the ISA contract are for,
 // and no sentence here or in CLAUDE.md may claim otherwise.
 // ---------------------------------------------------------------------------
@@ -191,6 +196,12 @@ const nodeGlobals = ["process", "Buffer", "global", "setImmediate", "clearImmedi
 const domAlternation = domGlobals.join("|");
 const nodeGlobalAlternation = nodeGlobals.join("|");
 
+// The globals in the lists above whose realistic use is a call or a
+// construction, which the property-or-index anchor below never meets, so
+// each list gets a call rule of its own as well.
+const domCalledGlobals = ["alert", "XMLHttpRequest"];
+const nodeCalledGlobals = ["setImmediate", "clearImmediate"];
+
 // A global is only a global when it is USED as one: a property access or an
 // index with no space in it, which is what the formatter produces and what
 // prose never does. Allowing whitespace around the dot was tried and
@@ -211,6 +222,11 @@ const usedAsGlobal = (alternation) => String.raw`\b(?:${alternation})(?:\.\w|\[)
 // rather than folded in here.
 const usedAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})(?:\.\w|\[)`;
 
+// A called global: the opening parenthesis with no space before it, which is
+// what the formatter writes and what prose rarely does, behind the same
+// lookbehind, so a method of that name on some other object stays quiet.
+const calledAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})\(`;
+
 const rules = [
   {
     id: "dom-global",
@@ -227,6 +243,22 @@ const rules = [
     documentedBy:
       "This module touches no Node global, so it never reads the process environment and never builds a Buffer.",
     violation: "const a = process.env.HOME;",
+  },
+  {
+    id: "dom-global-call",
+    pattern: new RegExp(calledAsBareGlobal(domCalledGlobals.join("|")), "g"),
+    why: "shipped source may not call a DOM global; it has to run where there is no DOM",
+    documentedBy:
+      "This module calls no browser global: it raises no dialog and opens no request object.",
+    violation: 'alert("declined");',
+  },
+  {
+    id: "node-global-call",
+    pattern: new RegExp(calledAsBareGlobal(nodeCalledGlobals.join("|")), "g"),
+    why: "shipped source may not call a Node global; it has to run where there is no Node",
+    documentedBy:
+      "This module calls no Node global, so it schedules nothing on the Node event loop.",
+    violation: "setImmediate(run);",
   },
   {
     id: "node-global-bare",
@@ -257,9 +289,21 @@ const rules = [
     violation: 'import "fs/promises";',
   },
   {
+    id: "module-resolve",
+    // The resolution accessor on the module's own metadata reaches a builtin
+    // by name with none of the import shapes above, and a constrained engine
+    // has no module loader to answer it. The member chain written out is the
+    // anchor, so the metadata object's other members stay quiet.
+    pattern: /\bimport\.meta\.resolve\b/g,
+    why: "shipped source may not ask the module loader to resolve a specifier; it reaches a builtin by name and has to run where there is no loader",
+    documentedBy:
+      "This module asks the module loader to resolve no specifier, builtin or otherwise.",
+    violation: 'const a = import.meta.resolve("fs");',
+  },
+  {
     id: "dynamic-code-eval",
     // The call form, so that the word "evaluator" cannot match: `eval` has to
-    // be followed by its own open parenthesis.
+    // be followed by its own open parenthesis, with or without spaces between.
     pattern: /\beval\s*\(/g,
     why: "authoring a condition is not authoring code, and dynamic code is unavailable on a locked-down engine",
     documentedBy: "This module never evaluates a string as code.",
@@ -271,6 +315,20 @@ const rules = [
     why: "authoring a condition is not authoring code, and dynamic code is unavailable on a locked-down engine",
     documentedBy: "This module never constructs a function from source text.",
     violation: 'const a = new Function("return 1");',
+  },
+  {
+    id: "dynamic-code-data-url",
+    // A data URL whose media type is a script, or WebAssembly, carries its
+    // own source, so importing it constructs and runs code exactly as the
+    // Function constructor does - and it is not a builtin, so the specifier
+    // rules never look at it. The anchor is the quote that opens the string,
+    // not the import keyword, so a long import the formatter wraps onto a
+    // second line is still caught. Media types match in any case, as they do
+    // in a URL; a data URL of any other type, an image say, stays quiet.
+    pattern: /["'`]data:(?:(?:text|application)\/(?:x-)?(?:java|ecma)script|application\/wasm)\b/gi,
+    why: "authoring a condition is not authoring code, and source text in a URL is dynamic code by another name",
+    documentedBy: "This module never imports source text written into a URL.",
+    violation: 'const a = await import("data:text/javascript,export default 1");',
   },
   {
     id: "dynamic-code-alias",
@@ -299,7 +357,7 @@ const rules = [
     // Anchored to a type position or a call, so that a doc comment saying this
     // module never produces one of these reads clean while `x: bigint` does not.
     pattern:
-      /[:<|&]\s*bigint\b|\bas\s+bigint\b|\bbigint\s*\[\s*\]|\bBigInt\s*\(|\bBigInt\s*\.|[:<|&]\s*BigInt\b|\bas\s+BigInt\b|=\s*BigInt\b(?!\s*\()/g,
+      /[:<|&]\s*bigint\b|\bas\s+bigint\b|\bbigint\s*\[\s*\]|\bBigInt\s*\(|\bBigInt\s*\.\w|[:<|&]\s*BigInt\b|\bas\s+BigInt\b|=\s*BigInt\b(?!\s*\()/g,
     why: "the value space is the one the ISA and the corpus define; a numeric tower the siblings lack is a conformance break",
     documentedBy:
       "This module declares no arbitrary-precision integer type and calls no arbitrary-precision integer constructor.",

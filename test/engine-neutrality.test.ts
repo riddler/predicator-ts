@@ -43,6 +43,15 @@ function scanLine(root: string, line: string): { status: number; output: string 
   return runChecker([root]);
 }
 
+/**
+ * The rule ids a run reported, one per finding. Matching the id as a whole
+ * word of the finding line, rather than as a substring of the output, keeps
+ * one rule's id from standing in for another that it happens to prefix.
+ */
+function firedRules(output: string): string[] {
+  return [...output.matchAll(/^\S+:\d+:\d+: ([\w-]+)$/gm)].map((match) => match[1] ?? "");
+}
+
 const rulesRun = runChecker(["--rules"]);
 const rules: readonly Rule[] = JSON.parse(rulesRun.output) as Rule[];
 
@@ -114,41 +123,99 @@ const prosePreviouslyTripping: readonly string[] = [
   // is quiet, whatever the name is.
   "// Neither eval nor Function is reachable here, BigInt is not part of the",
   "// value space, and Intl is never consulted for an ordering decision.",
-  // The same name as the trap above, written with a word after it instead of
-  // a full stop. This pair is the corollary, stated as two fixtures.
+  // The corollary's two spellings of a sentence about the same name: with a
+  // word after the name, and with the name as the last word. The capitalised
+  // constructor's dot arm once accepted a bare trailing dot, so the second
+  // line fired where the same sentence ending in any other forbidden name
+  // did not. Its fire side is the dotted-member line in the list below.
   "// No BigInt value is ever constructed here.",
+  "// The value space contains no BigInt.",
+];
+
+// Every forbidden name that has an anchor, as the last word of a sentence.
+// A full stop with no word character after it is not a member access, so
+// none of these fires, whichever name ends the sentence. The module-path
+// globals are absent because they have no anchor and fire on every mention.
+const namesEndingASentence: readonly string[] = [
+  "eval",
+  "Function",
+  "BigInt",
+  "bigint",
+  "Intl",
+  "localeCompare",
+  "window",
+  "document",
+  "alert",
+  "XMLHttpRequest",
+  "process",
+  "Buffer",
+  "global",
+  "setImmediate",
+  "clearImmediate",
+  "constructor",
+  "globalThis",
+  "require",
+  "import",
 ];
 
 // The other side of the same property. A forbidden name fires in prose as
 // soon as its anchor is present, because this scanner reads text and cannot
-// tell a comment's punctuation from code's. Each line below is ordinary
-// English that happens to put a name next to its anchor, and each one fires.
+// tell a comment's anchor from code's. Each line below is ordinary English
+// that happens to write a name with its anchor, and each one fires the rule
+// it is paired with - that rule by name, not merely some rule, so a line that
+// also trips a second rule cannot hide the loss of the arm it was written
+// for.
 //
 // These are not a list of the cases - the cases are whatever the patterns
 // currently say. They are a sample of the FAMILY, wide enough that a rewrite
 // of the anchoring paragraph which quietly re-narrows the property to one
 // rule, or to one kind of punctuation, goes red here.
-const proseCarryingAnAnchor: readonly string[] = [
+const proseCarryingAnAnchor: readonly (readonly [string, string])[] = [
   // A type name reached by the type punctuation around it.
-  "// Rule 9: bigint never.",
-  "// | bigint | never allowed |",
-  "// The rule is simple: bigint is out.",
-  "// Forbidden: bigint, and every literal base of it.",
+  ["bigint-type", "// Rule 9: bigint never."],
+  ["bigint-type", "// | bigint | never allowed |"],
+  ["bigint-type", "// The rule is simple: bigint is out."],
+  ["bigint-type", "// Forbidden: bigint, and every literal base of it."],
   // A dynamic-evaluation name reached by a following parenthesis, even with a
   // space between, and even mid-sentence.
-  "// Never write eval (like this) in shipped source.",
-  "// Calling Function (or any alias of it) is refused.",
-  // A capitalised constructor reached by a dot or a parenthesis.
-  "// BigInt.asIntN is unavailable on a constrained engine.",
-  "// Converting with BigInt(value) is refused outright.",
+  ["dynamic-code-eval", "// Never write eval (like this) in shipped source."],
+  ["dynamic-code-function", "// Calling Function (or any alias of it) is refused."],
+  // A capitalised constructor reached by a dotted member or a parenthesis.
+  ["bigint-type", "// BigInt.asIntN is unavailable on a constrained engine."],
+  ["bigint-type", "// Converting with BigInt(value) is refused outright."],
   // A namespace reached by a dotted member.
-  "// Intl.DateTimeFormat is absent on some engines.",
+  ["locale-sensitive", "// Intl.DateTimeFormat is absent on some engines."],
   // A global reached by a dotted member.
-  "// Reading process.env here would break the browser build.",
-  // A name that ends a sentence, where the full stop is its own anchor. This
-  // is the trap the corollary in the script header warns about, and the first
-  // draft of that very paragraph fell into it.
-  "// The value space contains no BigInt.",
+  ["node-global", "// Reading process.env here would break the browser build."],
+  // A global reached by a call.
+  ["dom-global-call", "// Raising alert(message) would break every other runtime."],
+  ["node-global-call", "// Deferring with setImmediate(callback) is refused."],
+  // A name with no anchor at all fires on every mention, in a comment too.
+  ["node-global-bare", "// Nothing here reads __dirname to find a fixture file."],
+  // A data URL reached by the quote that opens it, and the resolution
+  // accessor reached by the member chain that spells it.
+  ["dynamic-code-data-url", '// Loading "data:text/javascript,..." is refused.'],
+  ["module-resolve", "// Asking import.meta.resolve for a path is refused."],
+  // One line tripping two rules, listed once for each. Killing either arm
+  // leaves the line firing the other, so only the per-rule assertion notices.
+  ["locale-sensitive", "// Neither Intl.Collator nor process.env is read here."],
+  ["node-global", "// Neither Intl.Collator nor process.env is read here."],
+];
+
+// Ordinary code beside the rules that look at specifiers, data URLs, the
+// module's metadata and called globals. None of it constructs code or
+// reaches a builtin, and none of it may fire.
+const ordinaryModuleCode: readonly string[] = [
+  'const values = await import("./values.js");',
+  'import { parse } from "./parser.js";',
+  'export * from "./instructions.js";',
+  "const payload = response.data;",
+  "const settled = Promise.resolve(value);",
+  "const here = import.meta.url;",
+  'const logo = "data:image/png;base64,iVBORw0KGgo=";',
+  "scheduler.setImmediate(run);",
+  "banner.alert(message);",
+  "const level = alertLevel(amount);",
 ];
 
 // Identifiers an evaluator legitimately carries. The check omits `location`,
@@ -186,16 +253,43 @@ describe("prose and plausible identifiers do not fire the check", () => {
     },
   );
 
+  // Sabotage: dropping the `\w` after the dot in the `\bBigInt\s*\.\w` arm
+  // of scripts/engine-neutrality.mjs turns "contains no BigInt." red here.
+  it.each(namesEndingASentence.map((name) => [name] as const))(
+    "a sentence ending in %s is quiet",
+    (name) => {
+      const { status, output } = scanLine(root, `// The value space contains no ${name}.`);
+      expect(output).toContain("clean");
+      expect(status).toBe(0);
+    },
+  );
+
+  // Sabotage: widening the media type in `dynamic-code-data-url` to any data
+  // URL turns the image line red; widening `module-resolve` to the whole
+  // metadata object turns the `url` line red; dropping the `(?<![.\w$])`
+  // lookbehind from either call rule turns the member-call lines red.
+  it.each(ordinaryModuleCode.map((line, i) => [i, line] as const))(
+    "ordinary module code %i stays clean",
+    (_i, line) => {
+      const { status, output } = scanLine(root, line);
+      expect(output).toContain("clean");
+      expect(status).toBe(0);
+    },
+  );
+
   // Sabotage: dropping any one anchor alternative in
   // scripts/engine-neutrality.mjs - the `[:<|&]` arm of `bigint-type`, the
-  // `\s*` before the parenthesis in `dynamic-code-eval`, the `\bBigInt\s*\.`
-  // arm - turns the matching lines below red. Together they pin the anchor
-  // property itself rather than any one rule's wording.
-  it.each(proseCarryingAnAnchor.map((line, i) => [i, line] as const))(
-    "a name next to its anchor fires even in prose (%i)",
-    (_i, line) => {
-      const { status } = scanLine(root, line);
+  // `\s*` before the parenthesis in `dynamic-code-eval`, the `\bBigInt\s*\.\w`
+  // arm, the `\bIntl` arm of `locale-sensitive` - turns the matching lines
+  // below red, the last one even though its line still fires another rule.
+  // Together they pin the anchor property itself rather than any one rule's
+  // wording.
+  it.each(proseCarryingAnAnchor.map(([id, line], i) => [i, id, line] as const))(
+    "a name with its anchor fires even in prose (%i, %s)",
+    (_i, id, line) => {
+      const { status, output } = scanLine(root, line);
       expect(status, "this line must fire; the anchor property depends on it").toBe(1);
+      expect(firedRules(output), `this line must fire ${id}`).toContain(id);
     },
   );
 });
@@ -209,7 +303,7 @@ describe("every rule catches what it documents", () => {
     (id, violation) => {
       const { status, output } = scanLine(root, violation);
       expect(status, `${id} violation did not fail the check`).toBe(1);
-      expect(output, `${id} violation fired some other rule`).toContain(id);
+      expect(firedRules(output), `${id} violation fired some other rule`).toContain(id);
     },
   );
 });

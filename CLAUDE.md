@@ -220,21 +220,23 @@ before committing.
   of the full gate (`pnpm run neutrality`), so a reviewer runs the stage rather
   than retyping a pattern from memory.
   **One property governs all of it, and it is worth learning instead of a
-  list.** Every rule matches a forbidden name together with the punctuation
-  that turns that name into a use of the thing - an opening parenthesis after a
-  dynamic-evaluation name, a dot or parenthesis after a capitalised
-  constructor, a dotted member or an opening bracket after a global, the type
-  punctuation around a type name, a quoted specifier after an import keyword.
-  The scanner reads text and does not parse it, so **it cannot tell that
-  punctuation in a comment from the same punctuation in code.** Therefore:
+  list.** Every rule matches a forbidden name together with an anchor -
+  whatever is written beside the name to turn it into a use of the thing, most
+  often punctuation. The anchors differ from rule to rule; for example, an
+  opening parenthesis after a dynamic-evaluation name, a dotted member or a
+  parenthesis after a capitalised constructor, a dotted member or an opening
+  bracket after a global, the type punctuation around a type name, a quoted
+  specifier after an import keyword.
+  The scanner reads text and does not parse it, so **it cannot tell an anchor
+  in a comment from the same anchor in code.** Therefore:
   > a forbidden name is quiet in prose exactly when its anchor is absent, and
   > fires in prose exactly when its anchor is present.
 
-  `eval` reads clean and `eval (` does not. `BigInt` reads clean and `BigInt.`
-  does not. `Intl` reads clean and `Intl.DateTimeFormat` does not. A name with
-  no anchor at all - Node's two module-path globals are the only ones - fires
-  on every mention, which is why this paragraph describes them rather than
-  spelling them.
+  `eval` reads clean and `eval (` does not. `BigInt` reads clean and
+  `BigInt.asIntN` does not. `Intl` reads clean and `Intl.DateTimeFormat` does
+  not. A name with no anchor at all - Node's two module-path globals are the
+  only ones - fires on every mention, which is why this paragraph describes
+  them rather than spelling them.
   That is a rule, not a census, and it is the form this paragraph has to keep.
   Enumerating the cases is what went wrong repeatedly here: a count over a live
   pattern is false as soon as a pattern moves, while the property above stays
