@@ -216,9 +216,11 @@ before committing.
   break wearing a precision argument.
 - **The four rules above are checked mechanically, and this is exactly how far
   that reaches.** `scripts/engine-neutrality.mjs` is the one place the patterns
-  live. It reads every TypeScript file under `src/` and runs as its own stage
-  of the full gate (`pnpm run neutrality`), so a reviewer runs the stage rather
-  than retyping a pattern from memory.
+  live. It reads the TypeScript and plain JavaScript files under the
+  directory of each entry the build lists (`entry` in `tsup.config.ts`), so a
+  new entry in a new directory is scanned with no edit to the check, and it
+  runs as its own stage of the full gate (`pnpm run neutrality`), so a
+  reviewer runs the stage rather than retyping a pattern from memory.
   **One property governs all of it, and it is worth learning instead of a
   list.** Every rule matches a forbidden name together with an anchor -
   whatever is written beside the name to turn it into a use of the thing, most
