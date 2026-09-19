@@ -126,18 +126,23 @@ describe("classifyRun on constructed reports", () => {
     expect(classifyRun(run(report({ startTime: 999 })), 3).reason).toBe(INVALID.STALE_REPORT);
   });
 
-  // The failed-suite marker is necessary on its own: here the count meets the
-  // baseline and no test failed, and the run is still not evidence.
-  // Sabotage: deleting the failed-suite check turns this red (it reads survived).
+  // The failed-suite marker is what this report turns on, and it is built so
+  // that nothing else can fire: the count meets the baseline, the aggregate
+  // failed count agrees with the per-file results, and the success flag and
+  // the exit status agree with both. The file that loaded none of its tests is
+  // all that is left to notice. A real report of this runner would carry a
+  // false success flag alongside the failed file, and the success-flag check
+  // below would then reach it first; this report is constructed so it cannot.
+  // Sabotage: deleting the failed-suite check turns this red - the run reads
+  // survived.
   it("calls a run with a file that loaded none of its tests invalid, even at the baseline", () => {
     const r = report({
-      success: false,
       testResults: [
         { name: "a.test.mjs", status: "passed", assertionResults: [{ status: "passed" }] },
         { name: "b.test.mjs", status: "failed", message: "Parse failure", assertionResults: [] },
       ],
     });
-    const c = classifyRun(run(r, 1), 3);
+    const c = classifyRun(run(r), 3);
     expect(c).toMatchObject({ verdict: "invalid", reason: INVALID.FAILED_SUITE });
     expect(c.detail).toContain("b.test.mjs: Parse failure");
   });
@@ -477,7 +482,8 @@ describe("the command's exit status separates did-not-run from ran-and-passed", 
     ...m,
   });
 
-  // Sabotage: exiting 0 whenever no run survived reads an invalid run as a pass.
+  // Sabotage: exiting 1 when no mutation survived turns this red - this is the
+  // only test that pins the 0 status.
   it("exits 0 only when every mutation was caught by a valid run", () => {
     const r = sabotage({ mutations: [mutation(CAUGHT)] });
     expect(r.output).toContain("CAUGHT");
