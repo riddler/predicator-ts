@@ -27,8 +27,8 @@
   },
 
   "gate": {
-    "full": ["pnpm", "run", "gate"],
-    "loop": ["pnpm", "run", "gate:loop"],
+    "full": ["mise", "exec", "--", "pnpm", "run", "gate"],
+    "loop": ["mise", "exec", "--", "pnpm", "run", "gate:loop"],
     "build_paths": [
       "src/",
       "test/",
@@ -56,9 +56,9 @@
     "model": "worktree-per-issue",
     "worktrees_dir": "../predicator-ts-worktrees",
     "warm_clone": ["node_modules"],
-    "warm": [["pnpm", "install", "--frozen-lockfile"]],
+    "warm": [["mise", "exec", "--", "pnpm", "install", "--frozen-lockfile"]],
     "repair_when": "pnpm-lock.yaml",
-    "repair": [["pnpm", "install", "--frozen-lockfile"]],
+    "repair": [["mise", "exec", "--", "pnpm", "install", "--frozen-lockfile"]],
     "post_branch": []
   },
 

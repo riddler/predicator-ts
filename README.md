@@ -451,14 +451,16 @@ the host boundary, and the conformance apparatus.
 ## Development
 
 ```bash
-mise install                 # the pinned node and pnpm
-pnpm install --frozen-lockfile
-pnpm run gate:loop           # typecheck, lint, the suite
-pnpm run gate                # the full gate, which CI runs too
+mise install                                  # the pinned node and pnpm
+mise exec -- pnpm install --frozen-lockfile
+mise exec -- pnpm run gate:loop               # typecheck, lint, the suite
+mise exec -- pnpm run gate                    # the full gate, which CI runs too
 ```
 
-`mise.toml` carries the toolchain versions and CI reads them out of it with
-`sed` rather than duplicating them into the workflow. The pnpm version is the
+`mise.toml` carries the toolchain versions. The gate commands run through
+`mise exec --` so that they run on the pinned node whatever `node` a shell's
+`PATH` resolves to, and CI installs mise and provisions from the same file
+rather than duplicating the versions into the workflow. The pnpm version is the
 one exact version written in two places: `mise.toml` pins it for `mise install`
 and `package.json`'s `packageManager` pins it for corepack. Nothing checks that
 the two agree, so a bump has to move both. (`engines.node` in `package.json` is a floor
