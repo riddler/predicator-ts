@@ -16,6 +16,24 @@
 
 import { enterContainer, type NestingReason } from "./nesting.js";
 
+/** The registered keys that mark an instance of each value class. */
+const FLOAT_KEY = Symbol.for("predicator.float");
+const DATE_KEY = Symbol.for("predicator.date");
+const DATETIME_KEY = Symbol.for("predicator.datetime");
+const DURATION_KEY = Symbol.for("predicator.duration");
+
+/** What `ownData` answers for a property that is absent or is an accessor. */
+const NOT_DATA = Symbol("not a data property");
+
+/**
+ * Reads an object's own data property through its descriptor, so that no
+ * getter runs; an absent property or an accessor answers `NOT_DATA`.
+ */
+function ownData(candidate: object, key: PropertyKey): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
+  return descriptor !== undefined && "value" in descriptor ? descriptor.value : NOT_DATA;
+}
+
 /**
  * Lets `instanceof` recognize an instance of a value class that another copy
  * of this module built.
@@ -26,23 +44,39 @@ import { enterContainer, type NestingReason } from "./nesting.js";
  * domain is told apart by its class, so without this a float one copy built
  * is, to the other copy, an object of a class it did not define.
  *
- * So each class carries a key from the language's global symbol registry,
- * which every copy loaded on one thread reads back as the same symbol, on its
- * prototype, and its `instanceof` test asks for that key rather than for the
- * copy's own prototype. The key has to be inherited: an own property of that
- * name is how a plain object would claim to be one of these classes, and it
- * answers false. A key names one class's representation, so a change to what
- * a class holds takes a new key rather than reusing this one.
+ * So each instance carries, as an own data property, a key from the
+ * language's global symbol registry, which every copy loaded on one thread
+ * reads back as the same symbol, and the class's `instanceof` test asks for
+ * the shape every copy's constructor gives an instance rather than for the
+ * copy's own prototype. An object passes when all of these hold: its
+ * prototype is neither `null` nor `Object.prototype`, so no plain map
+ * passes; it is frozen; it holds the class's key as an own data property
+ * whose value is `true`; and it holds each of the class's fields as an own
+ * data property whose value is a number. Every property is read through its
+ * descriptor, so the test runs no getter. A key names one class's
+ * representation, so a change to what a class holds takes a new key rather
+ * than reusing this one.
  */
-function shareAcrossCopies(valueClass: abstract new (...args: never[]) => object, key: symbol) {
-  Object.defineProperty(valueClass.prototype, key, { value: true });
+function shareAcrossCopies(
+  valueClass: abstract new (...args: never[]) => object,
+  key: symbol,
+  fields: readonly string[],
+): void {
   Object.defineProperty(valueClass, Symbol.hasInstance, {
-    value: (candidate: unknown): boolean =>
-      typeof candidate === "object" &&
-      candidate !== null &&
-      !Object.hasOwn(candidate, key) &&
-      (candidate as { [brand: symbol]: unknown })[key] === true,
+    value: (candidate: unknown): boolean => {
+      if (typeof candidate !== "object" || candidate === null) return false;
+      const proto = Object.getPrototypeOf(candidate) as unknown;
+      if (proto === null || proto === Object.prototype) return false;
+      if (!Object.isFrozen(candidate)) return false;
+      if (ownData(candidate, key) !== true) return false;
+      return fields.every((field) => typeof ownData(candidate, field) === "number");
+    },
   });
+}
+
+/** Marks an instance under construction with its class's key, before it is frozen. */
+function mark(instance: object, key: symbol): void {
+  Object.defineProperty(instance, key, { value: true });
 }
 
 /**
@@ -72,6 +106,7 @@ export class Float {
       throw new TypeError("a float wraps a finite number; the domain has no non-finite member");
     }
     this.n = value;
+    mark(this, FLOAT_KEY);
     Object.freeze(this);
   }
 
@@ -84,7 +119,7 @@ export class Float {
   }
 }
 
-shareAcrossCopies(Float, Symbol.for("predicator.float"));
+shareAcrossCopies(Float, FLOAT_KEY, ["n"]);
 
 /**
  * Forces a float for any finite number, integral or not.
@@ -141,11 +176,12 @@ export class PDate {
     this.year = year;
     this.month = month;
     this.day = day;
+    mark(this, DATE_KEY);
     Object.freeze(this);
   }
 }
 
-shareAcrossCopies(PDate, Symbol.for("predicator.date"));
+shareAcrossCopies(PDate, DATE_KEY, ["year", "month", "day"]);
 
 /**
  * An instant in UTC, held as a whole number of seconds since the epoch plus a
@@ -169,11 +205,12 @@ export class PDateTime {
   constructor(epochSeconds: number, microsecond: number) {
     this.epochSeconds = epochSeconds;
     this.microsecond = microsecond;
+    mark(this, DATETIME_KEY);
     Object.freeze(this);
   }
 }
 
-shareAcrossCopies(PDateTime, Symbol.for("predicator.datetime"));
+shareAcrossCopies(PDateTime, DATETIME_KEY, ["epochSeconds", "microsecond"]);
 
 /** The parts a `Duration` may be built from; every one defaults to zero. */
 export interface DurationParts {
@@ -210,11 +247,21 @@ export class Duration {
     this.minutes = parts.minutes ?? 0;
     this.seconds = parts.seconds ?? 0;
     this.milliseconds = parts.milliseconds ?? 0;
+    mark(this, DURATION_KEY);
     Object.freeze(this);
   }
 }
 
-shareAcrossCopies(Duration, Symbol.for("predicator.duration"));
+shareAcrossCopies(Duration, DURATION_KEY, [
+  "years",
+  "months",
+  "weeks",
+  "days",
+  "hours",
+  "minutes",
+  "seconds",
+  "milliseconds",
+]);
 
 /** A predicator value: the closed union of the eleven members. */
 export type Value =

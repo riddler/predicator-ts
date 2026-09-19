@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { evaluate } from "../src/index.js";
+import { encodeTagged } from "../src/tagged.js";
 import {
   Duration,
   Float,
@@ -469,12 +471,60 @@ describe("two copies of the value module loaded together", () => {
     expect(back.ok && back.value instanceof Float).toBe(true);
   });
 
-  // Sabotage: reading the key without the own-property check turns this red.
-  it("do not take a plain object carrying the key for a member", () => {
-    const claim = { [Symbol.for("predicator.float")]: true };
+  // Sabotage: dropping the prototype test from the shared instanceof test
+  // turns this red - a frozen plain map holding the key and the field passes.
+  it("take no plain map for a member, whatever it holds", () => {
+    const claim = Object.freeze({ [Symbol.for("predicator.float")]: true, n: 7 });
     expect(claim instanceof Float).toBe(false);
-    expect(refusalOf(claim)).toBe(null);
-    expect(normalized(claim)).toEqual({});
+    expect(normalized(claim)).toEqual({ n: 7 });
     expect(typeName(normalized(claim))).toBe("map");
+  });
+
+  // Sabotage: reading the key with a plain property read instead of its own
+  // descriptor turns this red - the inherited key and the getter both pass.
+  it("take no object whose key is inherited or read through a getter", () => {
+    const inherited = Object.freeze(
+      Object.assign(Object.create({ [Symbol.for("predicator.float")]: true }), { n: 7 }),
+    );
+    class Seven {
+      readonly n = 7;
+      constructor() {
+        Object.freeze(this);
+      }
+      get [Symbol.for("predicator.float")]() {
+        return true;
+      }
+      valueOf() {
+        return 7;
+      }
+    }
+    for (const claim of [inherited, new Seven()]) {
+      expect(claim instanceof Float).toBe(false);
+      expect(refusalOf(claim)).toBe("unsupported_host_value");
+      expect(evaluate([["load", "rate"]], { rate: claim }).ok).toBe(false);
+      expect(encodeTagged({ rate: claim }).ok).toBe(false);
+    }
+  });
+
+  // Sabotage: dropping the frozen test from the shared instanceof test turns
+  // this red - the date-shaped object that is not frozen passes.
+  it("take no date-shaped object that is not frozen", () => {
+    const settledOn = Object.assign(Object.create({}), { year: 2026, month: 9, day: 19 });
+    Object.defineProperty(settledOn, Symbol.for("predicator.date"), { value: true });
+    expect(settledOn instanceof PDate).toBe(false);
+    expect(refusalOf(settledOn)).toBe("unsupported_host_value");
+  });
+
+  // Sabotage: reading a field with a plain property read instead of its own
+  // descriptor turns this red - the field served by a getter passes.
+  it("take no object whose field is served by a getter", () => {
+    const settledOn = Object.create({});
+    Object.defineProperty(settledOn, Symbol.for("predicator.date"), { value: true });
+    for (const field of ["year", "month", "day"]) {
+      Object.defineProperty(settledOn, field, { get: () => 1, enumerable: true });
+    }
+    Object.freeze(settledOn);
+    expect(settledOn instanceof PDate).toBe(false);
+    expect(refusalOf(settledOn)).toBe("unsupported_host_value");
   });
 });
