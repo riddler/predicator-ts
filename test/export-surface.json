@@ -34,8 +34,7 @@
     "isInteger",
     "isaVersion",
     "toHost",
-    "typeName",
-    "zeroDuration"
+    "typeName"
   ],
   "./tagged": [
     "DecodeReason",

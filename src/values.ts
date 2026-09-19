@@ -17,6 +17,35 @@
 import { enterContainer, type NestingReason } from "./nesting.js";
 
 /**
+ * Lets `instanceof` recognize an instance of a value class that another copy
+ * of this module built.
+ *
+ * A process can load this package twice - its module build and its CommonJS
+ * build are separate module graphs, and a host whose dependencies reach one
+ * each gets both - and each copy defines its own classes. A member of the
+ * domain is told apart by its class, so without this a float one copy built
+ * is, to the other copy, an object of a class it did not define.
+ *
+ * So each class carries a key from the language's global symbol registry,
+ * which every copy loaded on one thread reads back as the same symbol, on its
+ * prototype, and its `instanceof` test asks for that key rather than for the
+ * copy's own prototype. The key has to be inherited: an own property of that
+ * name is how a plain object would claim to be one of these classes, and it
+ * answers false. A key names one class's representation, so a change to what
+ * a class holds takes a new key rather than reusing this one.
+ */
+function shareAcrossCopies(valueClass: abstract new (...args: never[]) => object, key: symbol) {
+  Object.defineProperty(valueClass.prototype, key, { value: true });
+  Object.defineProperty(valueClass, Symbol.hasInstance, {
+    value: (candidate: unknown): boolean =>
+      typeof candidate === "object" &&
+      candidate !== null &&
+      !Object.hasOwn(candidate, key) &&
+      (candidate as { [brand: symbol]: unknown })[key] === true,
+  });
+}
+
+/**
  * A predicator float: a JavaScript `number` carrying a brand that survives
  * normalization, so that an integral float stays distinguishable from the
  * integer of the same magnitude.
@@ -55,6 +84,8 @@ export class Float {
   }
 }
 
+shareAcrossCopies(Float, Symbol.for("predicator.float"));
+
 /**
  * Forces a float for any finite number, integral or not.
  *
@@ -80,14 +111,26 @@ export function float(n: number): Float {
  * and a property bound to `undefined` back as the same thing, and predicator
  * keeps them distinct. A host still writes JavaScript `undefined` in a context
  * and reads it back in a plain result; the mapping happens at the boundary.
+ *
+ * It is a symbol from the language's global registry rather than a fresh one,
+ * so that every copy of this package loaded on one thread - the module
+ * build and the CommonJS build included - holds the same singleton, and an
+ * absence one copy produced is the absence to the other.
  */
-export const Undefined: unique symbol = Symbol("predicator.undefined");
+export const Undefined: unique symbol = Symbol.for("predicator.undefined");
 
 /**
  * A civil date: a year, a month and a day, with no time and no zone.
  *
  * This is not a JavaScript `Date` and it wraps none, so nothing a caller holds
  * can be mutated under the evaluator.
+ *
+ * The constructor does not check that its parts name a calendar date. The
+ * domain holds dates the tagged encoding cannot carry - a year before 100 or
+ * after 9999 - and this package's own date arithmetic builds them, so the
+ * check that matters is made where such a date would leave for a text: the
+ * tagged encoder refuses a date whose text would not read back as the same
+ * date.
  */
 export class PDate {
   readonly year: number;
@@ -102,6 +145,8 @@ export class PDate {
   }
 }
 
+shareAcrossCopies(PDate, Symbol.for("predicator.date"));
+
 /**
  * An instant in UTC, held as a whole number of seconds since the epoch plus a
  * microsecond of that second.
@@ -109,6 +154,13 @@ export class PDate {
  * The split keeps microsecond precision without spending a double's mantissa
  * on it: an epoch value in microseconds would be a large integer, and this
  * package refuses integers past the safe range rather than rounding them.
+ *
+ * The constructor checks neither part. This package's own arithmetic can move
+ * an instant past any year the tagged encoding carries, and can move it by a
+ * duration a host built with a fractional part, so a check here would turn
+ * such an evaluation into a throw rather than an answer. The check is made
+ * where an instant leaves for a text instead: the tagged encoder refuses an
+ * instant whose text would not read back as the same instant.
  */
 export class PDateTime {
   readonly epochSeconds: number;
@@ -120,6 +172,8 @@ export class PDateTime {
     Object.freeze(this);
   }
 }
+
+shareAcrossCopies(PDateTime, Symbol.for("predicator.datetime"));
 
 /** The parts a `Duration` may be built from; every one defaults to zero. */
 export interface DurationParts {
@@ -160,12 +214,7 @@ export class Duration {
   }
 }
 
-const ZERO_DURATION = new Duration();
-
-/** The duration whose every key is zero. */
-export function zeroDuration(): Duration {
-  return ZERO_DURATION;
-}
+shareAcrossCopies(Duration, Symbol.for("predicator.duration"));
 
 /** A predicator value: the closed union of the eleven members. */
 export type Value =

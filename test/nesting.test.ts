@@ -3,7 +3,7 @@ import { describeFault, jsonFault } from "../src/functions/json.js";
 import { evaluate, execute, executeValue, type Program } from "../src/index.js";
 import { DEPTH_LIMIT } from "../src/nesting.js";
 import { decodeTagged, encodeTagged, evaluateTagged } from "../src/tagged.js";
-import { fromHost, PDate, type Value, zeroDuration } from "../src/values.js";
+import { Duration, fromHost, PDate, type Value } from "../src/values.js";
 
 // The nesting guards: a value that contains itself, or whose lists and maps
 // nest past the declared depth limit, answers a failing arm with a named
@@ -342,7 +342,7 @@ describe("the tagged codec", () => {
     if (fits.ok) expect(decodeTagged(fits.text).ok).toBe(true);
     expect(reasonOf(encodeTagged(wrapIn(signedUp, DEPTH_LIMIT)))).toBe("depth_limit_exceeded");
     // A duration's value is a map inside its tag, one level further in.
-    const waited = zeroDuration();
+    const waited = new Duration();
     const durationFits = encodeTagged(wrapIn(waited, DEPTH_LIMIT - 2));
     expect(durationFits.ok).toBe(true);
     if (durationFits.ok) expect(decodeTagged(durationFits.text).ok).toBe(true);

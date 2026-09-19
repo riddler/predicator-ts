@@ -18,7 +18,6 @@ import {
   toHost,
   Undefined,
   type Value,
-  zeroDuration,
 } from "../src/values.js";
 
 /** The value a decode answered. Fails loudly rather than defaulting. */
@@ -370,6 +369,69 @@ describe("encodeTagged", () => {
     expect(encodeRefusal(Symbol("other") as unknown as Value)).toBe("unsupported_host_value");
     expect(encodeRefusal(new Duration({ days: Number.NaN }))).toBe("non_finite_number");
   });
+
+  // Sabotage: writing a date without the read-back check (formatDate alone)
+  // turns this red.
+  it("refuses a date whose tag would not read back as the same date", () => {
+    expect(encodeRefusal(new PDate(99, 12, 31))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDate(10000, 1, 1))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDate(-5, 1, 1))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDate(2026, 2, 30))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDate(2026, 13, 1))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDate(2026, 9, 1.5))).toBe("invalid_tagged_value");
+    expect(encodeRefusal([{ settledOn: new PDate(10000, 1, 1) }])).toBe("invalid_tagged_value");
+  });
+
+  // Sabotage: tightening the wire date test to refuse year 100 (year > 100)
+  // turns this red.
+  it("writes a date at either edge of the years a date tag carries", () => {
+    for (const edge of [new PDate(100, 1, 1), new PDate(9999, 12, 31)]) {
+      expect(decoded(encoded(edge))).toEqual(edge);
+    }
+  });
+
+  // Sabotage: writing a datetime without the read-back check (formatDateTime
+  // alone) turns this red.
+  it("refuses an instant whose tag would not read back as the same instant", () => {
+    const signedUpAt = Date.UTC(2026, 8, 19, 9, 0, 0) / 1000;
+    expect(encodeRefusal(new PDateTime(signedUpAt, 1234567))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDateTime(signedUpAt, -1))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDateTime(signedUpAt, 1.5))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDateTime(signedUpAt + 0.5, 0))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDateTime(Date.UTC(10000, 0, 1) / 1000, 0))).toBe(
+      "invalid_tagged_value",
+    );
+    expect(encodeRefusal(new PDateTime(-62135596800 - 86400, 0))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDateTime(1e16, 0))).toBe("invalid_tagged_value");
+  });
+
+  // Sabotage: refusing every instant with a fraction turns this red; the
+  // fraction it writes is six digits, never seven.
+  it("writes an instant's fraction as exactly six digits or none", () => {
+    const signedUpAt = Date.UTC(2026, 8, 19, 9, 0, 0) / 1000;
+    expect(encoded(new PDateTime(signedUpAt, 999999))).toBe(
+      '{"$type":"datetime","value":"2026-09-19T09:00:00.999999Z"}',
+    );
+    expect(encoded(new PDateTime(signedUpAt, 1))).toBe(
+      '{"$type":"datetime","value":"2026-09-19T09:00:00.000001Z"}',
+    );
+    expect(encoded(new PDateTime(signedUpAt, 0))).toBe(
+      '{"$type":"datetime","value":"2026-09-19T09:00:00Z"}',
+    );
+  });
+
+  // Sabotage: writing negative zero with the language's own spelling, which
+  // drops the sign, turns this red.
+  it("keeps the sign of negative zero, as an integer and as a float", () => {
+    expect(encoded(-0)).toBe("-0");
+    expect(encoded(float(-0))).toBe("-0.0");
+    expect(Object.is(decoded(encoded(-0)), -0)).toBe(true);
+    const back = decoded(encoded(float(-0)));
+    expect(back).toBeInstanceOf(Float);
+    expect(Object.is((back as Float).valueOf(), -0)).toBe(true);
+    expect(encoded(0)).toBe("0");
+    expect(encoded(float(0))).toBe("0.0");
+  });
 });
 
 describe("the round trip", () => {
@@ -378,7 +440,7 @@ describe("the round trip", () => {
     const authorizedAt = new PDateTime(Date.UTC(2026, 7, 9, 10, 30, 0) / 1000, 500000);
     const settledOn = new PDate(2026, 8, 6);
     const window = new Duration({ days: 3, milliseconds: 500 });
-    const empty = zeroDuration();
+    const empty = new Duration();
     const card: { [key: string]: Value } = {
       amount: 100,
       rate: float(1),

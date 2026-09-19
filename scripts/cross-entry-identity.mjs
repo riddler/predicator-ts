@@ -3,14 +3,15 @@
 //   node scripts/cross-entry-identity.mjs
 //
 // A value's member is told apart by its class - a float from an integer by
-// `instanceof Float`, the absence by identity with the `Undefined` symbol - so
-// a value produced by one entry point has to be an instance of the class the
-// other entry point exports. In the source tree that holds trivially, because
-// there is exactly one value module. It holds in the built package only
-// because the bundler emits the value module as a chunk both entries import;
-// a bundler upgrade, a change to the entry list or a config edit that inlines
-// the module into each entry again breaks it, and nothing in the suite can
-// see that, because the suite runs against the source.
+// `instanceof Float`, the absence by identity with the `Undefined` symbol. The
+// value classes recognize an instance another copy of them built, and the
+// absence is a registered symbol, so a value passes between two copies either
+// way. Within one module format there should still be one copy: the bundler
+// emits the value module as a chunk both entries import, which is what the
+// build's splitting setting is for, and a bundler upgrade, a change to the
+// entry list or a config edit that inlines the module into each entry again
+// would ship it twice. Nothing in the suite can see that, because the suite
+// runs against the source, where there is exactly one value module.
 //
 // So this runs after the build, as the last stage of the full gate, against
 // what the build wrote. It loads both entry points through the package's own
@@ -18,13 +19,20 @@
 // the ESM files and `require` for the CommonJS ones - and within each format
 // it checks both directions:
 //
-//   - a value decoded by the `./tagged` entry is an instance of the class the
-//     main entry exports, and its absence is the main entry's `Undefined`;
+//   - a value decoded by the `./tagged` entry is built by the very class the
+//     main entry exports - its prototype is that class's, which an inlined
+//     second copy would not give - and its absence is the main entry's
+//     `Undefined`;
 //   - a value built by the main entry is encoded by the `./tagged` entry as
 //     that member, not refused as a value outside the domain.
 //
-// The two formats are not compared with each other. They are separate module
-// graphs by construction, and a host loads one of them.
+// Then it checks across the two formats, because a host can load both: the
+// module build and the CommonJS build are separate module graphs, each with
+// its own copy of the value classes, and a host whose dependencies reach one
+// each gets both. Across them it checks that the absence is one singleton and
+// that a value built or decoded by one format is a member to the other - that
+// it normalizes, encodes, projects and is named as that member, not refused or
+// read as a map.
 //
 // A missing build is a failure, not a skip: every file the `exports` map
 // names is checked for before anything is loaded, so running this without a
@@ -84,10 +92,13 @@ function checkFormat(format, main, tagged) {
   };
   const encode = (value) => tagged.encodeTagged(value);
 
-  // Decoded by ./tagged, checked against the main entry's classes.
+  // Decoded by ./tagged, checked against the main entry's classes. The test is
+  // the prototype rather than instanceof, because instanceof also answers true
+  // for an instance of a second copy of the class.
+  const builtBy = (value, valueClass) => Object.getPrototypeOf(value) === valueClass.prototype;
   check(
     `${format}: a float decoded by ./tagged is the main entry's Float`,
-    decode("1.0") instanceof main.Float,
+    builtBy(decode("1.0"), main.Float),
   );
   check(
     `${format}: the absence decoded by ./tagged is the main entry's Undefined`,
@@ -95,15 +106,15 @@ function checkFormat(format, main, tagged) {
   );
   check(
     `${format}: a date decoded by ./tagged is the main entry's PDate`,
-    decode('{"$type":"date","value":"2026-09-18"}') instanceof main.PDate,
+    builtBy(decode('{"$type":"date","value":"2026-09-18"}'), main.PDate),
   );
   check(
     `${format}: a datetime decoded by ./tagged is the main entry's PDateTime`,
-    decode('{"$type":"datetime","value":"2026-09-18T12:00:00Z"}') instanceof main.PDateTime,
+    builtBy(decode('{"$type":"datetime","value":"2026-09-18T12:00:00Z"}'), main.PDateTime),
   );
   check(
     `${format}: a duration decoded by ./tagged is the main entry's Duration`,
-    decode('{"$type":"duration","value":{"days":1}}') instanceof main.Duration,
+    builtBy(decode('{"$type":"duration","value":{"days":1}}'), main.Duration),
   );
 
   // Built by the main entry, encoded by ./tagged.
@@ -128,9 +139,50 @@ const cjsMain = require(name);
 const cjsTagged = require(`${name}/tagged`);
 checkFormat("cjs", cjsMain, cjsTagged);
 
+function checkAcross(from, fromMain, fromTagged, to, toMain, toTagged) {
+  const label = `${from} -> ${to}`;
+  check(`${label}: the absence is one singleton`, fromMain.Undefined === toMain.Undefined);
+  const decoded = fromTagged.decodeTagged(
+    '[1.0,{"$type":"date","value":"2026-09-19"},{"$type":"datetime","value":"2026-09-19T09:00:00.500000Z"},{"$type":"duration","value":{"days":3}},{"$type":"undefined"}]',
+  );
+  if (!decoded.ok) die(`${from}: ./tagged could not decode the cross-format list`);
+  const [rate, settledOn, signedUpAt, window, absent] = decoded.value;
+  check(`${label}: a float is the other's Float`, rate instanceof toMain.Float);
+  check(`${label}: a date is the other's PDate`, settledOn instanceof toMain.PDate);
+  check(`${label}: a datetime is the other's PDateTime`, signedUpAt instanceof toMain.PDateTime);
+  check(`${label}: a duration is the other's Duration`, window instanceof toMain.Duration);
+  check(`${label}: a float is named a float`, toMain.typeName(rate) === "float");
+  check(`${label}: a float projects to its number`, toMain.toHost(rate) === 1);
+  check(`${label}: the absence projects to undefined`, toMain.toHost(absent) === undefined);
+  const normalized = toMain.fromHost({ rate, settledOn, signedUpAt, window, absent });
+  check(
+    `${label}: every member normalizes as itself`,
+    normalized.ok &&
+      normalized.value.rate === rate &&
+      normalized.value.settledOn === settledOn &&
+      normalized.value.signedUpAt === signedUpAt &&
+      normalized.value.window === window &&
+      normalized.value.absent === toMain.Undefined,
+  );
+  const reencoded = toTagged.encodeTagged(decoded.value);
+  check(
+    `${label}: every member encodes through the other's ./tagged`,
+    reencoded.ok &&
+      reencoded.text ===
+        '[1.0,{"$type":"date","value":"2026-09-19"},{"$type":"datetime","value":"2026-09-19T09:00:00.500000Z"},{"$type":"duration","value":{"days":3,"hours":0,"minutes":0,"months":0,"seconds":0,"weeks":0,"years":0}},{"$type":"undefined"}]',
+  );
+  const evaluated = toMain.evaluate([["load", "rate"]], { rate: fromMain.float(1) });
+  check(`${label}: a float in a context evaluates`, evaluated.ok && evaluated.value === 1);
+}
+
+checkAcross("esm", esmMain, esmTagged, "cjs", cjsMain, cjsTagged);
+checkAcross("cjs", cjsMain, cjsTagged, "esm", esmMain, esmTagged);
+
 if (failures.length > 0) {
   die(
-    "a value from one entry point is not a member of the other's domain; the build has given each entry its own copy of the value module",
+    "an entry point was built with its own copy of the value module, or one module format does not take the other's values as members",
   );
 }
-console.log("identity: both entry points share one value domain in both module formats");
+console.log(
+  "identity: both entry points share one value domain in both module formats, and the formats recognize each other's values",
+);

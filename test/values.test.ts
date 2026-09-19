@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   Duration,
   Float,
@@ -13,7 +13,6 @@ import {
   typeName,
   Undefined,
   type Value,
-  zeroDuration,
 } from "../src/values.js";
 
 /** The refusal reason a normalization answered, or `null` when it succeeded. */
@@ -130,7 +129,7 @@ describe("PDate and PDateTime", () => {
 describe("Duration", () => {
   // Sabotage: defaulting any key to something other than 0 turns this red.
   it("carries all eight keys, defaulting to zero", () => {
-    expect({ ...zeroDuration() }).toEqual({
+    expect({ ...new Duration() }).toEqual({
       years: 0,
       months: 0,
       weeks: 0,
@@ -187,7 +186,7 @@ describe("typeName", () => {
       [{ a: 1 }, "map"],
       [new PDate(2026, 8, 6), "date"],
       [new PDateTime(0, 0), "datetime"],
-      [zeroDuration(), "duration"],
+      [new Duration(), "duration"],
       [null, "null"],
       [Undefined, "undefined"],
     ];
@@ -255,6 +254,26 @@ describe("fromHost", () => {
     expect(refusalOf(new Map())).toBe("unsupported_host_value");
     expect(refusalOf(new Set())).toBe("unsupported_host_value");
     expect(refusalOf(new Money())).toBe("unsupported_host_value");
+  });
+
+  // Sabotage: refusing a map that carries a type-tag key, or dropping the key
+  // from the normalized map, turns this red.
+  it("neither adds nor rejects a type-tag key", () => {
+    const signup = { $type: "trial", plan: "pro" };
+    expect(normalized(signup)).toEqual({ $type: "trial", plan: "pro" });
+    expect(Object.keys(normalized({ plan: "pro" }) as object)).toEqual(["plan"]);
+  });
+
+  // Sabotage: normalizing the array arm with the list's own map rather than
+  // Array.from turns this red - map builds the host's class again.
+  it("answers a plain array for an array of a host's own class", () => {
+    class Charges extends Array<number> {}
+    const charges = new Charges();
+    charges.push(100, 250);
+    const seen = normalized({ charges });
+    const list = (seen as { charges: Value }).charges;
+    expect(Object.getPrototypeOf(list)).toBe(Array.prototype);
+    expect(list).toEqual([100, 250]);
   });
 
   // Sabotage: using map instead of Array.from in the array arm turns this red -
@@ -327,7 +346,7 @@ describe("fromHost", () => {
   it("passes the package's own value classes through unchanged", () => {
     const day = new PDate(2026, 8, 6);
     const instant = new PDateTime(0, 0);
-    const span = zeroDuration();
+    const span = new Duration();
     expect(normalized(day)).toBe(day);
     expect(normalized(instant)).toBe(instant);
     expect(normalized(span)).toBe(span);
@@ -357,7 +376,7 @@ describe("toHost", () => {
   it("returns a date, a datetime and a duration as themselves", () => {
     const day = new PDate(2026, 8, 6);
     const instant = new PDateTime(0, 0);
-    const span = zeroDuration();
+    const span = new Duration();
     expect(toHost(day)).toBe(day);
     expect(toHost(instant)).toBe(instant);
     expect(toHost(span)).toBe(span);
@@ -401,5 +420,61 @@ describe("toHost", () => {
     });
     const projected = toHost(map) as { [key: string]: HostValue };
     expect(Object.keys(projected)).toEqual(["__proto__"]);
+  });
+});
+
+describe("two copies of the value module loaded together", () => {
+  /**
+   * A second, separately evaluated copy of the value module and the codec, as
+   * a host that loads both the module build and the CommonJS build gets. The
+   * copies imported at the top of this file are the first.
+   */
+  async function secondCopy() {
+    vi.resetModules();
+    const values = await import("../src/values.js");
+    const tagged = await import("../src/tagged.js");
+    return { values, tagged };
+  }
+
+  // Sabotage: a fresh Symbol for Undefined instead of the registered one turns
+  // this red.
+  it("share one absence", async () => {
+    const other = await secondCopy();
+    expect(other.values.Undefined).toBe(Undefined);
+    expect(normalized({ nickname: other.values.Undefined })).toEqual({ nickname: Undefined });
+    expect(other.values.toHost(Undefined)).toBe(undefined);
+    expect(other.values.typeName(Undefined)).toBe("undefined");
+  });
+
+  // Sabotage: removing the shared instanceof test from the value classes turns
+  // this red.
+  it("recognize each other's floats, dates, datetimes and durations", async () => {
+    const other = await secondCopy();
+    expect(other.values.Float).not.toBe(Float);
+    const rate = float(1);
+    const settledOn = new PDate(2026, 9, 19);
+    const authorizedAt = new PDateTime(0, 500000);
+    const window = new Duration({ days: 3 });
+    expect(rate).toBeInstanceOf(other.values.Float);
+    expect(other.values.float(1)).toBeInstanceOf(Float);
+    expect(other.values.typeName(rate)).toBe("float");
+    expect(other.values.toHost(rate)).toBe(1);
+    const card = other.values.fromHost({ rate, settledOn, authorizedAt, window });
+    expect(card).toEqual({ ok: true, value: { rate, settledOn, authorizedAt, window } });
+    expect(other.tagged.encodeTagged([rate, settledOn, Undefined])).toEqual({
+      ok: true,
+      text: '[1.0,{"$type":"date","value":"2026-09-19"},{"$type":"undefined"}]',
+    });
+    const back = other.tagged.decodeTagged("1.0");
+    expect(back.ok && back.value instanceof Float).toBe(true);
+  });
+
+  // Sabotage: reading the key without the own-property check turns this red.
+  it("do not take a plain object carrying the key for a member", () => {
+    const claim = { [Symbol.for("predicator.float")]: true };
+    expect(claim instanceof Float).toBe(false);
+    expect(refusalOf(claim)).toBe(null);
+    expect(normalized(claim)).toEqual({});
+    expect(typeName(normalized(claim))).toBe("map");
   });
 });
