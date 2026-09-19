@@ -2096,3 +2096,61 @@ this amendment and is not decided here.
 Consequences. In the text a `::string` cast, a concatenation or a
 `JSON.stringify` answers, a float negative zero is now written `-0.0` where it
 was written `0.0`. What the tagged encoder writes is unchanged.
+
+## Note: the reason each normalization refusal carries (2026-09-19)
+
+Recorded for `pts-pzw`. This note is appended, and removes no line above. It
+records which reason each refusal of the normalization section already carries,
+and where later text of this record names it; it changes nothing this record
+decides, so it carries no Status line.
+
+The section headed "The host boundary: normalization" states three refusals:
+a finite, integral number outside the safe range; `NaN`, `Infinity` and
+`-Infinity`; and a value the table has no row for. Its table names a reason
+for the first alone. The other two carry a reason as well, and later text of
+this record names each:
+
+- **A number that is not finite is refused with `"non_finite_number"`.** The
+  amendment headed "the cast exemption reaches the non-finite bound" names it
+  as the value boundary's reason. The refusal is in `normalizeNumber` in
+  `src/values.ts`, read at `f38ab76`, for each of the three spellings.
+- **A value the table has no row for is refused with
+  `"unsupported_host_value"`.** The amendment headed "a `lit` operand refuses
+  an integer outside the safe range" names it as the value boundary's reason
+  for a value the domain has no member for. The refusal is in the last arm of
+  `normalize` in `src/values.ts`, read at `f38ab76`, for a value no earlier
+  arm takes that is not a number, a string or a boolean, and in
+  `normalizeObject` in the same file for an object whose prototype is neither
+  the object prototype nor null.
+
+**A host `Date` that names no instant is refused with `"non_finite_number"`
+too.** The table's `Date` row normalizes a `Date` at the same instant, and
+such a `Date` has none: its time value is `NaN`. The refusal is in the `Date`
+arm of `normalize` in `src/values.ts`, read at `f38ab76`.
+
+**Each reason is pinned by a shipped test** in `test/values.test.ts`: "refuses
+a non-finite number in all three spellings" expects `"non_finite_number"` for
+each spelling; "refuses a value it has no row for" expects
+`"unsupported_host_value"` for a function, a symbol other than the `Undefined`
+singleton, a `bigint`, a `Map`, a `Set` and a class instance this package did
+not define; and "refuses a host Date that names no instant" expects
+`"non_finite_number"`. Run at `f38ab76`, respelling the reason at any one of
+the refusals above turned at least one of these tests red.
+
+**The reference emits no reason for either case, so there is none to match.**
+Neither token appears in any file of predicator-ex at tag `v9.4.1`, its
+`conformance/` directory included, nor in the corpus vendored here. Run at
+that tag (Elixir 1.18.3, OTP 27):
+
+- Its runtime has no number that is not finite to hand it. It raises an
+  arithmetic error where an operation would produce one (`:math.pow(10.0,
+  400)` and `0.0 / 0.0` each raised), rejects one in its external term format,
+  and its JSON decoder rejects the texts `1e999`, `NaN` and `Infinity`.
+- It does not refuse a value it has no member for. Its context constructor,
+  `Predicator.Context.new/2` in `lib/predicator/context.ex`, accepted a context
+  binding `x` to a function, a process id, a tuple, a reference, the atom
+  `:other`, a `MapSet` or a host struct, and evaluating `x` against it
+  answered that value itself.
+
+So neither reason is one the reference has, and neither adds an opcode or
+changes the wire format.
