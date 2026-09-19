@@ -1170,6 +1170,24 @@ class Machine {
     return this.unboundError(this.unboundRoot, this.unboundAt);
   }
 
+  /**
+   * Runs one instruction: its length and operand shapes are checked first,
+   * then whether its opcode is retired, and only then does the opcode run.
+   *
+   * The order is visible for one kind of instruction. An instruction for a
+   * retired opcode that fails the length or shape check answers
+   * `unknown_instruction` here; only a well-formed one reaches the retirement
+   * check and answers `retired_opcode`. So `["and", 1]` is an unknown
+   * instruction here, while a bare `["and"]` is refused as retired.
+   *
+   * The reference differs. At the tag `conformance/SOURCE.json` pins, its
+   * evaluator has no case of its own for a retired opcode, which falls to a
+   * catch-all that matches the opcode name with any operands and answers
+   * `retired_opcode`, for `["and", 1]` as for `["and"]`. No corpus case at
+   * that tag carries an operand on a retired opcode, so the corpus cannot
+   * reach the difference. A test in `test/evaluator.test.ts` pins the order
+   * this evaluator runs, so a change to it is a deliberate one.
+   */
   private step(instruction: Instruction, at: number): Step {
     if (!Array.isArray(instruction)) return unknownInstruction(at);
     const opcode = instruction[0];

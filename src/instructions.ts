@@ -85,9 +85,13 @@ export type Program = readonly Instruction[];
  * unknown instruction, and a corpus case pins the distinction.
  *
  * An operand the first half keeps out falls to the catch-all and comes back as
- * `unknown_instruction`. The one thing that does not is an opcode a version
- * retired: it is intercepted before dispatch and answers a retired-opcode
- * refusal instead, which is a property of its row and not of any operand.
+ * `unknown_instruction`. The one thing that does not is a well-formed
+ * instruction for an opcode a version retired: it passes the length and shape
+ * checks, is intercepted before dispatch and answers a retired-opcode refusal
+ * instead, which is a property of its row and not of any operand. An
+ * instruction for a retired opcode that fails the length or shape check is an
+ * unknown instruction here; the evaluator's `step` states where the reference
+ * answers otherwise.
  */
 export type OperandShape =
   | "value"

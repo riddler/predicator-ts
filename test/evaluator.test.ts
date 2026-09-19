@@ -603,6 +603,34 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
     expect(outcome.error.message).toContain("3");
   });
 
+  // The length and shape checks run before the retirement check, so a retired
+  // opcode carrying an operand is an unknown instruction here. The reference
+  // answers retired_opcode for these, and no corpus case reaches the
+  // difference; this pins the order so that a change to it is deliberate.
+  //
+  // Sabotage: moving the retirement check in the machine's step method above
+  // the length check turns this red on the reason. It was run and reverted.
+  it("checks a retired opcode's operands before its retirement", () => {
+    for (const program of [
+      [
+        ["lit", true],
+        ["lit", true],
+        ["and", 1],
+      ],
+      [
+        ["lit", true],
+        ["lit", false],
+        ["or", "approved"],
+      ],
+    ] as Program[]) {
+      const outcome = evaluateToValue(program);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.reason).toBe("unknown_instruction");
+      expect(outcome.error.position).toBe(2);
+    }
+  });
+
   it("halts on a forward jump past the last instruction", () => {
     const outcome = evaluateToValue([
       ["lit", false],
@@ -1863,6 +1891,37 @@ describe("the store write path", () => {
       ["load", "attempts"],
     ]);
     expect(outcome).toEqual({ ok: true, value: [Undefined, "approved"] });
+  });
+
+  // A literal list is the operand as the program carried it, so a slot in it
+  // can be a hole or the language's undefined rather than the absence. Writing
+  // through such a slot reads it as the absence and vivifies it.
+  //
+  // Sabotage: descending into the padded slot as it is, without reading the
+  // language's undefined as the absence, turns this red: the write refuses the
+  // slot as not a container. It was run and reverted.
+  it("writes through a hole or an undefined slot in a literal list", () => {
+    const holey: unknown[] = ["insufficient_funds"];
+    holey.length = 3;
+    holey[2] = "do_not_honor";
+    const unset: unknown[] = ["insufficient_funds", undefined, "do_not_honor"];
+    for (const declines of [holey, unset]) {
+      const outcome = evaluateToValue([
+        ["lit", "declines"],
+        ["lit", declines as unknown as Value],
+        ["store", 1],
+        ["lit", "declines"],
+        ["lit", 1],
+        ["lit", "code"],
+        ["lit", "expired_card"],
+        ["store", 3],
+        ["load", "declines"],
+      ]);
+      expect(outcome).toEqual({
+        ok: true,
+        value: ["insufficient_funds", { code: "expired_card" }, "do_not_honor"],
+      });
+    }
   });
 
   // Sabotage: descending into a map's slot by replacing it falsifies the rule
