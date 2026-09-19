@@ -5,8 +5,12 @@
 // the tag `conformance/transcript/SOURCE.json` records. The rows cover where
 // this package states how its answer compares with the reference's and no
 // vendored case reaches: how a float is written as text, the unit a string
-// position is counted in, what trimming removes, and which spellings of a
-// UTC offset the datetime cast reads. The file is written by
+// position is counted in, what trimming removes, which spellings of a UTC
+// offset the datetime cast reads, what `JSON.stringify` answers for a value
+// with no JSON form, whether a sign before a whole date or datetime text is
+// read, what an integer key finds against a map, what an arithmetic result
+// past the safe integer range answers, and whether two reads of the clock in
+// one evaluation answer one instant. The file is written by
 // `scripts/reference-transcript.mjs` and by nothing else; the suite never
 // runs the reference, it reads what the reference answered.
 //
@@ -28,7 +32,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Program } from "../src/instructions.js";
 import { decodeTagged, evaluateTagged } from "../src/tagged.js";
-import { PDateTime, Undefined, type Value } from "../src/values.js";
+import { PDate, PDateTime, Undefined, type Value } from "../src/values.js";
 import { type DecodedCase, decodeCase, sameValue } from "./conformance/runner.js";
 
 const conformanceRoot = fileURLToPath(new URL("../conformance/", import.meta.url));
@@ -169,6 +173,100 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
     "datetime-offset/plus-in-minute-field",
     { reference: utc(5, 27), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
   ],
+  // A value with no JSON form. This package refuses a temporal member and the
+  // absence; the reference answers a text for each. Its encoder succeeded on
+  // all four: an instant and a date answer a JSON string holding their ISO
+  // text, a duration answers a JSON object of its parts, and the absence
+  // answers the JSON string `"undefined"`, which is what its host encoder
+  // makes of the value that stands for the absence and not a form of the
+  // domain. The arm that falls back to the host language's own inspect
+  // rendering ran for none of the four, and that rendering of the absence is
+  // a different text again, carrying no quotation marks at all.
+  [
+    "json-form/datetime",
+    {
+      reference: '"2026-09-19T10:30:00.000000Z"',
+      ours: "refused: JSON.stringify has no JSON form for a datetime",
+      declaredBy: "serialize in src/functions/json.ts",
+    },
+  ],
+  [
+    "json-form/date",
+    {
+      reference: '"2026-09-19"',
+      ours: "refused: JSON.stringify has no JSON form for a date",
+      declaredBy: "serialize in src/functions/json.ts",
+    },
+  ],
+  [
+    "json-form/duration",
+    {
+      reference:
+        '{"seconds":0,"milliseconds":0,"years":0,"months":0,"weeks":0,"days":2,"hours":0,"minutes":0}',
+      ours: "refused: JSON.stringify has no JSON form for a duration",
+      declaredBy: "serialize in src/functions/json.ts",
+    },
+  ],
+  [
+    "json-form/absence",
+    {
+      reference: '"undefined"',
+      ours: "refused: JSON.stringify has no JSON form for an absence",
+      declaredBy: "serialize in src/functions/json.ts",
+    },
+  ],
+  // A sign before the whole text: the reference reads it as the sign of the
+  // year and this package refuses either sign. Only the plus is a row; what
+  // the reference answers for a minus is outside the wire form a row is read
+  // back through, as the generator's own comment on these cases says.
+  [
+    "leading-sign/date-plus",
+    { reference: new PDate(2026, 9, 19), ours: Undefined, declaredBy: "readDate in src/iso.ts" },
+  ],
+  [
+    "leading-sign/datetime-plus",
+    { reference: utc(10, 30), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  // An integer key against a map holding that key's string spelling. This
+  // package looks the key up under its decimal spelling and finds the
+  // occupant; the reference holds the two spellings as two keys and answers
+  // the absence. The row beside it, a boolean key against the text of a
+  // boolean, agrees on both sides and is not declared here.
+  [
+    "map-key/integer-against-string-spelling",
+    { reference: Undefined, ours: "gold", declaredBy: "bracketAccess in src/evaluator.ts" },
+  ],
+  // An arithmetic result past the safe integer range. The reference's
+  // integers are arbitrary precision and it answers the exact number; this
+  // package refuses. Each row asks for the result as text, so that the row
+  // carries no integer this package cannot hold. The row at the bound agrees
+  // on both sides and is not declared here.
+  [
+    "integer-range/sum-past-safe",
+    {
+      reference: "9007199254740992",
+      ours: "refused: integer_out_of_range",
+      declaredBy: "numericResult in src/evaluator.ts",
+    },
+  ],
+  [
+    "integer-range/product-past-safe",
+    {
+      reference: "18014398509481982",
+      ours: "refused: integer_out_of_range",
+      declaredBy: "numericResult in src/evaluator.ts",
+    },
+  ],
+  // Two reads of the clock inside one evaluation. This package reads the host
+  // clock at most once per evaluation, so both calls answer one instant and
+  // the comparison is true; the reference reads its own on every call, so the
+  // two differ. This is the one row whose reference answer is a property of
+  // the run rather than of the tag, and the generator says so where the case
+  // is authored.
+  [
+    "clock/two-reads-in-one-evaluation",
+    { reference: false, ours: true, declaredBy: "clockFunction in src/functions/date.ts" },
+  ],
 ]);
 
 /** The transcript's rows, decoded with the corpus decoder. */
@@ -231,6 +329,16 @@ describe("the reference transcript", () => {
   // zero in `floatText`; so does admitting a sign in an offset field of
   // `DATETIME_TEXT`, which turns the declared rows red as agreeing, and
   // admitting a lowercase `z` offset, which turns an agreeing row red.
+  //
+  // Sabotage for the declarations added beside the offset rows, each run and
+  // reverted: answering the JSON string `"undefined"` for the absence in
+  // `serialize` turns `json-form/absence` red as agreeing; admitting a leading
+  // plus in `DATE_TEXT` turns `leading-sign/date-plus` red; answering the
+  // absence from `bracketAccess` whatever the key turns
+  // `map-key/integer-against-string-spelling` red; dropping the safe-integer
+  // guard in `numericResult` turns `integer-range/sum-past-safe` red; and
+  // reading the host clock inside the clock builtin rather than the
+  // evaluation's memo turns `clock/two-reads-in-one-evaluation` red.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const expected = row.expectation;
     expect(expected.kind).toBe("result");

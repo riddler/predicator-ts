@@ -570,12 +570,17 @@ describe("locating a fault in a JSON text", () => {
 // string position, and trimming - the reference's side is a transcript rather
 // than a reading: `conformance/transcript/` holds what the reference answered,
 // run at the vendored tag, and `test/reference-transcript.test.ts` diffs both
-// sides row by row. The declarations pinned elsewhere, named below, are not in
-// the transcript.
+// sides row by row.
 //
 // Declarations pinned elsewhere are not repeated here: the memoized clock, the
-// refusal to serialize a value JSON has no form for, and the ones the
-// evaluator makes about which values may key a map.
+// refusal to serialize a value JSON has no form for, the refusal of a leading
+// sign on a date or datetime text, the integer key against a map, and the
+// refusal of an arithmetic result past the safe integer range. Each of those
+// now has its reference half in the transcript too, cited where it is
+// declared; two do not, and say where they are pinned instead: a map with a
+// boolean-keyed hit, which no row can express because a row's keys are
+// strings, and what a write under an integer key leaves behind, which needs
+// the statement entry point a row does not use.
 describe("the declared divergences, on the side that can be executed", () => {
   // The float rendering. The reference chooses between full and exponential
   // notation per value rather than by magnitude, so it has no boundary to

@@ -22,12 +22,25 @@
 # reference's and no vendored case reaches: how a float is written as text,
 # through the string cast and through `JSON.stringify`; the unit a string
 # position is counted in, through the length, index and slice builtins; the
-# set of characters trimming removes; and which spellings of a UTC offset the
-# datetime cast reads. The values are chosen to show the
+# set of characters trimming removes; which spellings of a UTC offset the
+# datetime cast reads; what `JSON.stringify` answers for a value with no JSON
+# form; whether a sign before a whole date or datetime text is read; what an
+# integer key finds against a map; what an arithmetic result past this
+# package's safe integer range answers; and whether two reads of the clock in
+# one evaluation answer one instant. The values are chosen to show the
 # reference's own behaviour rather than to agree with this package's: a
 # rendering is a function of significant digits against decimal exponent
 # there, so neighbouring values that land on opposite sides of it are both
 # here.
+#
+# ONE ROW RECORDS A PROPERTY OF THE RUN RATHER THAN OF THE TAG. The `clock/`
+# row asks the reference whether two reads of its clock inside one expression
+# answer the same instant, and the reference reads its host clock on each
+# call, so it answers that they differ. Every other row is reproducible from
+# the tag alone; that one is reproducible only in the sense that two clock
+# reads separated by an instruction land in different microseconds. A
+# regeneration that answered otherwise is a coincidence to re-run before it is
+# read as a change in the reference.
 #
 # Every example stays inside the two canonical domains: card processing, and a
 # signup wizard.
@@ -164,7 +177,102 @@ offset_cases =
     }
   end
 
-authored = float_cases ++ string_cases ++ offset_cases
+# WHAT `JSON.stringify` ANSWERS FOR A VALUE WITH NO JSON FORM. This package
+# refuses a temporal member and the absence there, and the refusal is a
+# declared divergence, so what the reference answers instead is asked rather
+# than described: a date, an instant, a duration and an unbound name, each
+# handed to the builtin.
+json_form_cases = [
+  %{
+    "id" => "json-form/datetime",
+    "source" => "JSON.stringify(authorized_at::datetime)",
+    "context" => %{"authorized_at" => "2026-09-19T10:30:00Z"}
+  },
+  %{
+    "id" => "json-form/date",
+    "source" => "JSON.stringify(opened_on::date)",
+    "context" => %{"opened_on" => "2026-09-19"}
+  },
+  %{"id" => "json-form/duration", "source" => "JSON.stringify(2d)", "context" => %{}},
+  %{"id" => "json-form/absence", "source" => "JSON.stringify(nickname)", "context" => %{}}
+]
+
+# A SIGN BEFORE THE WHOLE TEXT. The date and datetime casts here refuse a
+# leading sign, and the reference reads it as the sign of the year. The
+# spelling asked of the reference is the plus, which names a year both sides
+# admit without it, put to the date cast and to the datetime cast.
+#
+# NEITHER MINUS SPELLING IS A ROW, and the reason is the wire form a row is
+# read back through rather than a choice about what to ask. That form writes a
+# year as four unsigned digits and, by its own further condition, holds only
+# years from one hundred up. So the two values the reference answers for a
+# minus are both outside it: `-2026-09-19` reads there as a negative year, and
+# `-0000-01-01` as the year zero. A row carrying either stops the whole file
+# from being read rather than declaring one divergence, so the refusal of a
+# minus stays pinned on the side that can be executed and the plus rows carry
+# the reference's half.
+leading_sign_cases =
+  for {label, source, key, text} <- [
+        {"date-plus", "opened_on::date", "opened_on", "+2026-09-19"},
+        {"datetime-plus", "authorized_at::datetime", "authorized_at",
+         "+2026-09-19T10:30:00Z"}
+      ] do
+    %{"id" => "leading-sign/#{label}", "source" => source, "context" => %{key => text}}
+  end
+
+# AN INTEGER KEY AGAINST A MAP. This package looks an integer key up under its
+# decimal spelling, so a map holding only the string-spelled key answers a
+# value here. The reference's maps hold the two spellings as two keys, so what
+# it answers is asked. The boolean row is the control beside it: a map whose
+# key is the text of a boolean, asked for by the boolean, which neither side
+# finds.
+map_key_cases = [
+  %{
+    "id" => "map-key/integer-against-string-spelling",
+    "source" => "tiers[0]",
+    "context" => %{"tiers" => %{"0" => "gold", "name" => "visa"}}
+  },
+  %{
+    "id" => "map-key/boolean-against-string-spelling",
+    "source" => "tiers[true]",
+    "context" => %{"tiers" => %{"true" => "gold", "name" => "visa"}}
+  }
+]
+
+# AN ARITHMETIC RESULT PAST THE SAFE INTEGER RANGE. This package refuses one;
+# the reference's integers are arbitrary precision, so it answers the exact
+# number. The result is asked for as text, because a row whose answer is an
+# integer this package cannot hold is a row this package cannot decode.
+integer_range_cases = [
+  %{
+    "id" => "integer-range/sum-past-safe",
+    "source" => "(balance + 1)::string",
+    "context" => %{"balance" => 9_007_199_254_740_991}
+  },
+  %{
+    "id" => "integer-range/product-past-safe",
+    "source" => "(balance * 2)::string",
+    "context" => %{"balance" => 9_007_199_254_740_991}
+  },
+  %{
+    "id" => "integer-range/sum-at-bound",
+    "source" => "(balance + 0)::string",
+    "context" => %{"balance" => 9_007_199_254_740_991}
+  }
+]
+
+# TWO READS OF THE CLOCK IN ONE EVALUATION. This package reads the host clock
+# at most once per evaluation and both calls answer that instant; the
+# reference reads its own on every call. Nothing pins either answer, so the
+# question asked is the one that has an answer: whether the two reads agree.
+clock_cases = [
+  %{"id" => "clock/two-reads-in-one-evaluation", "source" => "Date.now() == Date.now()", "context" => %{}}
+]
+
+authored =
+  float_cases ++
+    string_cases ++
+    offset_cases ++ json_form_cases ++ leading_sign_cases ++ map_key_cases ++ integer_range_cases ++ clock_cases
 
 completed =
   case Predicator.Conformance.Generator.generate(authored) do

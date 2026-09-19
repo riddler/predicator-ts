@@ -657,6 +657,14 @@ function isFloating(left: Value, right: Value): boolean {
  * paths route through here anyway, because a reader checking a path against
  * the record should not have to redo that argument path by path.
  */
+/**
+ * The reference has no such bound, and that is a run rather than a reading:
+ * the transcript rows `integer-range/sum-past-safe` and
+ * `integer-range/product-past-safe` in `conformance/transcript/` hold the
+ * exact numbers the reference answers where this refuses, taken as text so
+ * that no row carries an integer this package cannot hold. The row
+ * `integer-range/sum-at-bound` beside them agrees on both sides.
+ */
 function numericResult(magnitude: number, floating: boolean): Arithmetic {
   if (floating) {
     if (!Number.isFinite(magnitude)) return { ok: false, refusal: "non_finite_number" };
@@ -1580,6 +1588,12 @@ class Machine {
    * under an integer is read back under the spelling that wrote it. That round
    * trip is what `docs/adr/0002`'s amendment to this rule restores, and the
    * divergences one key leaves against the reference's two are declared there.
+   * The read-side one of them is a run rather than a reading: the transcript
+   * row `map-key/integer-against-string-spelling` in `conformance/transcript/`
+   * asks a map holding only the string-spelled key for the integer key, and
+   * the reference answers the absence where this answers the occupant. The
+   * two that turn on a write are not rows there, because a transcript row runs
+   * an expression and a write needs the statement entry point.
    *
    * A BOOLEAN key against a map still always misses. The amendment assigns a
    * spelling to an integer key and to no other type, so a boolean key has
