@@ -1,9 +1,12 @@
 // Verify-then-add: the only thing that writes the conformance registry.
 //
 //   node scripts/ratchet.mjs [--report <path>] [--claim <surface>:<tier>]
+//                            [--registry <path>]
 //
 // With no --report it reads every report under `reports/`, which is where the
-// runner writes them.
+// runner writes them. With no --registry it reads and writes
+// `conformance/registry.json`; the flag exists so that a test can drive the
+// script against a registry in a temporary directory instead of the real one.
 //
 // NOTHING HAND-EDITS THE REGISTRY. The only input to the writing step is a
 // runner report: there is no command that adds a case by id. That is the
@@ -37,13 +40,13 @@
 // the same module and compares bytes.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadCases, loadManifest, runnableCases, surfaceCaseSet } from "./lib/corpus.mjs";
 import { encodeRegistry } from "./lib/registry-encoding.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const registryPath = join(repoRoot, "conformance", "registry.json");
+const defaultRegistryPath = join(repoRoot, "conformance", "registry.json");
 const reportsRoot = join(repoRoot, "reports");
 const SURFACES = ["compiler", "evaluator"];
 
@@ -56,12 +59,19 @@ function die(message, detail = []) {
 function parseArguments(argv) {
   const reports = [];
   const claims = [];
+  let registry = defaultRegistryPath;
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if (flag === "--report") {
       if (value === undefined) die("--report needs a path");
       reports.push(value);
+      index += 1;
+      continue;
+    }
+    if (flag === "--registry") {
+      if (value === undefined) die("--registry needs a path");
+      registry = value;
       index += 1;
       continue;
     }
@@ -75,7 +85,7 @@ function parseArguments(argv) {
     }
     die(`unknown argument ${flag}`);
   }
-  return { reports, claims };
+  return { reports, claims, registry };
 }
 
 function readJson(path, what) {
@@ -107,7 +117,11 @@ function reportPaths(requested) {
   return found.map((entry) => join(reportsRoot, entry));
 }
 
-const { reports: requestedReports, claims: assertedClaims } = parseArguments(process.argv.slice(2));
+const {
+  reports: requestedReports,
+  claims: assertedClaims,
+  registry: registryPath,
+} = parseArguments(process.argv.slice(2));
 
 const manifest = loadManifest();
 const registry = readJson(registryPath, "the registry");
@@ -225,5 +239,5 @@ writeFileSync(registryPath, written, "utf8");
 
 const added = entries.length - registry.entries.length;
 console.log(
-  `ratchet: conformance/registry.json holds ${entries.length} entries (${added} new) and ${claims.size} claims, pinned to ${manifest.corpus_hash}`,
+  `ratchet: ${relative(repoRoot, registryPath)} holds ${entries.length} entries (${added} new) and ${claims.size} claims, pinned to ${manifest.corpus_hash}`,
 );
