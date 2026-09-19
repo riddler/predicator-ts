@@ -15,12 +15,20 @@
 // the report file's own bytes, so a stamp belongs to one report and cannot be
 // carried over to another.
 //
-// WHAT IT DOES NOT RECORD. The runner itself, `test/conformance/runner.ts`,
-// and the shared corpus rules in `scripts/lib/corpus.mjs` are not in the
-// digest: a change to how a case is judged does not invalidate a report. An
-// entry such a report adds is re-run by the registry check's currency part in
-// the next gate, with the runner as it is then, and fails the gate if that run
-// does not pass it.
+// WHAT IT DOES NOT RECORD. Everything else in the repository. Only the roots
+// named above are digested, so a change anywhere outside them - to the runner
+// and the shared corpus rules, for instance, or to anything else that is not
+// under one of those roots - leaves an already written stamp matching. For how
+// a case is judged that is deliberate: an entry such a report adds is re-run
+// by the registry check's currency part in the next gate, with the runner as
+// it is then, and fails the gate if that run does not pass it.
+//
+// `test/conformance/build-stamp.test.ts` holds the `build` digest to the
+// roots named above: it fails if the digest stops reading any one of them,
+// at the top level or nested, and it fails if the digest starts reading the
+// runner, the shared corpus rules, the registry or the lockfile. Those four
+// are the whole of what it holds out, and it does not exercise the `report`
+// digest at all.
 //
 // The digest is taken over each file's path relative to the repository root,
 // its length, and its bytes, in ascending path order, so a file renamed, moved
