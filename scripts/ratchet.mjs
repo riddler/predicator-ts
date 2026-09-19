@@ -38,10 +38,11 @@
 // A REPORT IS READ ONLY WHEN ITS STAMP TIES IT TO WHAT IS ON DISK. Reports
 // live under an ignored directory, so the one there is whatever was last
 // written, by whatever build was checked out or mutated at the time. The
-// runner writes a stamp beside each report, and this script refuses a report
-// with no stamp, a stamp written for other bytes, or a stamp whose digest of
-// the package source and the vendored corpus is not the digest of those files
-// now. What the stamp covers is `scripts/lib/build-stamp.mjs`'s to say.
+// runner writes a stamp beside each report, and this script refuses every
+// report whose stamp does not tie it to what is on disk now, whatever the
+// reason. Which reasons there are, and what the stamp covers, are
+// `scripts/lib/build-stamp.mjs`'s to say: this script asks it and prints the
+// answer it gives back, so a reason added there needs no change here.
 //
 // The encoding is not decided here either: `scripts/lib/registry-encoding.mjs`
 // is the one implementation of it, and the registry check re-encodes through
