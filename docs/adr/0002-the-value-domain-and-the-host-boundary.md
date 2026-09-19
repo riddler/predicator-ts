@@ -2405,3 +2405,82 @@ It amends no rule, adds no obligation, and changes no reason token. It does not
 decide whether the passages it leaves resting on a run against a checkout past
 the tag should be converted; that needs an apparatus this record does not
 describe.
+
+## Amendment: a sign inside an offset field stays refused (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+Recorded for `pts-uenf`. This amendment is appended and removes no line above.
+The datetime cast declares a divergence over offsets whose hour or minute
+field holds a sign, and until now the declaration said only that the
+difference exists. This decides that it is kept rather than closed, and says
+why, so that a reader who finds the declaration does not read it as an
+oversight.
+
+**What the reference does.** Its parser reads each two-character hour and
+minute field of a UTC offset as an integer that may carry its own sign, so an
+offset whose field holds a sign where the field's first digit belongs parses
+and is applied. Asked at the tag the vendored corpus records, with the local
+time `2026-09-19T10:30:00` on every row, it answered an instant for each of
+the seven spellings the transcript now carries:
+
+| Offset | The reference's answer |
+|---|---|
+| `+-5:30` | `2026-09-19T15:00:00Z` |
+| `++5:30` | `2026-09-19T05:00:00Z` |
+| `+05:+3` | `2026-09-19T05:27:00Z` |
+| `+05:-3` | `2026-09-19T05:33:00Z` |
+| `+-530` | `2026-09-19T15:00:00Z` |
+| `+-5` | `2026-09-19T15:30:00Z` |
+| `-+5:30` | `2026-09-19T16:00:00Z` |
+
+Those are the seven enumerated there, and they are the rows of
+`conformance/transcript/transcript.json` whose ids are
+`datetime-offset/minus-in-hour-field`, `datetime-offset/plus-in-hour-field`,
+`datetime-offset/plus-in-minute-field`, `datetime-offset/minus-in-minute-field`,
+`datetime-offset/minus-in-hour-field-colonless`,
+`datetime-offset/minus-in-hour-field-hour-only` and
+`datetime-offset/plus-in-hour-field-under-minus`. Each is declared in
+`test/reference-transcript.test.ts` with both answers, so it fails if either
+side moves or if the two come to agree.
+
+**The decision.** This package requires two digits in each field and answers
+the absence for all seven, and that is kept rather than closed. The shape that
+requires them is `DATETIME_TEXT` in `src/iso.ts`, read at `27088ea`.
+
+**The reasons.**
+
+The first is that the behaviour is a property of how the reference reads a
+field rather than a spelling it set out to admit. A signed read of a
+two-character field is what makes `+-5:30` four and a half hours west of UTC,
+which is not a shift anyone writing that text would mean. No clause of ISO
+8601 puts a sign inside an hour or a minute field.
+
+The second is that reproducing it would make this package's own refusals
+inconsistent. The hour-only spelling `+-5` names an offset of minus five
+hours, and the colonless `+-530` an offset of minus five hours and thirty
+minutes, by the same field read that makes the colon spelling mean something
+else; a package that admitted all three would owe a rule for why two of them
+mean what their digits say and the third does not.
+
+The third is that nothing measured depends on it. The conformance claim is
+measured by the vendored corpus, no corpus case reaches an offset field
+carrying a sign, and the seven rows above exist only because the transcript
+authors them. Keeping the divergence costs no case.
+
+The fourth is that the code already behaves this way, and the change here is
+to the declarations rather than to the parse: three of the seven rows existed
+and four are added, the comment at `DATETIME_TEXT` is brought into line with
+what the rows now cover, and no text this package accepted before is refused
+now, nor the other way.
+
+**What this spends, stated rather than left for a reader to find.** A declared
+divergence on a reachable input class is a real gap: a consumer handed offsets
+written by the reference gets the absence here where the reference got an
+instant, and it gets it silently, because the absence is how this package says
+a text is not a datetime. Closing the gap would also be cheap - reading each
+field as a signed number is a small change to one shape - so cost is not the
+argument. The argument is only that the behaviour is wrong to reproduce, and
+that argument is weaker than a measurement would be. A later reading may
+overturn this and close the divergence; what this amendment fixes is that
+doing so is a decision and not a repair.

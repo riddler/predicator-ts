@@ -76,8 +76,13 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
  * each two-character field as an integer that may carry its own sign, so it
  * reads `+-5:30` as four and a half hours west of UTC. This shape requires
  * two digits in each field, and the parse answers nothing. The transcript's
- * `datetime-offset/` rows named for a sign in a field hold both answers. That
- * divergence is declared rather than closed too.
+ * `datetime-offset/` rows named for a sign in a field hold both answers,
+ * and they put such a field to each offset clause that has one: to the
+ * hour and to the minute of the colon spelling, to the hour of the
+ * colonless spelling and to the hour of the hour-only spelling, all under
+ * a leading plus, and to the hour of the colon spelling under a leading
+ * minus. That divergence is declared rather than closed too, and the
+ * record of the value domain holds the reason it is not closed.
  */
 const DATETIME_TEXT =
   /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:[.,](\d+))?(Z|[+-]\d{2}(?::?\d{2})?)$/;
