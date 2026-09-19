@@ -2,10 +2,12 @@
 //
 // The ratchet is the only writer of the conformance registry, and most of
 // what makes that registry trustworthy is what the script refuses to write.
-// Three of those refusals are checked here: a report that records no integer
-// instruction-set version, reports that disagree about that version, and a
-// claim that is not complete - scoped by the version the reports record, which
-// is the package's, never the vendored corpus's.
+// The refusals checked here: a report nothing ties to the build and corpus on
+// disk (no stamp, a stamp written for other bytes, or a stamp from another
+// build), a report that records no integer instruction-set version, reports
+// that disagree about that version, and a claim that is not complete - scoped
+// by the version the reports record, which is the package's, never the
+// vendored corpus's.
 //
 // Every run below is a real `node scripts/ratchet.mjs` process. Its reports
 // and its registry are fixtures written to a temporary directory and passed by
@@ -16,12 +18,14 @@
 // and writes.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execPath } from "node:process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildHash, stampPath, writeStamp } from "../../scripts/lib/build-stamp.mjs";
 import { loadCases, loadManifest, runsAtVersion } from "../../scripts/lib/corpus.mjs";
 import { encodeRegistry } from "../../scripts/lib/registry-encoding.mjs";
 
@@ -52,7 +56,13 @@ let dir: string;
 let registryPath: string;
 let emptyRegistry: string;
 
-function writeReport(name: string, fields: Record<string, unknown>): string {
+// A fixture report is stamped the way the runner stamps one, against the
+// build and corpus on disk, unless a case asks for it not to be.
+function writeReport(
+  name: string,
+  fields: Record<string, unknown>,
+  options: { readonly stamp: boolean } = { stamp: true },
+): string {
   const path = join(dir, name);
   writeFileSync(
     path,
@@ -64,7 +74,12 @@ function writeReport(name: string, fields: Record<string, unknown>): string {
       ...fields,
     }),
   );
+  if (options.stamp) writeStamp(path);
   return path;
+}
+
+function sha256(bytes: Uint8Array | string): string {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
 function passes(items: readonly { id: string }[]): { id: string; result: string }[] {
@@ -122,6 +137,76 @@ describe("the fixtures", () => {
     const written = JSON.parse(registryText());
     expect(written.claims).toEqual([{ surface: "evaluator", tier: 1 }]);
     expect(written.entries.length).toBe(runsAtCorpusVersion.length);
+  });
+});
+
+describe("the ratchet refuses a report nothing ties to the build and corpus on disk", () => {
+  // Sabotage: replacing the stamp check's null test in scripts/ratchet.mjs
+  // with a constant null turns this red - the unstamped report is read and
+  // the fixture registry is rewritten with exit status 0.
+  it("a report with no stamp beside it", () => {
+    const report = writeReport(
+      "evaluator.json",
+      { isa_version: manifest.isa_version },
+      { stamp: false },
+    );
+    const run = ratchet("--report", report);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(
+      `ratchet: ${report} has no stamp at ${stampPath(report)}, so nothing ties it to a build`,
+    );
+    expect(registryText()).toBe(emptyRegistry);
+  });
+
+  // A stamp names the report bytes it was written for, so a report rewritten
+  // after its stamp - or a stamp copied beside another report - is refused.
+  //
+  // Sabotage: replacing the report-digest comparison in
+  // scripts/lib/build-stamp.mjs with `false` turns this red - the stamp is
+  // accepted for bytes it does not describe and the registry is rewritten.
+  it("a report whose stamp was written for other bytes", () => {
+    const report = writeReport("evaluator.json", { isa_version: manifest.isa_version });
+    const stamped = readFileSync(report, "utf8");
+    writeFileSync(
+      report,
+      JSON.stringify({
+        corpus_hash: manifest.corpus_hash,
+        tier: 1,
+        surface: "evaluator",
+        results: passes(runsAtCorpusVersion),
+        isa_version: manifest.isa_version,
+      }),
+    );
+    expect(readFileSync(report, "utf8")).not.toBe(stamped);
+    const run = ratchet("--report", report);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(
+      `ratchet: ${stampPath(report)} was written for other bytes than ${report} holds`,
+    );
+    expect(registryText()).toBe(emptyRegistry);
+  });
+
+  // The case the stamp exists for: a report left on disk by a run of some
+  // other build - an earlier commit, a sabotage mutation since reverted, a
+  // corpus since refreshed - whose own fields are all still valid.
+  //
+  // Sabotage: replacing the build-digest comparison in
+  // scripts/lib/build-stamp.mjs with `false` turns this red - the report
+  // from the other build is read and the registry is rewritten.
+  it("a report run against another build or corpus", () => {
+    const report = writeReport("evaluator.json", { isa_version: manifest.isa_version });
+    const other = `sha256:${"0".repeat(64)}`;
+    expect(buildHash()).not.toBe(other);
+    writeFileSync(
+      stampPath(report),
+      `${JSON.stringify({ build: other, report: sha256(readFileSync(report)) })}\n`,
+    );
+    const run = ratchet("--report", report);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(
+      `ratchet: ${report} was run against ${other}, and the build and corpus on disk hash to ${buildHash()}`,
+    );
+    expect(registryText()).toBe(emptyRegistry);
   });
 });
 

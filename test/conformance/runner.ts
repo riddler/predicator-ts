@@ -32,6 +32,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeStamp } from "../../scripts/lib/build-stamp.mjs";
 import type { CaseMetadata, Surface } from "../../scripts/lib/corpus.mjs";
 import { loadCases, loadManifest, runnableCases } from "../../scripts/lib/corpus.mjs";
 import type { PredicatorError } from "../../src/errors.js";
@@ -289,15 +290,19 @@ export function runEvaluator(tier: number): Report {
 }
 
 /**
- * Writes a report under the ignored reports directory.
+ * Writes a report under the ignored reports directory, and the stamp beside
+ * it that ties it to the build and corpus on disk.
  *
  * A report is a build artifact and is never committed: nothing reads one out
- * of the repository, and no check trusts one it did not just produce.
+ * of the repository, and no check trusts one it did not just produce. The
+ * stamp is what lets the ratchet, which reads a report written earlier,
+ * refuse one produced by any other build.
  */
 export function writeReport(report: Report): string {
   const target = join(repoRoot, "reports", `${report.surface}.json`);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  writeStamp(target);
   return target;
 }
 
