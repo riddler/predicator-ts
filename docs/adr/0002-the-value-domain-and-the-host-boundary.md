@@ -1540,7 +1540,7 @@ join the refusal reasons of the value boundary and of the codec's encode
 direction; the decode direction gains only `"depth_limit_exceeded"`, since a
 text cannot contain itself.
 
-### A throwing getter, proxy trap or `now` option is outside the promise
+### A throwing getter or proxy trap, or the `now` option read for a relative date, is outside the promise
 
 **A getter or a proxy trap on a value this package walks, and the `now`
 option when a relative date reads the clock, are host code this package runs
@@ -1562,10 +1562,10 @@ evaluation and codec sections, in the Conventions of `CLAUDE.md`, and here.
 
 **ADR-0001 is not edited, and this exception scopes its rule.** ADR-0001 says
 errors are values and that throwing is reserved for a violated internal
-invariant. A getter, a proxy trap or a `now` option throwing is none of this
-package's own throwing: this package lets the host's error through, so that
-rule does not reach it, and ADR-0001's sentences are read as scoped by this
-section rather than contradicted by it.
+invariant. A getter, a proxy trap or the `now` option read for a relative
+date throwing is none of this package's own throwing: this package lets the
+host's error through, so that rule does not reach it, and ADR-0001's
+sentences are read as scoped by this section rather than contradicted by it.
 
 ### What this does not decide
 
