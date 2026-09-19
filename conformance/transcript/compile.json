@@ -1,0 +1,132 @@
+{"id":"compile/string/single-quoted","instructions":[["lit","visa"]],"kind":"compile","source":"'visa'"}
+{"id":"compile/escape/double-quote","instructions":[["lit","visa \"gold\""]],"kind":"compile","source":"\"visa \\\"gold\\\"\""}
+{"id":"compile/escape/single-quote","instructions":[["lit","visa 'gold'"]],"kind":"compile","source":"'visa \\'gold\\''"}
+{"id":"compile/escape/backslash","instructions":[["lit","visa\\gold"]],"kind":"compile","source":"\"visa\\\\gold\""}
+{"id":"compile/escape/newline","instructions":[["lit","visa\ngold"]],"kind":"compile","source":"\"visa\\ngold\""}
+{"id":"compile/escape/tab","instructions":[["lit","visa\tgold"]],"kind":"compile","source":"\"visa\\tgold\""}
+{"id":"compile/escape/carriage-return","instructions":[["lit","visa\rgold"]],"kind":"compile","source":"\"visa\\rgold\""}
+{"id":"compile/escape/unknown-stands-for-its-character","instructions":[["lit","visaqgold"]],"kind":"compile","source":"\"visa\\qgold\""}
+{"id":"compile/escape/uppercase-u-passes-through","instructions":[["lit","cafU00e9"]],"kind":"compile","source":"\"caf\\U00e9\""}
+{"id":"compile/operator/uppercase-and","instructions":[["load","score"],["lit",85],["compare","GT"],["jump_if_falsy_or_pop",4],["load","tier"],["lit","gold"],["compare","EQ"]],"kind":"compile","source":"score > 85 AND tier == 'gold'"}
+{"id":"compile/operator/uppercase-or","instructions":[["load","score"],["lit",85],["compare","GT"],["jump_if_true_or_pop",4],["load","tier"],["lit","gold"],["compare","EQ"]],"kind":"compile","source":"score > 85 OR tier == 'gold'"}
+{"id":"compile/operator/uppercase-not","instructions":[["load","flagged"],["not"]],"kind":"compile","source":"NOT flagged"}
+{"id":"compile/operator/uppercase-in","instructions":[["load","tier"],["lit",["gold","platinum"]],["in"]],"kind":"compile","source":"tier IN ['gold', 'platinum']"}
+{"id":"compile/operator/uppercase-contains","instructions":[["load","issuer"],["lit","visa"],["contains"]],"kind":"compile","source":"issuer CONTAINS 'visa'"}
+{"id":"compile/operator/ampersand-ampersand","instructions":[["load","flagged"],["jump_if_falsy_or_pop",2],["load","verified"]],"kind":"compile","source":"flagged && verified"}
+{"id":"compile/operator/pipe-pipe","instructions":[["load","flagged"],["jump_if_true_or_pop",2],["load","verified"]],"kind":"compile","source":"flagged || verified"}
+{"id":"compile/operator/bang-at-not-level","instructions":[["load","flagged"],["not"]],"kind":"compile","source":"!flagged"}
+{"id":"compile/operator/bang-below-comparison","instructions":[["load","score"],["lit",85],["compare","GT"],["not"]],"kind":"compile","source":"!score > 85"}
+{"id":"compile/grouping/parentheses","instructions":[["load","score"],["lit",85],["compare","GT"],["jump_if_true_or_pop",2],["load","verified"],["jump_if_falsy_or_pop",4],["load","tier"],["lit","gold"],["compare","EQ"]],"kind":"compile","source":"(score > 85 OR verified) AND tier == 'gold'"}
+{"id":"compile/grouping/redundant","instructions":[["load","score"],["lit",85],["compare","GT"]],"kind":"compile","source":"((score > 85))"}
+{"id":"compile/list/nested","instructions":[["lit",1],["lit",2],["lit",[]],["make_list",2],["make_list",2]],"kind":"compile","source":"[1, [2, []]]"}
+{"id":"compile/list/empty","instructions":[["lit",[]]],"kind":"compile","source":"[]"}
+{"id":"compile/object/empty","instructions":[["object_new"]],"kind":"compile","source":"{}"}
+{"id":"compile/object/quoted-key","instructions":[["object_new"],["lit","gold"],["object_set","tier"]],"kind":"compile","source":"{\"tier\": 'gold'}"}
+{"id":"compile/object/bare-key","instructions":[["object_new"],["lit","gold"],["object_set","tier"]],"kind":"compile","source":"{tier: 'gold'}"}
+{"id":"compile/access/dot-depth-two","instructions":[["load","user"],["access","profile"],["access","tier"]],"kind":"compile","source":"user.profile.tier"}
+{"id":"compile/access/dot-depth-three","instructions":[["load","user"],["access","profile"],["access","card"],["access","tier"]],"kind":"compile","source":"user.profile.card.tier"}
+{"id":"compile/access/bracket-depth-two","instructions":[["load","user"],["lit","profile"],["bracket_access"],["lit","tier"],["bracket_access"]],"kind":"compile","source":"user['profile']['tier']"}
+{"id":"compile/call/zero-arg","instructions":[["call","Date.now",0]],"kind":"compile","source":"Date.now()"}
+{"id":"compile/call/nested","instructions":[["load","tier"],["call","upper",1],["call","len",1]],"kind":"compile","source":"len(upper(tier))"}
+{"id":"compile/call/qualified","instructions":[["load","score"],["lit",85],["call","Math.max",2]],"kind":"compile","source":"Math.max(score, 85)"}
+{"id":"compile/relative-date/ago","instructions":[["duration",[[3,"d"]]],["relative_date","ago"]],"kind":"compile","source":"3d ago"}
+{"id":"compile/relative-date/next","instructions":[["duration",[[1,"w"]]],["relative_date","next"]],"kind":"compile","source":"next 1w"}
+{"id":"compile/relative-date/last","instructions":[["duration",[[1,"w"]]],["relative_date","last"]],"kind":"compile","source":"last 1w"}
+{"id":"compile/relative-date/from-now","instructions":[["duration",[[1,"d"]]],["relative_date","future"]],"kind":"compile","source":"1d from now"}
+{"id":"compile/logical/and-right-operand-two-instructions","instructions":[["load","verified"],["jump_if_falsy_or_pop",4],["load","score"],["lit",85],["compare","GT"]],"kind":"compile","source":"verified AND score > 85"}
+{"id":"compile/logical/or-right-operand-two-instructions","instructions":[["load","verified"],["jump_if_true_or_pop",4],["load","score"],["lit",85],["compare","GT"]],"kind":"compile","source":"verified OR score > 85"}
+{"id":"compile/logical/mixed-precedence","instructions":[["load","verified"],["jump_if_true_or_pop",8],["load","score"],["lit",85],["compare","GT"],["jump_if_falsy_or_pop",4],["load","tier"],["lit","gold"],["compare","EQ"]],"kind":"compile","source":"verified OR score > 85 AND tier == 'gold'"}
+{"id":"compile/logical/not-over-comparison","instructions":[["load","score"],["lit",85],["compare","GT"],["not"]],"kind":"compile","source":"NOT score > 85"}
+{"id":"compile/cast/chained","instructions":[["load","score"],["cast","integer"],["cast","string"]],"kind":"compile","source":"score::integer::string"}
+{"id":"compile/duration/years","instructions":[["duration",[[1,"y"]]]],"kind":"compile","source":"1y"}
+{"id":"compile/duration/months","instructions":[["duration",[[2,"mo"]]]],"kind":"compile","source":"2mo"}
+{"id":"compile/duration/weeks","instructions":[["duration",[[3,"w"]]]],"kind":"compile","source":"3w"}
+{"id":"compile/duration/days","instructions":[["duration",[[4,"d"]]]],"kind":"compile","source":"4d"}
+{"id":"compile/duration/hours","instructions":[["duration",[[5,"h"]]]],"kind":"compile","source":"5h"}
+{"id":"compile/duration/minutes","instructions":[["duration",[[6,"m"]]]],"kind":"compile","source":"6m"}
+{"id":"compile/duration/seconds","instructions":[["duration",[[7,"s"]]]],"kind":"compile","source":"7s"}
+{"id":"compile/duration/milliseconds","instructions":[["duration",[[8,"ms"]]]],"kind":"compile","source":"8ms"}
+{"id":"compile/duration/multi-unit","instructions":[["duration",[[1,"y"],[2,"mo"],[3,"w"],[4,"d"],[5,"h"],[6,"m"],[7,"s"]]]],"kind":"compile","source":"1y2mo3w4d5h6m7s"}
+{"id":"compile/duration/fraction-expands","instructions":[["duration",[[1,"h"],[30,"m"]]]],"kind":"compile","source":"1.5h"}
+{"id":"compile/duration/integer-duplicate","instructions":[["duration",[[1,"h"],[2,"h"]]]],"kind":"compile","source":"1h2h"}
+{"id":"compile/cast-name-as-identifier/integer","instructions":[["load","integer"]],"kind":"compile","source":"integer"}
+{"id":"compile/cast-name-as-identifier/float","instructions":[["load","float"]],"kind":"compile","source":"float"}
+{"id":"compile/cast-name-as-identifier/string","instructions":[["load","string"]],"kind":"compile","source":"string"}
+{"id":"compile/cast-name-as-identifier/boolean","instructions":[["load","boolean"]],"kind":"compile","source":"boolean"}
+{"id":"compile/cast-name-as-identifier/date","instructions":[["load","date"]],"kind":"compile","source":"date"}
+{"id":"compile/cast-name-as-identifier/datetime","instructions":[["load","datetime"]],"kind":"compile","source":"datetime"}
+{"id":"compile/cast-name-as-identifier/duration","instructions":[["load","duration"]],"kind":"compile","source":"duration"}
+{"id":"compile/tagged-operand/date","instructions":[["lit",{"$type":"date","value":"2026-09-19"}]],"kind":"compile","source":"#2026-09-19#"}
+{"id":"compile/tagged-operand/datetime","instructions":[["lit",{"$type":"datetime","value":"2026-09-19T10:30:00Z"}]],"kind":"compile","source":"#2026-09-19T10:30:00Z#"}
+{"id":"compile/tagged-operand/absence","instructions":[["lit",{"$type":"undefined"}]],"kind":"compile","source":"undefined"}
+{"id":"refusal/unexpected_character","kind":"refusal","message":"Unexpected character '&'","position":{"column":7,"line":1},"reason":"unexpected_character","source":"score & 85","span":{"end":{"column":8,"line":1},"start":{"column":7,"line":1}}}
+{"id":"refusal/unterminated_string","kind":"refusal","message":"Unterminated double-quoted string literal","position":{"column":1,"line":1},"reason":"unterminated_string","source":"\"visa","span":{"end":{"column":2,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/unsupported_escape","kind":"refusal","message":"Unsupported escape sequence \\u in string literal: predicator has no numeric escape; write the character itself (string literals are UTF-8)","position":{"column":1,"line":1},"reason":"unsupported_escape","source":"\"caf\\u00e9\"","span":{"end":{"column":2,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/unterminated_date","kind":"refusal","message":"Unterminated date literal","position":{"column":1,"line":1},"reason":"unterminated_date","source":"#2026-09-19","span":{"end":{"column":12,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/invalid_date","kind":"refusal","message":"Invalid date format: 2024-13-45","position":{"column":1,"line":1},"reason":"invalid_date","source":"#2024-13-45#","span":{"end":{"column":13,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/invalid_datetime","kind":"refusal","message":"Invalid datetime format: 2024-13-45T10:00:00Z","position":{"column":1,"line":1},"reason":"invalid_datetime","source":"#2024-13-45T10:00:00Z#","span":{"end":{"column":23,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/expected_primary","kind":"refusal","message":"Expected number, string, boolean, date, datetime, identifier, function call, list, object, or '(' but found ')'","position":{"column":2,"line":1},"reason":"expected_primary","source":"()","span":{"end":{"column":3,"line":1},"start":{"column":2,"line":1}}}
+{"id":"refusal/trailing_token","kind":"refusal","message":"Unexpected token number '3' after expression","position":{"column":7,"line":1},"reason":"trailing_token","source":"score 3","span":{"end":{"column":8,"line":1},"start":{"column":7,"line":1}}}
+{"id":"refusal/statement_keyword","kind":"refusal","message":"'if' is a statement keyword, not an expression - control flow is only valid in a program (Predicator.parse_program/2).","position":{"column":1,"line":1},"reason":"statement_keyword","source":"if","span":{"end":{"column":3,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/assignment_in_expression","kind":"refusal","message":"'=' is not an equality operator - use '==' for equality. Assignment is only valid at the start of a statement.","position":{"column":7,"line":1},"reason":"assignment_in_expression","source":"score = 3","span":{"end":{"column":8,"line":1},"start":{"column":7,"line":1}}}
+{"id":"refusal/expected_close_paren","kind":"refusal","message":"Expected ')' but found ']'","position":{"column":3,"line":1},"reason":"expected_close_paren","source":"(1]","span":{"end":{"column":4,"line":1},"start":{"column":3,"line":1}}}
+{"id":"refusal/expected_close_bracket","kind":"refusal","message":"Expected ']' but found ')'","position":{"column":3,"line":1},"reason":"expected_close_bracket","source":"[1)","span":{"end":{"column":4,"line":1},"start":{"column":3,"line":1}}}
+{"id":"refusal/expected_close_brace","kind":"refusal","message":"Expected '}' but found end of input","position":{"column":14,"line":1},"reason":"expected_close_brace","source":"{tier: 'gold'","span":{"end":{"column":14,"line":1},"start":{"column":14,"line":1}}}
+{"id":"refusal/expected_object_key","kind":"refusal","message":"Expected identifier or string for object key but found number '1'","position":{"column":2,"line":1},"reason":"expected_object_key","source":"{1: 2}","span":{"end":{"column":3,"line":1},"start":{"column":2,"line":1}}}
+{"id":"refusal/expected_object_colon","kind":"refusal","message":"Expected ':' after object key but found number '1'","position":{"column":7,"line":1},"reason":"expected_object_colon","source":"{tier 1}","span":{"end":{"column":8,"line":1},"start":{"column":7,"line":1}}}
+{"id":"refusal/expected_property_name","kind":"refusal","message":"Expected property name after '.' but found end of input","position":{"column":6,"line":1},"reason":"expected_property_name","source":"user.","span":{"end":{"column":6,"line":1},"start":{"column":6,"line":1}}}
+{"id":"refusal/expected_type_name","kind":"refusal","message":"Expected a type name after '::' but found end of input","position":{"column":8,"line":1},"reason":"expected_type_name","source":"score::","span":{"end":{"column":8,"line":1},"start":{"column":8,"line":1}}}
+{"id":"refusal/unknown_cast_type","kind":"refusal","message":"Unknown cast type 'foo' - expected one of: integer, float, string, boolean, date, datetime, duration","position":{"column":8,"line":1},"reason":"unknown_cast_type","source":"score::foo","span":{"end":{"column":11,"line":1},"start":{"column":8,"line":1}}}
+{"id":"refusal/expected_now","kind":"refusal","message":"Expected 'now' after 'from' but found identifier 'yesterday'","position":{"column":9,"line":1},"reason":"expected_now","source":"1d from yesterday","span":{"end":{"column":18,"line":1},"start":{"column":9,"line":1}}}
+{"id":"refusal/expected_duration","kind":"refusal","message":"Expected duration after 'next' but found number '5'","position":{"column":6,"line":1},"reason":"expected_duration","source":"next 5","span":{"end":{"column":7,"line":1},"start":{"column":6,"line":1}}}
+{"id":"refusal/duration_fraction","kind":"refusal","message":"Duration fraction is not a whole number of milliseconds: 0.5ms","position":{"column":1,"line":1},"reason":"duration_fraction","source":"0.5ms","span":{"end":{"column":6,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/duration_unit_twice","kind":"refusal","message":"Duration literal names the 'h' unit twice after expanding a fraction","position":{"column":1,"line":1},"reason":"duration_unit_twice","source":"1.5d2h","span":{"end":{"column":7,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/unterminated_string/single-quoted","kind":"refusal","message":"Unterminated single-quoted string literal","position":{"column":1,"line":1},"reason":"unterminated_string","source":"'visa","span":{"end":{"column":2,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/unterminated_date/datetime","kind":"refusal","message":"Unterminated date literal","position":{"column":1,"line":1},"reason":"unterminated_date","source":"#2026-09-19T10:30:00Z","span":{"end":{"column":22,"line":1},"start":{"column":1,"line":1}}}
+{"id":"refusal/assignment_in_expression/access-chain","kind":"refusal","message":"'=' is not an equality operator - use '==' for equality. Assignment is only valid at the start of a statement.","position":{"column":10,"line":1},"reason":"assignment_in_expression","source":"user.age = 30","span":{"end":{"column":11,"line":1},"start":{"column":10,"line":1}}}
+{"id":"refusal/trailing_token/comparison-chain","kind":"refusal","message":"Unexpected token '<' after expression","position":{"column":12,"line":1},"reason":"trailing_token","source":"score < 85 < 90","span":{"end":{"column":13,"line":1},"start":{"column":12,"line":1}}}
+{"id":"decompile/nested/minimal/normal","kind":"decompile","options":{"parentheses":"minimal","spacing":"normal"},"rendered":"score > 85 AND (tier == 'gold' OR NOT flagged)","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/minimal/compact","kind":"decompile","options":{"parentheses":"minimal","spacing":"compact"},"rendered":"score>85AND(tier=='gold'ORNOTflagged)","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/minimal/verbose","kind":"decompile","options":{"parentheses":"minimal","spacing":"verbose"},"rendered":"score  >  85  AND  (tier  ==  'gold'  OR  NOT  flagged)","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/explicit/normal","kind":"decompile","options":{"parentheses":"explicit","spacing":"normal"},"rendered":"((score > 85) AND ((tier == 'gold') OR (NOT flagged)))","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/explicit/compact","kind":"decompile","options":{"parentheses":"explicit","spacing":"compact"},"rendered":"((score>85)AND((tier=='gold')OR(NOTflagged)))","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/explicit/verbose","kind":"decompile","options":{"parentheses":"explicit","spacing":"verbose"},"rendered":"((score  >  85)  AND  ((tier  ==  'gold')  OR  (NOT  flagged)))","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/none/normal","kind":"decompile","options":{"parentheses":"none","spacing":"normal"},"rendered":"score > 85 AND tier == 'gold' OR NOT flagged","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/none/compact","kind":"decompile","options":{"parentheses":"none","spacing":"compact"},"rendered":"score>85ANDtier=='gold'ORNOTflagged","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/nested/none/verbose","kind":"decompile","options":{"parentheses":"none","spacing":"verbose"},"rendered":"score  >  85  AND  tier  ==  'gold'  OR  NOT  flagged","source":"score > 85 AND (tier == 'gold' OR NOT flagged)"}
+{"id":"decompile/lowercase-operators/minimal/normal","kind":"decompile","options":{"parentheses":"minimal","spacing":"normal"},"rendered":"score > 85 AND tier == 'gold'","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/minimal/compact","kind":"decompile","options":{"parentheses":"minimal","spacing":"compact"},"rendered":"score>85ANDtier=='gold'","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/minimal/verbose","kind":"decompile","options":{"parentheses":"minimal","spacing":"verbose"},"rendered":"score  >  85  AND  tier  ==  'gold'","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/explicit/normal","kind":"decompile","options":{"parentheses":"explicit","spacing":"normal"},"rendered":"((score > 85) AND (tier == 'gold'))","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/explicit/compact","kind":"decompile","options":{"parentheses":"explicit","spacing":"compact"},"rendered":"((score>85)AND(tier=='gold'))","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/explicit/verbose","kind":"decompile","options":{"parentheses":"explicit","spacing":"verbose"},"rendered":"((score  >  85)  AND  (tier  ==  'gold'))","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/none/normal","kind":"decompile","options":{"parentheses":"none","spacing":"normal"},"rendered":"score > 85 AND tier == 'gold'","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/none/compact","kind":"decompile","options":{"parentheses":"none","spacing":"compact"},"rendered":"score>85ANDtier=='gold'","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/lowercase-operators/none/verbose","kind":"decompile","options":{"parentheses":"none","spacing":"verbose"},"rendered":"score  >  85  AND  tier  ==  'gold'","source":"score > 85 and tier == 'gold'"}
+{"id":"decompile/quote-characters/minimal/normal","kind":"decompile","options":{"parentheses":"minimal","spacing":"normal"},"rendered":"'gold' == \"gold\"","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/minimal/compact","kind":"decompile","options":{"parentheses":"minimal","spacing":"compact"},"rendered":"'gold'==\"gold\"","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/minimal/verbose","kind":"decompile","options":{"parentheses":"minimal","spacing":"verbose"},"rendered":"'gold'  ==  \"gold\"","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/explicit/normal","kind":"decompile","options":{"parentheses":"explicit","spacing":"normal"},"rendered":"('gold' == \"gold\")","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/explicit/compact","kind":"decompile","options":{"parentheses":"explicit","spacing":"compact"},"rendered":"('gold'==\"gold\")","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/explicit/verbose","kind":"decompile","options":{"parentheses":"explicit","spacing":"verbose"},"rendered":"('gold'  ==  \"gold\")","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/none/normal","kind":"decompile","options":{"parentheses":"none","spacing":"normal"},"rendered":"'gold' == \"gold\"","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/none/compact","kind":"decompile","options":{"parentheses":"none","spacing":"compact"},"rendered":"'gold'==\"gold\"","source":"'gold' == \"gold\""}
+{"id":"decompile/quote-characters/none/verbose","kind":"decompile","options":{"parentheses":"none","spacing":"verbose"},"rendered":"'gold'  ==  \"gold\"","source":"'gold' == \"gold\""}
+{"id":"decompile/bare-object-key/minimal/normal","kind":"decompile","options":{"parentheses":"minimal","spacing":"normal"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/minimal/compact","kind":"decompile","options":{"parentheses":"minimal","spacing":"compact"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/minimal/verbose","kind":"decompile","options":{"parentheses":"minimal","spacing":"verbose"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/explicit/normal","kind":"decompile","options":{"parentheses":"explicit","spacing":"normal"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/explicit/compact","kind":"decompile","options":{"parentheses":"explicit","spacing":"compact"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/explicit/verbose","kind":"decompile","options":{"parentheses":"explicit","spacing":"verbose"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/none/normal","kind":"decompile","options":{"parentheses":"none","spacing":"normal"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/none/compact","kind":"decompile","options":{"parentheses":"none","spacing":"compact"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/bare-object-key/none/verbose","kind":"decompile","options":{"parentheses":"none","spacing":"verbose"},"rendered":"{tier: 'gold'}","source":"{tier: 'gold'}"}
+{"id":"decompile/chain/minimal/normal","kind":"decompile","options":{"parentheses":"minimal","spacing":"normal"},"rendered":"user.profile.score::integer > Math.max(1, 2)","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/minimal/compact","kind":"decompile","options":{"parentheses":"minimal","spacing":"compact"},"rendered":"user.profile.score::integer>Math.max(1, 2)","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/minimal/verbose","kind":"decompile","options":{"parentheses":"minimal","spacing":"verbose"},"rendered":"user.profile.score::integer  >  Math.max(1, 2)","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/explicit/normal","kind":"decompile","options":{"parentheses":"explicit","spacing":"normal"},"rendered":"(user.profile.score::integer > Math.max(1, 2))","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/explicit/compact","kind":"decompile","options":{"parentheses":"explicit","spacing":"compact"},"rendered":"(user.profile.score::integer>Math.max(1, 2))","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/explicit/verbose","kind":"decompile","options":{"parentheses":"explicit","spacing":"verbose"},"rendered":"(user.profile.score::integer  >  Math.max(1, 2))","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/none/normal","kind":"decompile","options":{"parentheses":"none","spacing":"normal"},"rendered":"user.profile.score::integer > Math.max(1, 2)","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/none/compact","kind":"decompile","options":{"parentheses":"none","spacing":"compact"},"rendered":"user.profile.score::integer>Math.max(1, 2)","source":"user.profile.score::integer > Math.max(1, 2)"}
+{"id":"decompile/chain/none/verbose","kind":"decompile","options":{"parentheses":"none","spacing":"verbose"},"rendered":"user.profile.score::integer  >  Math.max(1, 2)","source":"user.profile.score::integer > Math.max(1, 2)"}
