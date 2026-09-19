@@ -33,7 +33,20 @@ import type { Float } from "./values.js";
  * differs, with both answers.
  */
 export function floatText(value: Float): string {
-  const n = value.valueOf();
+  return floatSpelling(value.valueOf());
+}
+
+/**
+ * The same spelling, for a number that is not a domain float yet.
+ *
+ * The grammar names a decimal literal in a refusal's message before anything
+ * has built a domain value out of it, and it has to spell that literal the way
+ * the rest of the package spells a float or the message says the wrong number.
+ * It is the one caller that has a bare number rather than a `Float`, which is
+ * why the rule sits here and `floatText` delegates to it rather than the other
+ * way around.
+ */
+export function floatSpelling(n: number): string {
   const spelling = Object.is(n, -0) ? "-0" : String(n);
   return POINT_OR_EXPONENT.test(spelling) ? spelling : `${spelling}.0`;
 }
