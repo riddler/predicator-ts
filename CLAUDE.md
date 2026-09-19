@@ -181,7 +181,10 @@ before committing.
   **reason token** - a stable, machine-readable symbol - rather than throwing,
   and never a bare `null` that loses why. Throwing is reserved for a violated
   internal invariant, which is a bug in this package and not an outcome a
-  caller handles. Never catch-to-default at a leaf.
+  caller handles. Outside this rule is host code that throws while this
+  package reads what the host handed it - a getter or a proxy trap on a value
+  it walks, or the `now` option read for a relative date - whose error
+  propagates unchanged. Never catch-to-default at a leaf.
 - **No `eval`, no `new Function`, and no alias of either.** The whole point of
   an embedded expression language is that authoring a condition is not
   authoring code. A compiler or evaluator that reaches for either has given

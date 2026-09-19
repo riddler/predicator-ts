@@ -2,16 +2,20 @@
  * The one nesting limit this package declares, and the reasons it answers when
  * a value breaks it.
  *
- * Every walk over a host's structure - normalizing a context, a function's
- * answered value, a literal operand, encoding and decoding the tagged wire
- * text, and handing a result back - recurses once per level of nesting. Left
- * alone, how deep a value may nest before that recursion exhausts the call
- * stack is a property of the engine and of whatever is already on the stack,
- * so the same value would answer on one machine and raise on another, and a
- * value with a back-reference would raise on all of them. So every walk counts
- * its levels against this one constant and remembers the containers it is
- * inside, and a value past the limit or with a cycle is answered as a failing
- * arm with a named reason rather than left to the stack.
+ * Walking a value - normalizing a context or a function's answered value,
+ * encoding and decoding the tagged wire text, comparing two values or testing
+ * membership, writing a path into the context, and projecting a result back -
+ * recurses once per level of nesting. Left alone, how deep a value may nest
+ * before that recursion exhausts the call stack is a property of the engine
+ * and of whatever is already on the stack, so the same value would answer on
+ * one machine and raise on another, and a value with a back-reference would
+ * raise on all of them. So the boundary walks count their levels against this
+ * one constant and remember the containers they are inside, and the machine
+ * checks a literal, a store, the operands of a comparison or a membership test
+ * and a result against it before anything walks them; a value past the limit
+ * or with a cycle is answered as a failing arm with a named reason rather than
+ * left to the stack. The projection itself and the JSON builtins' own walks
+ * do not count against it; the record below says why.
  *
  * This module is internal: neither entry point re-exports it. A walk that
  * lives elsewhere imports the constant from here rather than declaring its

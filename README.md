@@ -161,8 +161,11 @@ context whose lists and maps nest past the depth limit is refused with
 `depth_limit_exceeded`. The limit is 256 levels, the context itself counting as
 the first, and it is a constant this package declares rather than whatever the
 host's stack happens to allow, so the same context answers the same way on
-every engine. A result nested past the same limit is refused on its way back
-rather than handed over. A value reached by two paths without a cycle - one
+every engine. A literal in the instruction list is held to the same limit, and
+so is a value the program builds for itself: a comparison or a membership test
+whose operand is nested past the limit, a store that would nest the context
+past it, and a result nested past it are each refused at that point rather
+than walked or handed over. A value reached by two paths without a cycle - one
 card object under two keys, say - is not refused.
 
 ```ts
@@ -178,11 +181,14 @@ if (refused.ok || refused.error.reason !== "cyclic_value") {
 }
 ```
 
-One thing is outside the promise: the host's own code. A getter or a proxy
-trap on the context runs while the context is read, and if it throws, its
-error propagates out of `evaluate` unchanged, because that is the host failing
-rather than an outcome of the evaluation. A host whose context carries code
-like that, and that wants a result rather than a throw, wraps the call.
+Outside the promise is host code that throws while the evaluation reads what
+the host handed it: a getter or a proxy trap on a value the evaluation walks,
+such as the context, and the `now` option when a relative date reads the
+clock. Its error propagates out of `evaluate` unchanged, because that is the
+host failing rather than an outcome of the evaluation. A function the host
+registers under `functions` is different: if it throws, the failing arm
+carries its message. A host whose context carries code like that, and that
+wants a result rather than a throw, wraps the call.
 
 ```ts
 import { evaluate } from "@riddler/predicator";
@@ -397,8 +403,8 @@ nesting past the same declared limit of 256 levels with
 `depth_limit_exceeded` - a decode at the offset of the first bracket or brace
 past it. In the text every bracket and brace counts, a tag's own included, so
 whatever `encodeTagged` writes, `decodeTagged` reads back. A getter or a proxy
-trap on a value handed to `encodeTagged` is the host's own code, and an error
-it throws propagates unchanged, as it does at `evaluate`.
+trap on a value handed to `encodeTagged` is host code running inside the walk,
+and an error it throws propagates unchanged, as it does at `evaluate`.
 
 The encoding is the corpus's apparatus rather than a published serialization
 format: predicator-ex's `conformance/README.md` specifies it, it is revised by

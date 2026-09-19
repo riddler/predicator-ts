@@ -398,8 +398,8 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  * reached twice by two different paths is not a cycle and is normalized at
  * each place it appears.
  *
- * What the walk cannot turn into a refusal is the host's own code running
- * inside it: a getter or a proxy trap that throws propagates its own error out
+ * What the walk cannot turn into a refusal is host code running inside it: a
+ * getter or a proxy trap on the value that throws propagates its own error out
  * of this function unchanged, because the error is the host's rather than an
  * outcome of the value.
  */
