@@ -7,8 +7,10 @@
 | [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision,
-Consequences), plus the typespecs and worked-example sections this family's
-records carry. Pick the number against a freshly fetched remote.
+Consequences). A record that states a public signature adds a Typespecs
+section, and a record that states one or defines the shape of a JSON document
+adds a Worked example section showing it; a record that does neither, such as
+a charter, adds neither. Pick the number against a freshly fetched remote.
 
 This repository inherits the family's ADR practice rather than restating it,
 so there is no local "record architecture decisions" record. A bare
