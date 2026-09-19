@@ -525,9 +525,14 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
     expect(outcome.error.position).toBeUndefined();
   });
 
-  // Sabotage: checking operand types before stack depth turns the reason of
-  // the first assertion into a type mismatch. It was run and reverted.
-  it("reports insufficient operands before it looks at any type", () => {
+  // The comparison opcode has no type test, so this shows the depth guard and
+  // not an ordering. The ordering is pinned by the test after this one, at
+  // single-operand opcodes that have both a depth guard and a type test.
+  //
+  // Sabotage: removing the comparison opcode's depth guard turns the first
+  // assertion red, because the opcode then compares what the stack gave it
+  // and answers. It was run and reverted.
+  it("answers insufficient operands at a comparison handed one operand", () => {
     const outcome = evaluateToValue([
       ["lit", "visa"],
       ["compare", "EQ"],
@@ -537,6 +542,34 @@ describe("the errors that belong to the machine rather than to an opcode", () =>
     expect(outcome.error.type).toBe("EvaluationError");
     expect(outcome.error.reason).toBe("insufficient_operands");
     expect(outcome.error.position).toBe(1);
+  });
+
+  // Each opcode below has a depth guard and a type test, and on an empty stack
+  // the order of the two decides the answer: a type test run first reads the
+  // missing operand, finds no boolean or number there, and reports a type
+  // mismatch.
+  //
+  // Sabotage: in each of the four machine methods these opcodes run through -
+  // the negations, unary minus, the two connective jumps and
+  // pop_jump_if_falsy - moving the type test above the depth guard, so that it
+  // reads the missing top first, turns this red on the error type. Each of the
+  // four was run and reverted.
+  it("checks stack depth before operand type at the negations and the conditional jumps", () => {
+    for (const program of [
+      [["not"]],
+      [["unary_bang"]],
+      [["unary_minus"]],
+      [["jump_if_falsy_or_pop", 1]],
+      [["jump_if_true_or_pop", 1]],
+      [["pop_jump_if_falsy", 1]],
+    ] as Program[]) {
+      const outcome = evaluateToValue(program);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.type).toBe("EvaluationError");
+      expect(outcome.error.reason).toBe("insufficient_operands");
+      expect(outcome.error.position).toBe(0);
+    }
   });
 
   // Sabotage: admitting an offset of zero as a valid operand turns the second
@@ -1152,6 +1185,50 @@ describe("indexing", () => {
     if (onList.ok) return;
     expect(onList.error.type).toBe("TypeMismatchError");
     expect(onList.error.reason).toBe("bracket_access");
+  });
+
+  // An absence an unbound load put there, reaching the key position, is
+  // refused at a list like any other absence, and the refusal is then
+  // reported as that unbound root rather than as a type mismatch. The refusal
+  // is built from the key alone rather than from the popped pair, so this is
+  // the rewrite reached through the helper for one refused value, not the one
+  // for a pair.
+  //
+  // Sabotage: building the list-key refusal without the flag that marks a
+  // refused absence turns this red on the type, because the mismatch is then
+  // reported as it was raised. It was run and reverted.
+  it("reports an unbound key refused at a list as the unbound root", () => {
+    const outcome = evaluateToValue([["load", "charges"], ["load", "cohort"], ["bracket_access"]], {
+      charges: [1, 2],
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("UndefinedVariableError");
+    expect(outcome.error.reason).toBe("unbound_variable");
+    expect(outcome.error.message).toContain("cohort");
+    expect(outcome.error.position).toBe(1);
+  });
+
+  // A map that already holds only the string spelling of a numeric key, read
+  // by the integer key with no store anywhere in the run, answers what that
+  // spelling holds. docs/adr/0002 declares this a divergence from the
+  // reference, which that record reports answering the absence here, from a
+  // run. It is pinned by a unit test rather than by a case because the corpus
+  // is the reference's own, vendored byte for byte, and a case there carries
+  // the reference's answer, which this build deliberately does not give. The
+  // map itself is plain JSON, so it is not the corpus's neutrality that keeps
+  // the case out.
+  //
+  // Sabotage: reading a map's integer key as a miss turns this red, because
+  // the lookup then never reaches the spelled slot. It was run and reverted.
+  it("reads a string-spelled numeric key by the integer key with no store", () => {
+    const context = { attempts: { "0": "declined", pending: true } };
+    expect(
+      evaluateToValue([["load", "attempts"], ["lit", 0], ["bracket_access"]], context),
+    ).toEqual({ ok: true, value: "declined" });
+    expect(
+      evaluateToValue([["load", "attempts"], ["lit", 1], ["bracket_access"]], context),
+    ).toEqual({ ok: true, value: Undefined });
   });
 
   // Section 5 rules nothing about an absence inside a list this opcode builds,
