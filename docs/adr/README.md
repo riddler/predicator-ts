@@ -42,4 +42,7 @@ The second is an acceptance: moving a record from proposed to accepted replaces
 each Status line it moves, and may amend a sentence that the move itself makes
 false, such as one stating that the record stays at proposed, rewrapping the
 paragraph that sentence sits in; it changes nothing else. This covers the
-numbered records; the index at the top of this file is not a record.
+numbered records; the index at the top of this file is not a record. This
+paragraph records what changes to these records have followed; it does not
+decide whether a merged line of an accepted record may be edited in place for
+another reason.
