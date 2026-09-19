@@ -2089,6 +2089,27 @@ describe("the store write path", () => {
     expect(outcome).toEqual({ ok: true, value: { "0": { at: 1, outcome: "approved" } } });
   });
 
+  // The amendment to docs/adr/0002 headed "what a store writes at the path's
+  // root" decides that an integer root segment is written under its decimal
+  // spelling. This pins that decision: a later load of that spelling reads the
+  // write back.
+  //
+  // Sabotage: spelling an integer segment's key other than in decimal turns
+  // this red. It was run and reverted.
+  it("writes an integer root under its decimal spelling", () => {
+    const program = [
+      ["lit", 0],
+      ["lit", "approved"],
+      ["store", 1],
+      ["load", "0"],
+    ] as Program;
+    expect(evaluateToValue(program)).toEqual({ ok: true, value: "approved" });
+    expect(evaluateToValue(program, { "0": "declined" })).toEqual({
+      ok: true,
+      value: "approved",
+    });
+  });
+
   // Sabotage: writing into the map the context already holds, rather than into
   // a copy, falsifies the rule that a write answers a new context and mutates
   // none. It was run and reverted.
@@ -2306,6 +2327,27 @@ describe("the six failures a well-formed store answers", () => {
       { protectedRoots: ["card"] },
     );
     expect(error.reason).toBe("protected_root");
+  });
+
+  // An integer root segment is compared with the protected roots under its
+  // decimal spelling, the key it writes, so protecting that spelling protects
+  // the root; another spelling of the same number names another root.
+  //
+  // Sabotage: comparing the root segment as it is, without spelling it,
+  // turns this red. It was run and reverted.
+  it("compares an integer root with the protected roots under its decimal spelling", () => {
+    const program = [
+      ["lit", 0],
+      ["lit", "attempt"],
+      ["lit", "approved"],
+      ["store", 2],
+      ["load", "0"],
+    ] as Program;
+    expect(failure(program, {}, { protectedRoots: ["0"] }).reason).toBe("protected_root");
+    expect(evaluateToValue(program, {}, { protectedRoots: ["00"] })).toEqual({
+      ok: true,
+      value: { attempt: "approved" },
+    });
   });
 
   // Sabotage: running the protected-root check before the segment types
