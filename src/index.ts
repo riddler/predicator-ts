@@ -1,5 +1,6 @@
 /**
- * The main entry point: the value domain, the host boundary, and evaluation.
+ * The main entry point: the value domain, the host boundary, compilation from
+ * source text, and evaluation.
  *
  * A host writing a context reaches for `float()` and the absence singleton,
  * and a host reading a plain result back holds a date, a datetime or a
@@ -23,9 +24,20 @@ import type { Program } from "./instructions.js";
 import { nestingFault } from "./nesting.js";
 import { toHost } from "./values.js";
 
+export type {
+  CompileResult,
+  CompileWithPositionsResult,
+  CompileWithSpansResult,
+} from "./compile.js";
+export { compile, compileWithPositions, compileWithSpans } from "./compile.js";
 export type { UnboundPolicy } from "./context.js";
-export type { PredicatorError, Reason } from "./errors.js";
-export { EvaluationError, TypeMismatchError, UndefinedVariableError } from "./errors.js";
+export type { ParseReason, Position, PredicatorError, Reason, Span } from "./errors.js";
+export {
+  EvaluationError,
+  ParseError,
+  TypeMismatchError,
+  UndefinedVariableError,
+} from "./errors.js";
 export type {
   EvaluateOptions,
   EvaluateResult,
