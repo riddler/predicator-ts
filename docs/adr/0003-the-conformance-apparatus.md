@@ -281,17 +281,18 @@ the test `claims the version the corpus was generated at` in
 `test/instructions.test.ts` fails the gate when `isaVersion()` and the
 vendored manifest's `isa_version` differ. Neither ties a report to the build
 that produced it. A report left by a run of an earlier commit, or by a run made
-while a sabotage mutation was in place, carries the same corpus hash and the
+while a sabotage mutation was in place, can carry the same corpus hash and the
 same version as a fresh one.
 
-What changes, as of commit `7000c76`. The runner writes a stamp beside each
+What changes. The runner writes a stamp beside each
 report (`writeReport` in `test/conformance/runner.ts`). The stamp holds two
 digests: one of every file under `src/`, the vendored manifest and every file
 under `conformance/corpus/` (`buildHash` in `scripts/lib/build-stamp.mjs`), and
 one of the report file's own bytes (`writeStamp` in the same module). The
-ratchet script refuses a report in three cases: it has no stamp, its stamp was
-written for other bytes, or its stamp's build digest is not the digest of those
-files when the script runs (`stampProblem` in the same module). The script
+ratchet script refuses a report when it has no stamp, when its stamp does not
+parse or is not an object, when its stamp was written for other bytes, or when
+its stamp's build digest is not the digest of those files when the script runs
+(`stampProblem` in the same module). The script
 checks the stamp before it reads any field of the report (`readReport` in
 `scripts/ratchet.mjs`).
 
@@ -308,9 +309,13 @@ with the runner as it is then, and an entry that run does not pass turns the
 gate red.
 
 Why the ratchet refuses rather than this record arguing that the two checks
-suffice. The two checks compare numbers that a stale report still carries
-correctly, so they bound a stale report only when its version differs from the
-build's. They say nothing about a stale report at the same version whose
+suffice. Each of the two reaches less than a tie. The script's comparison of
+a report's `corpus_hash` with the vendored manifest's refuses a report run
+against another corpus, and not one run against the same corpus by another
+build. The version test reads `isaVersion()` and the vendored manifest, never
+a report: it holds the current build's version to the corpus's, and says
+nothing about the version a report on disk records. Neither refuses a stale
+report that records the current corpus hash and the current version but whose
 results the current build no longer produces. A digest of the inputs catches
 that case, and it catches it when the ratchet runs rather than at the next
 gate.
