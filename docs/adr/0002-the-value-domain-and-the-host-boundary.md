@@ -1703,3 +1703,92 @@ the number; the conformance run is unchanged. This remains a divergence from
 the reference, whose integers are arbitrary precision, and the bound is this
 package's own, as the reason-token paragraph above already says. Nothing in
 this amendment adds an opcode, a reason token or a wire-format change.
+
+## Note: the two options types and the options table, read exactly (2026-09-18)
+
+Recorded for `pts-gmc` and `pts-w5l`, which collected prose gaps that review
+found after the options-type split and after the note naming which entry
+point accepts `tagged`. This note is appended, and removes no line above. It
+records what sentences already accepted were about and changes nothing this
+record decides, so it carries no Status line. Each sentence it reads sits in
+accepted text, so it is read here rather than reworded in place; this note
+decides nothing about whether accepted text may be edited in place.
+
+### The two options types differ in `tagged` alone
+
+The options-split amendment says that `EvaluateOptions` declares every
+evaluation option this record tabulates except `tagged`. Read as a list of
+members, that sentence leaves out `functions`, which `EvaluateOptions`
+declares and the options table does not tabulate: this record states it in
+its host-functions section instead. The sentence states a rule, and the rule
+is this: **an option this record states for an evaluation belongs to
+`EvaluateOptions` unless it is `tagged`, whichever section states it, and
+`TaggedEvaluateOptions` adds `tagged` to it and nothing else.** That is the
+shape `TaggedEvaluateOptions` in `src/tagged.ts` has.
+
+### What the smaller type lost
+
+The same amendment's consequences say that the smaller type lost nothing in
+the split. It lost `tagged`, which the split exists to take off it. The clause
+means that it lost none of the options the two entry points share, and that
+is the part of the clause the sentence's claim about one options object
+relies on: those options are declared once, in `EvaluateOptions`, and
+`TaggedEvaluateOptions` takes them by extending it.
+
+### Which paragraph the split supersedes
+
+The same amendment says that the paragraph after the superseded
+`EvaluateOptions` block in the Typespecs section states the same thing in
+prose. The paragraph directly after that block is the one on the class bodies
+of `Float`, `PDate`, `PDateTime` and `Duration`, and the split supersedes
+nothing in it. The paragraph meant is the one opening "`EvaluateOptions` is
+one type serving both entry points rather than two", which the sentence
+placed above it already marks as superseded.
+
+### Where this record defines the options
+
+The note on the `tagged` option says that the sentences it added state the
+ruling where this record defines the options object, and names the options
+table separately. The singular dates from when one options type served both
+entry points. The change that note records also added sentences in the
+projection and evaluation-options sections; the phrase names the place among
+them where the record declares the options type, the `EvaluateOptions` block
+in the Typespecs section, where it added the doc comment on the `tagged`
+member and the paragraph opening "`EvaluateOptions` is one type serving both
+entry points rather than two". Since the split that block is superseded by
+the options-split amendment's typespec, which declares both types,
+`EvaluateOptions` and `TaggedEvaluateOptions`, and that typespec is where this
+record now defines the options.
+
+### The evaluation-options preamble
+
+The sentence opening the evaluation-options section speaks of a run without
+naming an entry point, and it predates the table's `tagged` row. Its run is a
+run at either entry point, over the rows that entry point accepts. The
+`tagged` row is accepted by the `./tagged` subpath's entry point alone, and
+the paragraph on `tagged` below the table states that an evaluation requested
+at the main entry point is always the plain projection, which is what that
+row's default of `false` gives. So the preamble's closing clause, that a run
+passing no option behaves as the table's defaults say, holds at both.
+
+### Why the Consequences paragraph on policy does not name `tagged`
+
+The Consequences paragraph opening "Making the loop budget, the clock" names
+options with defaults, and `tagged`, which the options table carries, is not
+among them. The omission is deliberate. That paragraph is about the host's
+policy making one instruction list evaluate differently, and `tagged` does
+not change what an instruction list evaluates to: the subpath's entry point,
+`evaluateTagged` in `src/tagged.ts`, evaluates before it reads `tagged`, and
+`tagged` decides only the form the result is handed back in - under `true`,
+the corpus's tagged-value encoding, or a failure when the value is one that
+encoding cannot carry.
+
+### The cost of accepting `tagged` on the subpath alone
+
+The Consequences section records no cost for accepting `tagged` at the
+`./tagged` subpath's entry point alone. The cost is this: a host that wants
+the corpus encoding takes its evaluation from the subpath as well as its
+codec, calling `evaluateTagged` there rather than `evaluate` at the main
+entry point. The options-split amendment's consequences say the same of the
+import; this states it as the cost of the decision the note on `tagged`
+records.
