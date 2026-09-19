@@ -31,3 +31,15 @@ correction and note blocks, and this convention extends that exemption to
 these records: the id belongs in the body, where it says why a paragraph
 exists, not in the heading, which is what a reader scans and what another
 record cites.
+
+A change to a record adds lines and removes none. The measure is the change's
+diff against the default branch - `git diff origin/main` over a record shows no
+removed line - so an amendment or a note is an insertion, and a line that has
+merged is not rewritten by a later change. Two removals are consistent with
+this. The first is a change's own text: because the measure is the default
+branch, a change may reword or rewrap lines it added itself before it merges.
+The second is an acceptance: moving a record from proposed to accepted replaces
+each Status line it moves, and may amend a sentence that the move itself makes
+false, such as one stating that the record stays at proposed, rewrapping the
+paragraph that sentence sits in; it changes nothing else. This covers the
+numbered records; the index at the top of this file is not a record.
