@@ -1,11 +1,12 @@
 // The corpus rules that more than one thing has to agree about.
 //
-// Three things read the vendored corpus: the runner, which runs a surface; the
-// registry check, which reads membership; and the ratchet, which decides
+// The runner, which runs a surface, reads the vendored corpus; so do the
+// registry check, which reads membership, and the ratchet, which decides
 // whether a claim is complete. Each of them needs the same three rules, and a
-// rule implemented three times is three chances to implement it differently.
-// So the rules live here, once, and the readers differ only in what they do
-// with the answer.
+// rule implemented once per reader is a chance for each reader to implement
+// it differently. So the rules live here, once, for a reader to import rather
+// than restate. Which files import them is the import graph's to say, not
+// this header's.
 //
 // THE RULES. Tiers are cumulative: the cases for tier N are the case files for
 // tiers 1 through N. A surface's case set is every case for the evaluator, and
