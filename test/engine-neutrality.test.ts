@@ -132,30 +132,53 @@ const prosePreviouslyTripping: readonly string[] = [
   "// The value space contains no BigInt.",
 ];
 
-// Every forbidden name that has an anchor, as the last word of a sentence.
-// A full stop with no word character after it is not a member access, so
-// none of these fires, whichever name ends the sentence. The module-path
-// globals are absent because they have no anchor and fire on every mention.
+// Forbidden names as the last word of a sentence. A full stop with no word
+// character after it is not a member access, so none of these fires,
+// whichever name ends the sentence. The list is every name in the script's
+// DOM and Node global lists, the members of the toLocale family, and each
+// other forbidden name the rules spell out. The module-path globals are
+// absent because they have no anchor and fire on every mention.
 const namesEndingASentence: readonly string[] = [
-  "eval",
-  "Function",
-  "BigInt",
-  "bigint",
-  "Intl",
-  "localeCompare",
+  // The DOM global list.
   "window",
   "document",
-  "alert",
+  "navigator",
+  "localStorage",
+  "sessionStorage",
   "XMLHttpRequest",
+  "HTMLElement",
+  "alert",
+  // The Node global list.
   "process",
   "Buffer",
   "global",
   "setImmediate",
   "clearImmediate",
+  // The CommonJS names with an anchor.
+  "module",
+  "exports",
+  "require",
+  // The import forms, the data URL scheme and the resolution accessor.
+  "import",
+  "data",
+  "meta",
+  "resolve",
+  // Dynamic code and its aliases.
+  "eval",
+  "Function",
   "constructor",
   "globalThis",
-  "require",
-  "import",
+  // The numeric type and its constructor.
+  "bigint",
+  "BigInt",
+  // Locale data.
+  "Intl",
+  "localeCompare",
+  "toLocaleString",
+  "toLocaleDateString",
+  "toLocaleTimeString",
+  "toLocaleUpperCase",
+  "toLocaleLowerCase",
 ];
 
 // The other side of the same property. A forbidden name fires in prose as
@@ -189,7 +212,9 @@ const proseCarryingAnAnchor: readonly (readonly [string, string])[] = [
   ["node-global", "// Reading process.env here would break the browser build."],
   // A global reached by a call.
   ["dom-global-call", "// Raising alert(message) would break every other runtime."],
+  ["dom-global-call", "// Opening a new XMLHttpRequest() here is refused."],
   ["node-global-call", "// Deferring with setImmediate(callback) is refused."],
+  ["node-global-call", "// Cancelling with clearImmediate(handle) is refused."],
   // A name with no anchor at all fires on every mention, in a comment too.
   ["node-global-bare", "// Nothing here reads __dirname to find a fixture file."],
   // A data URL reached by the quote that opens it, and the resolution
