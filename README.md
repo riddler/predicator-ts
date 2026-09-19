@@ -54,14 +54,15 @@ for those constructs rather than leaving the rule to review.
 ## The entry points
 
 ```ts
-import { compile, evaluate, execute, executeValue, float, isaVersion } from "@riddler/predicator";
+import { compile, decompile, evaluate, execute, executeValue, float, isaVersion, parse } from "@riddler/predicator";
 import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/tagged";
 ```
 
 - **`@riddler/predicator`** is the main entry point: the value domain, the host
   boundary, the compilation of an expression's source text into an instruction
-  list, the evaluation of such a list, and the version of the instruction set
-  this build implements.
+  list, the evaluation of such a list, the rendering of a parsed expression
+  back to source text, and the version of the instruction set this build
+  implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
   conformance corpus's tagged encoding, and the one evaluation that speaks it.
   That encoding carries the members a plain JSON round trip loses - a date, a
@@ -227,6 +228,103 @@ The cost is on the failing arm's type: it now admits a `ParseError` for every
 caller of the three, including one that never passes a string. A caller that
 wants the narrower set back narrows on `error.type`, which is what the example
 above does.
+
+## Rendering a rule back
+
+`decompile` writes an expression back out as source text, and `parse` is how
+you get it something to write: it reads the source into the syntax tree the
+renderer takes. The two are a pair, and an editor that lets someone author a
+rule and then shows it back in a normalized form is what they are for.
+
+The rendering is the reference implementation's. The `parentheses` option is
+`minimal` (the default), `explicit` or `none`, the `spacing` option is `normal`
+(the default), `compact` or `verbose`, and the word operators come out
+uppercase whatever case the author typed.
+
+```ts
+import { compile, decompile, parse } from "@riddler/predicator";
+
+// A signup wizard's editor holds the rule its author typed, lowercase `and`
+// and all.
+const authored = "variant == 'B' and steps_completed >= 3";
+
+const read = parse(authored);
+
+if (!read.ok) {
+  throw new Error("a well-formed rule parses");
+}
+
+// Written back at the defaults: the word operator is uppercase, each literal
+// keeps the quote character it was written with, and no parenthesis is added
+// that precedence does not need.
+if (decompile(read.ast) !== "variant == 'B' AND steps_completed >= 3") {
+  throw new Error("the defaults are minimal parentheses and normal spacing");
+}
+
+// The editor offers a view that makes every grouping visible.
+const grouped = decompile(read.ast, { parentheses: "explicit" });
+
+if (grouped !== "((variant == 'B') AND (steps_completed >= 3))") {
+  throw new Error("explicit parentheses wrap every operator application");
+}
+
+// `compact` reaches the infix operators and nothing else: the separators
+// inside a list, an object or a call stay a fixed `", "`.
+const tight = decompile(read.ast, { spacing: "compact" });
+
+if (tight !== "variant=='B'ANDsteps_completed>=3") {
+  throw new Error("compact spacing removes the spaces around the operators");
+}
+
+// At the defaults, a rendering compiles back to the program the source
+// itself compiles to.
+const first = compile(authored);
+const second = compile(decompile(read.ast));
+
+if (!first.ok || !second.ok) {
+  throw new Error("both the source and its rendering compile");
+}
+
+if (JSON.stringify(first.instructions) !== JSON.stringify(second.instructions)) {
+  throw new Error("rendering and recompiling answers the same program");
+}
+
+// `parse` refuses exactly what `compile` refuses, on the same arm and with
+// the same refusal - there is no second error shape to handle.
+const draft = parse("variant == 'B' and steps_completed >= ");
+
+if (draft.ok) {
+  throw new Error("a rule that stops mid-comparison does not parse");
+}
+
+if (draft.error.reason !== "expected_primary") {
+  throw new Error("the refusal names the grammar family it belongs to");
+}
+```
+
+Two values are worth care, and they are not both on the same option. `none`
+writes no parentheses at all, not merely the redundant ones, so a rendering
+under it can read back as a different expression. `compact` closes the space
+around the word operators, so `a AND b` renders as `aANDb`, a single
+identifier. On the expression above, `none` renders exactly what the
+defaults render and recompiles to the same program, while the `compact`
+rendering the block above pins does not compile at all. Which value bites
+depends on the expression, so neither of them is the one to watch. Both
+are what the reference does and this matches it.
+
+The tree `parse` answers and `decompile` takes is exported as `Ast`, and it is
+not a compatibility promise. The alias is there so the two functions can be
+typed and composed; the node shapes behind it are internal and may change
+without a major version. What holds across such a change is that
+`decompile(parse(source).ast)` keeps answering what the reference answers.
+`docs/adr/0004-the-compiler-surface.md` is the record, and it says why the
+renderer takes the tree rather than a compiled program.
+
+One divergence from the reference is worth stating: an instant literal written
+with fewer than six fraction digits is rendered with six. The reference's
+datetime value carries the precision it was written with, and this package's
+carries a microsecond count, so the digit count is not in the tree to render.
+The instant is the same, and the rendering compiles back to the same program.
 
 ## Evaluating a rule
 

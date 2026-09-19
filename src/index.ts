@@ -1,6 +1,6 @@
 /**
  * The main entry point: the value domain, the host boundary, compilation from
- * source text, and evaluation.
+ * source text, evaluation, and the rendering direction back to source.
  *
  * A host writing a context reaches for `float()` and the absence singleton,
  * and a host reading a plain result back holds a date, a datetime or a
@@ -23,7 +23,9 @@ import {
   projectContext,
 } from "./evaluator.js";
 import type { Program } from "./instructions.js";
+import { tokenize } from "./lexer.js";
 import { nestingFault } from "./nesting.js";
+import { type ParseResult, parse as parseTokens } from "./parser.js";
 import { toHost } from "./values.js";
 
 export type {
@@ -33,6 +35,8 @@ export type {
 } from "./compile.js";
 export { compile, compileWithPositions, compileWithSpans } from "./compile.js";
 export type { UnboundPolicy } from "./context.js";
+export type { Ast, DecompileOptions } from "./decompile.js";
+export { decompile } from "./decompile.js";
 export type { ParseReason, Position, PredicatorError, Reason, Span } from "./errors.js";
 export {
   EvaluationError,
@@ -49,6 +53,7 @@ export type {
 } from "./evaluator.js";
 export type { Instruction, Program } from "./instructions.js";
 export { isaVersion } from "./instructions.js";
+export type { ParseResult } from "./parser.js";
 export * from "./values.js";
 
 /**
@@ -233,4 +238,35 @@ export function executeValue(
   }
   if (outcome.context === undefined) return { ok: false, error: outcome.error };
   return { ok: false, error: outcome.error, context: projectContext(outcome.context) };
+}
+
+/**
+ * Reads an expression's source text into the syntax tree `decompile` renders.
+ *
+ * It is the producer the rendering direction needs: `decompile` takes the tree
+ * rather than a compiled program, because a program has already lost a string
+ * literal's quote character and an object key's bare form, and a rendering
+ * that cannot reproduce those is not the reference's rendering.
+ * `docs/adr/0004-the-compiler-surface.md` is the record.
+ *
+ * It stops where `compile` stops. The scanner and the grammar are the same two
+ * stages `compile` runs, so the same sources are accepted and the same ones
+ * are refused - the statement grammar among them - and the tree is the one the
+ * emitter would have compiled.
+ *
+ * Failure is the value `compile` answers, handed out unwrapped: the same
+ * closed `reason`, the reference's own `message`, the same `position` and the
+ * same `span`. There is no second error shape to tell apart, and a caller that
+ * already handles a refusal from `compile` handles this one unchanged.
+ *
+ * What comes back is not a compatibility promise. `Ast` is exported so that
+ * this and `decompile` can be typed and composed; the node shapes behind it
+ * may change without a major version, and what holds across such a change is
+ * that `decompile(parse(source).ast)` keeps answering what the reference
+ * answers for that source.
+ */
+export function parse(source: string): ParseResult {
+  const scanned = tokenize(source);
+  if (!scanned.ok) return { ok: false, error: scanned.error };
+  return parseTokens(scanned.tokens);
 }
