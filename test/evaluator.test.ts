@@ -469,6 +469,39 @@ describe("a literal integer outside the safe range", () => {
   // visited falsifies the rule that a cycle ends the path it closes, and turns
   // this test red, the walk following the cycle to the depth limit. It was run
   // and reverted.
+  // An index a list does not hold itself reads through the list's prototype,
+  // so a list with a hole whose prototype holds a number at that index would
+  // hand an opcode a number the literal's check never saw. Such a list is not
+  // a list of the domain, and the literal refuses it by name, at any depth of
+  // the operand.
+  //
+  // Sabotage: dropping the prototype test from the literal's walk falsifies
+  // the rule that a literal holds no list whose prototype is not the array
+  // prototype, and turns this test red: the index read answers the number
+  // from the prototype. It was run and reverted.
+  it("refuses a list whose prototype is not the array prototype", () => {
+    const beyond = Number.MAX_SAFE_INTEGER + 1;
+    const holey = (): unknown[] => {
+      const limits: unknown[] = [100];
+      limits.length = 3;
+      limits[2] = 300;
+      const prototype = Object.create(Array.prototype) as Record<number, unknown>;
+      prototype[1] = beyond;
+      Object.setPrototypeOf(limits, prototype);
+      return limits;
+    };
+    for (const program of [
+      [["lit", holey() as unknown as Value], ["lit", 1], ["bracket_access"]],
+      [["lit", { card: "visa", limits: holey() } as unknown as Value]],
+    ] as Program[]) {
+      const outcome = evaluateToValue(program);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.reason).toBe("unsupported_host_value");
+      expect(outcome.error.position).toBe(0);
+    }
+  });
+
   it("admits an operand whose hidden property refers back to it", () => {
     const signup: Record<string, unknown> = { variant: "treatment" };
     Object.defineProperty(signup, "self", { value: signup, enumerable: false });

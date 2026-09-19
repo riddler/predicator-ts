@@ -555,8 +555,14 @@ const LITERAL_CONTAINER_LIMIT = 65536;
 /**
  * Why a literal operand's own properties refuse it, beyond its shape: it
  * carries an integral number outside the safe range, a container the walk
- * first reaches past the depth limit, or more containers than
- * `LITERAL_CONTAINER_LIMIT`. `undefined` when none of those.
+ * first reaches past the depth limit, more containers than
+ * `LITERAL_CONTAINER_LIMIT`, or a list whose prototype is not the array
+ * prototype. `undefined` when none of those.
+ *
+ * A list's prototype is checked because the opcodes read a list's element by
+ * index, and an index the list does not hold itself reads through its
+ * prototype. With the array prototype as the only one admitted, what such a
+ * read finds is the built-in prototype's and not the operand's.
  *
  * Only an integral number is tested: a number the domain would hold as an
  * integer if it were in range. The walk descends every list and every object
@@ -579,7 +585,12 @@ function literalFault(
   value: unknown,
   depth: number,
   visited: Set<object>,
-): "integer_out_of_range" | "depth_limit_exceeded" | "too_many_containers" | undefined {
+):
+  | "integer_out_of_range"
+  | "depth_limit_exceeded"
+  | "too_many_containers"
+  | "unsupported_host_value"
+  | undefined {
   if (typeof value === "number") {
     return Number.isInteger(value) && !Number.isSafeInteger(value)
       ? "integer_out_of_range"
@@ -590,6 +601,9 @@ function literalFault(
   if (visited.has(value)) return undefined;
   if (depth > DEPTH_LIMIT) return "depth_limit_exceeded";
   if (visited.size >= LITERAL_CONTAINER_LIMIT) return "too_many_containers";
+  if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) {
+    return "unsupported_host_value";
+  }
   visited.add(value);
   for (const name of Object.getOwnPropertyNames(value)) {
     const property = Object.getOwnPropertyDescriptor(value, name);
@@ -1248,10 +1262,12 @@ class Machine {
    * that fails both answers the shape's reason. The walk that looks for such
    * an integer also follows the data properties the shape check passes over:
    * the non-enumerable ones, and a list's properties that are not elements.
-   * It answers the first fault it meets, and it refuses, with the depth
-   * limit's reason, an operand in which it first reaches a container past the
-   * depth limit, or in which it finds more containers than it will visit.
-   * Nothing else about the operand is checked here.
+   * It answers the first fault it meets. It refuses, with the depth limit's
+   * reason, an operand in which it first reaches a container past the depth
+   * limit, or in which it finds more containers than it will visit; and it
+   * refuses, as the value boundary refuses a value the domain has no member
+   * for, an operand holding a list whose prototype is not the array
+   * prototype. Nothing else about the operand is checked here.
    */
   private lit(operand: Value, at: number): Step {
     const fault = nestingFault(operand, isPlainMap);
@@ -1259,6 +1275,16 @@ class Machine {
     const carried = literalFault(operand, 1, new Set());
     if (carried === "depth_limit_exceeded") {
       return { ok: false, error: nestingError(carried, "the literal", at) };
+    }
+    if (carried === "unsupported_host_value") {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          carried,
+          "the literal holds a list whose prototype is not the array prototype",
+          at,
+        ),
+      };
     }
     if (carried === "too_many_containers") {
       return {

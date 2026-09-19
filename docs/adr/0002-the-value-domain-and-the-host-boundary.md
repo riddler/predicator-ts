@@ -1646,10 +1646,14 @@ never calls a getter. It answers the first fault it meets: an integral number
 outside the safe range answers `"integer_out_of_range"`, and a container it
 first reaches past the depth limit, or more distinct containers than
 `LITERAL_CONTAINER_LIMIT` in `src/evaluator.ts` (65536, added with this
-amendment), answers `"depth_limit_exceeded"`. It visits each container once,
-so a deeper path to a container it has already visited is not measured. The
-count exists because a proxy's trap can answer a new container on every read;
-the number is this package's own, and no reason token is added.
+amendment), answers `"depth_limit_exceeded"`. A list whose prototype is not the
+array prototype answers `"unsupported_host_value"`, the value boundary's reason
+for a value the domain has no member for: an index a list does not hold itself
+is read through its prototype, so such a prototype could hand an opcode a
+number the walk never saw. It visits each container once, so a deeper path to a
+container it has already visited is not measured. The count exists because a
+proxy's trap can answer a new container on every read; the number is this
+package's own, and no reason token is added.
 
 **The two walks do not read exactly the same members, and host code is outside
 what this record promises about them.** A getter, a proxy's traps and a list's
@@ -1670,18 +1674,11 @@ in a `lit` operand is not a member of the domain either, but it is not an
 integer outside the safe range, and this amendment decides nothing about it:
 such an operand is admitted exactly as it was before.
 
-**The literal push was the only site that put an unvalidated value on the
-machine's stack.** Every push onto the machine's stack in `src/evaluator.ts`
-was read at `0f753ce`. Apart from the `lit` push, each pushes a value it
-constructs, a value read out of the context or out of a value already on the
-stack, an arithmetic result the shared numeric-result helper has tested, a
-`cast` result the cast module has bounded, or a host or builtin function's
-answer after it passed the value boundary. So, apart from a value host code
-supplies, the module-local integer test, `isIntegral` in `src/evaluator.ts`,
-which tests only that a value is a number, agrees with the domain's own
-predicate, `isInteger` in `src/values.ts`, on every integral number the
-machine holds. The sites that classify with `isIntegral` are not changed by
-this amendment, and they still disagree with `isInteger` on the raw
+**The classification sites are not changed.** The sites that classify with the
+module-local integer test, `isIntegral` in `src/evaluator.ts`, which tests only
+that a value is a number, are not changed by this amendment, and this record
+makes no claim that it agrees with the domain's own predicate, `isInteger` in
+`src/values.ts`, on every value the machine holds. They disagree on the raw
 non-integral or non-finite number the paragraph above leaves admitted.
 
 **It is pinned by shipped tests** in `test/evaluator.test.ts`: "is refused with
@@ -1692,15 +1689,17 @@ machine reads as a map"; "admits the bound inside any object the machine reads
 as a map"; "never calls a getter on the operand"; "refuses an operand whose
 hidden properties nest past the limit"; "answers an operand whose traps mint
 containers, in bounded work"; "counts distinct containers against its limit";
-and "admits an operand whose hidden property refers back to it". The nesting
-walk's map test is pinned in `test/nesting.test.ts` by "refuses a class-built
-literal operand past the limit, or cyclic".
+"admits an operand whose hidden property refers back to it"; and "refuses a
+list whose prototype is not the array prototype". The nesting walk's map test
+is pinned in `test/nesting.test.ts` by "refuses a class-built literal operand
+past the limit, or cyclic".
 
 Consequences. A hand-built instruction list whose `lit` operand holds an
 integer past the safe range as data now answers the failing arm where it
-answered a success. No vendored corpus case carries such a literal, since a
-case is read through the tagged decoder, which already refuses the number; the
-conformance run is unchanged. This remains a divergence from the reference,
-whose integers are arbitrary precision, and the bound is this package's own,
-as the reason-token paragraph above already says. Nothing in this amendment
-adds an opcode, a reason token or a wire-format change.
+answered a success, and so does one whose `lit` operand holds a list whose
+prototype is not the array prototype. No vendored corpus case carries such a
+literal, since a case is read through the tagged decoder, which already refuses
+the number; the conformance run is unchanged. This remains a divergence from
+the reference, whose integers are arbitrary precision, and the bound is this
+package's own, as the reason-token paragraph above already says. Nothing in
+this amendment adds an opcode, a reason token or a wire-format change.

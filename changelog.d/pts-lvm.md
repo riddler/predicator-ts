@@ -14,3 +14,6 @@
   that check meets another fault first. So the range check visits a bounded
   number of containers, even on a proxy that answers a new container every
   time it is read.
+- A `lit` operand holding a list whose prototype is not the array prototype
+  is refused with `unsupported_host_value`, so an index that list does not
+  hold itself cannot hand an opcode a value from that prototype.
