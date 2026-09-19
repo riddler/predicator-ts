@@ -38,6 +38,9 @@ const FILES: Record<string, string> = {
 
 // Turning the comparison round breaks both card tests.
 const CAUGHT = { find: "amount <= limit", replace: "amount > limit" };
+// Terminal colour codes, as the runner writes them.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching the escape character is the point
+const ANSI_ESCAPE = /\u001b\[[0-9;]*m/g;
 // A change no test can see.
 const SURVIVES = { find: "amount <= limit", replace: "limit >= amount" };
 // Fault two: a real control byte in the source, so the file cannot be parsed.
@@ -224,8 +227,11 @@ describe("the three faults, constructed against the real runner", () => {
   // the output for a missing summary line turns this red.
   it("fault three - a parse failure that prints a summary - is invalid", () => {
     const r = withMutation({ file: card, ...CONTROL_BYTE }, () => runSuite({ root: project }));
-    expect(r.output).toMatch(/Test Files\s+1 failed \| 1 passed/);
-    expect(r.output).toMatch(/Tests\s+1 passed/);
+    // The runner colours its output when the environment asks for it (CI
+    // does), so the escape sequences are removed before the text is read.
+    const printed = r.output.replace(ANSI_ESCAPE, "");
+    expect(printed).toMatch(/Test Files\s+1 failed \| 1 passed/);
+    expect(printed).toMatch(/Tests\s+1 passed/);
     expect(r.report).toMatchObject({ numFailedTests: 0 });
     expect(classifyRun(r, baseline).verdict).toBe("invalid");
   }, 60_000);
