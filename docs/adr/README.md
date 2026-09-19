@@ -2,9 +2,9 @@
 
 | # | Decision | Status |
 |---|---|---|
-| [0001](0001-a-conformant-sibling.md) | A conformant sibling, not a second reference implementation | proposed |
-| [0002](0002-the-value-domain-and-the-host-boundary.md) | The value domain in TypeScript, and the host boundary | proposed |
-| [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | proposed |
+| [0001](0001-a-conformant-sibling.md) | A conformant sibling, not a second reference implementation | accepted |
+| [0002](0002-the-value-domain-and-the-host-boundary.md) | The value domain in TypeScript, and the host boundary | accepted |
+| [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences). A record that states a public signature adds a Typespecs
@@ -20,11 +20,13 @@ repository's ADR-0001, and `px-ADR-0001` is predicator-ex's. Records in sibling
 repos that are still being drafted are cited by bead id until their number is
 assigned.
 
-A `## Note` on a record carries no Status line. Every Status line in these
-records sits on the record's own header or under a `## Amendment`, because an
-amendment changes what the record decides and a note does not: a note records
-where something already decided renders, or what a sentence already accepted
-was about.
+A `## Note` on a record carries no Status line, with one exception written
+before this rule was: the note in ADR-0002 on statement mode, the two program
+entry points, and the store write carries one. Every other Status line in
+these records sits on the record's own header or under a `## Amendment`,
+because an amendment changes what the record decides and a note does not: a
+note records where something already decided renders, or what a sentence
+already accepted was about.
 
 A note's heading names the decision it is about and never a bead id; the
 first paragraph may name the bead and the ruling the note was recorded for.

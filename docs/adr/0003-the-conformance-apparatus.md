@@ -1,6 +1,6 @@
 # ADR-0003: The conformance apparatus
 
-Status: accepted (2026-09-17, the operator's authorization in campaign RF052; proposed 2026-09-16)
+Status: accepted (2026-09-17; proposed 2026-09-16)
 
 ## Context
 
@@ -462,7 +462,7 @@ sections read differently, the Context reading governs.
 
 ## Amendment: a transcript of the reference, diffed in the suite (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-bx8`. This amendment is appended, and removes no line above.
 A file this change does not touch is cited as read at commit `7821532`; a file
