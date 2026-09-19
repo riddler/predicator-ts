@@ -383,3 +383,79 @@ at that earlier version, records the corpus's version in the field.
 
 This note states what the field already is and changes no rule above, so it
 carries no Status line and does not advance this record's status.
+
+## Note: the currency part's scope, and how the Decision's wording reads (2026-09-19)
+
+Recorded for `pts-4fe`. This note states how passages of the decision above
+read against the code and against predicator-ex at tag `v9.4.1`. It decides
+nothing new and changes no rule above, so it carries no Status line and does
+not advance this record's status. Code is cited as read at commit `8711dcd`.
+
+**The currency part is not scoped by the claimed ISA version.** It asks that
+every entry pass in the run the gate makes now (`currencyProblems` in
+`test/conformance/registry.test.ts`), and that run attempts only the cases the
+claimed version runs (`runEvaluator` in `test/conformance/runner.ts`).
+Completeness is scoped by the claimed version (`completenessProblems` in
+`test/conformance/registry.test.ts`). Membership is not, by the decision above
+that a retired case stays a member of the evaluator surface's case set. So an
+entry for a retired case, which that decision keeps legal and never drops, is
+reported by the currency part as no longer passing whenever the claimed
+version filters the case out of the run. What was observed, on 2026-09-19 at
+commit `8711dcd`, by running it: a registry holding one evaluator entry for
+the retired case `legacy/and-does-not-short-circuit` passed the membership
+check, and the currency check, given the evaluator run at `isaVersion()` 6,
+named that case as no longer passing.
+
+The registry at that commit holds no such entry. One arises when the registry
+holds an entry for a case the vendored corpus tags `retired`, for example
+after a refresh to a corpus that retires an opcode an entered case uses, once
+this package claims that corpus's version.
+
+Scoping the currency part the way the claim rule is scoped would be a new
+rule, and this note does not make it. The currency part belongs with the seam
+the Consequences above name, in the paragraph beginning "The ISA-version
+filter and the completeness check meet at a seam". Predicator-ex's
+`conformance/RATCHET.md` asks, in the R4 line of its check step, that every
+recorded pass still pass in a run made now, and its `conformance/README.md`
+rules that a runner targeting the current version filters a retired case out
+of that run. Which reading predicator-ex intends for an entry recorded for a
+retired case is part of the question that paragraph raises there.
+
+**The word "unchanged" in the five-part sentence is inaccurate.** The R5 line
+of predicator-ex's check step reads completeness over every case in the
+surface's case set up to the claimed tier, and the claim rule above reads it
+over the cases the claimed ISA version runs. The sentence beginning "The
+gate's registry check has five parts", which ends "check step, unchanged.",
+is superseded by this one: "The gate's registry check has five parts." The
+five parts that paragraph goes on to name, and its closing sentence, stand as
+written.
+
+**Where a Decision sentence carries a reason or a citation, the rule is what
+it decides.** Read by one test - a clause that gives a rule's reason or
+purpose, or cites another document as agreeing with the rule - these
+sentences of the Decision section carry such a clause:
+
+- the sentence beginning "A case tagged `retired`, whose opcodes the claimed
+  version no longer carries", whose clause "exactly as predicator-ex's
+  `conformance/README.md` rules for a runner targeting the current version"
+  is a citation;
+- the sentence beginning "It is absent from that run's case set", whose
+  clause "so the never-skip rule below does not reach it" is a reason;
+- the sentence beginning "A package claiming a version at which the opcode is
+  still live", whose clause "and that is what makes an earlier-version claim
+  verifiable" is a purpose;
+- the sentence beginning "An entry recorded for it, under a version that ran
+  it", whose clause "the filter above scopes a run, not the registry" is a
+  reason;
+- the sentence beginning "A hand edit, a formatter, or an editor that
+  reindents on save", which states the purpose of the byte comparison;
+- the sentence beginning "The gate's registry check has five parts", whose
+  naming of predicator-ex's check step is a citation, superseded as the
+  paragraph above states;
+- the sentence beginning "Entries above a claimed tier are legal", whose
+  clause "it says what the package passes without asserting a tier" is a
+  reason.
+
+In each, the rule the sentence states is what the Decision decides; the named
+clause decides nothing further, and where it and the Context or Consequences
+sections read differently, the Context reading governs.

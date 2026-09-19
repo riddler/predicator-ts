@@ -286,8 +286,12 @@ before committing.
   above the test.
 - **Process artifacts stay out of shipped prose.** Bead ids, plan phase and
   step numbers, plan filenames and workflow jargon do not appear in `src/`
-  comments, in the README, or in published docs. Dated correction and note
-  blocks are exempt: there the id is the only trace of why a paragraph moved.
+  comments, in `scripts/` comments, in the README, or in published docs.
+  `scripts/` is not in the published package, and the rule reaches it anyway:
+  gate stages and the conformance apparatus (ADR-0003) live there, and
+  a reader checking a claim this repository makes reads those comments as
+  their documentation. Dated correction and note blocks are exempt: there the
+  id is the only trace of why a paragraph moved.
 - **Examples and fixtures use the family's two canonical domains** - credit-card
   processing, and a signup wizard with A/B testing - and no others.
 - **Commit messages**: title < 50 chars, simple present tense ("Adds ...",
