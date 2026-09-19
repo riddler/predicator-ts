@@ -252,15 +252,16 @@ prefix are left out of it: without the prefix each is an ordinary package
 name, and the rule for the prefixed spelling refuses them with the prefix.
 
 **A field named for a DOM global no longer fires.** The DOM rule matched the
-name as a word wherever a member access or an index followed it, so a field
-named for a window or a document on an options object, with a member access
-after it, failed the stage. The rule now takes the member lookbehind the
-Node rule already had, plus one alternative
-(`usedAsBareOrGlobalThisMember`). It fires on the name, followed by a member
-access or an index, when the character before the name is not a dot, a word
-character or a dollar sign, or when the name `globalThis` and a dot are
-written directly before it. Other ways of reaching a DOM global through the
-global object are not caught by this rule.
+name as a word wherever a dot and a word character, or an opening bracket,
+directly followed it, so a field named for a window or a document on an
+options object, with a dot and a word character directly after it, failed
+the stage. The rule now takes the member lookbehind the Node rule already
+had, plus one alternative (`usedAsBareOrGlobalThisMember`). It fires on the
+name, followed directly by a dot and a word character or by an opening
+bracket, when the character before the name is not a dot, a word character
+or a dollar sign, or when the name `globalThis` and a dot are written
+directly before it. Other ways of reaching a DOM global through the global
+object are not caught by this rule.
 
 **A type-only import of a Node builtin still fires, and that is accepted.**
 Such an import is erased by the build and does no harm on a constrained
