@@ -34,6 +34,10 @@ export interface CaseMetadata {
 }
 
 export function loadManifest(): Manifest;
+export function throughTier<Item extends { readonly tier: number }>(
+  items: readonly Item[],
+  tier: number,
+): Item[];
 export function loadCases(tier: number, manifest?: Manifest): CaseMetadata[];
 export function surfaceCaseSet(cases: readonly CaseMetadata[], surface: Surface): CaseMetadata[];
 export function runsAtVersion(item: CaseMetadata, claimed: number, corpusVersion: number): boolean;

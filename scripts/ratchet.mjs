@@ -51,7 +51,13 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stampProblem } from "./lib/build-stamp.mjs";
-import { loadCases, loadManifest, runnableCases, surfaceCaseSet } from "./lib/corpus.mjs";
+import {
+  loadCases,
+  loadManifest,
+  runnableCases,
+  surfaceCaseSet,
+  throughTier,
+} from "./lib/corpus.mjs";
 import { encodeRegistry } from "./lib/registry-encoding.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -238,7 +244,7 @@ const entryKeys = new Set(merged.keys());
 const unsupported = [];
 for (const claim of claims.values()) {
   const required = runnableCases(
-    surfaceCaseSet(cases, claim.surface).filter((item) => item.tier <= claim.tier),
+    throughTier(surfaceCaseSet(cases, claim.surface), claim.tier),
     claim.surface,
     claimedVersion,
     manifest.isa_version,

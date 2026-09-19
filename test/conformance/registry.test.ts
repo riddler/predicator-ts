@@ -33,6 +33,7 @@ import {
   loadManifest,
   runnableCases,
   surfaceCaseSet,
+  throughTier,
 } from "../../scripts/lib/corpus.mjs";
 import type { Registry, RegistryEntry } from "../../scripts/lib/registry-encoding.mjs";
 import { encodeRegistry } from "../../scripts/lib/registry-encoding.mjs";
@@ -156,7 +157,7 @@ function completenessProblems(
   const problems: string[] = [];
   for (const claim of subject.claims) {
     const wanted = runnableCases(
-      corpus.filter((item) => item.tier <= claim.tier),
+      throughTier(corpus, claim.tier),
       claim.surface as Surface,
       claimed,
       corpusVersion,
