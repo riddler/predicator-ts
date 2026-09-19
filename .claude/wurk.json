@@ -9,6 +9,7 @@
       "labels": [
         "area:values",
         "area:evaluator",
+        "area:compiler",
         "area:functions",
         "area:casts",
         "area:conformance",
@@ -37,6 +38,7 @@
       "pnpm-lock.yaml",
       "tsconfig.json",
       "tsconfig.build.json",
+      "tsconfig.src.json",
       "tsup.config.ts",
       "vitest.config.ts",
       "biome.json"
