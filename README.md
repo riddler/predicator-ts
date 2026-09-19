@@ -654,22 +654,37 @@ predicator-ex and arrives here as a re-vendoring.
 
 **What this build claims is in `conformance/registry.json`**, which is written
 only by the ratchet script from an observed run and never by hand. It carries
-one entry per case the runner watched pass, and the claim it records is
+one entry per case the runner watched pass, and it records two claims, one per
+surface. On the evaluator:
 
 ```json
 {"surface":"evaluator","tier":9}
 ```
 
-Tiers are cumulative, so that claim covers tiers 1 through 9 on the evaluator
-surface, and it is written only when every case the claimed ISA version runs in
-those tiers has an entry - the ratchet refuses to write it otherwise. A case
-the claimed version retired is filtered out of the run rather than reported,
-and a case result is `pass` or `fail` with no third value, so nothing is
-skipped into looking finished. The corpus's other surface, the compiler, has no
-entry here: the runner runs one surface and only the evaluator's run is wired
-to it, so no compiler case has been watched pass and there is nothing observed
-for the ratchet to record. A claim there arrives in a later release, from a run
-like every other entry in the file.
+And on the compiler:
+
+```json
+{"surface":"compiler","tier":7}
+```
+
+Tiers are cumulative, so the first covers tiers 1 through 9 on the evaluator
+surface and the second covers tiers 1 through 7 on the compiler surface. A
+claim is written only when every case the claimed ISA version runs in those
+tiers has an entry - the ratchet refuses to write it otherwise. A case the
+claimed version retired is filtered out of the run rather than reported, and a
+case result is `pass` or `fail` with no third value, so nothing is skipped into
+looking finished.
+
+The two claims reach different tiers because the two surfaces run different
+case sets. The evaluator's set is every case; the compiler's is the
+source-bearing ones, and a case carrying no source is absent from that set
+rather than skipped by it. So a tier whose cases all lack a source contributes
+no compiler entry, and the completeness rule behind the compiler's claim holds
+there over nothing: tier 6 is such a tier, which is why a reader counting
+compiler entries by tier finds none for it. Tiers 8 and 9 are the same, so
+tier 7 is the last tier at which a compiler entry exists at all, and the claim
+is stated there rather than reaching past the evidence into tiers that could
+only satisfy it by being empty.
 
 Running it:
 
