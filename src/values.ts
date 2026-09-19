@@ -14,6 +14,7 @@
  * every rule this module implements.
  */
 
+import { hasPlainPrototype, setKey } from "./maps.js";
 import { enterContainer, type NestingReason } from "./nesting.js";
 
 /** The registered keys that mark an instance of each value class. */
@@ -65,8 +66,7 @@ function shareAcrossCopies(
   Object.defineProperty(valueClass, Symbol.hasInstance, {
     value: (candidate: unknown): boolean => {
       if (typeof candidate !== "object" || candidate === null) return false;
-      const proto = Object.getPrototypeOf(candidate) as unknown;
-      if (proto === null || proto === Object.prototype) return false;
+      if (hasPlainPrototype(candidate)) return false;
       if (!Object.isFrozen(candidate)) return false;
       if (ownData(candidate, key) !== true) return false;
       return fields.every((field) => typeof ownData(candidate, field) === "number");
@@ -368,23 +368,6 @@ export interface Refusal {
 /** The result of normalizing one host value. */
 export type Normalization = { readonly ok: true; readonly value: Value } | Refusal;
 
-/**
- * Writes one key of a map being built.
- *
- * It goes through `defineProperty` because the key is whatever the host or the
- * value being projected said, and a plain assignment of the key `__proto__`
- * would set the object's prototype instead of adding a member - a map read
- * back as something other than what was written.
- */
-function setKey<T>(target: { [key: string]: T }, key: string, value: T): void {
-  Object.defineProperty(target, key, {
-    value,
-    writable: true,
-    enumerable: true,
-    configurable: true,
-  });
-}
-
 class RefusalSignal extends Error {
   readonly reason: RefusalReason;
 
@@ -452,8 +435,7 @@ function normalizeNumber(value: number): Value {
 }
 
 function normalizeObject(value: object, depth: number, ancestors: Set<object>): Value {
-  const proto = Object.getPrototypeOf(value) as unknown;
-  if (proto !== null && proto !== Object.prototype) {
+  if (!hasPlainPrototype(value)) {
     throw new RefusalSignal("unsupported_host_value");
   }
   enter(value, depth, ancestors);
