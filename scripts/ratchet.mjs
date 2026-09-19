@@ -123,6 +123,21 @@ function readJson(path, what) {
   return parseJson(readBytes(path, what), path, what);
 }
 
+// The corpus is read before any report is, so a tier file holding a line that
+// does not parse reaches this script as a throw from the loader rather than as
+// anything a later check could refuse. The loader supplies the file, the line
+// and the parser's reason, because that is what it knows; the refusal is this
+// script's own, because this is where the script's refusals live.
+function loadCasesOrDie(tier, manifest) {
+  try {
+    return loadCases(tier, manifest);
+  } catch (error) {
+    die(`the vendored corpus does not read: ${error.message}`, [
+      "Nothing was written. A tier file the manifest lists holds a line that is not JSON.",
+    ]);
+  }
+}
+
 // A report is refused before a field of it is read when its stamp does not
 // tie these bytes to the build and corpus on disk.
 function readReport(path) {
@@ -159,7 +174,7 @@ const {
 
 const manifest = loadManifest();
 const registry = readJson(registryPath, "the registry");
-const cases = loadCases(Math.max(...manifest.tiers.map((tier) => tier.tier)), manifest);
+const cases = loadCasesOrDie(Math.max(...manifest.tiers.map((tier) => tier.tier)), manifest);
 const tierOf = new Map(cases.map((item) => [item.id, item.tier]));
 
 // The candidate set: every (case, surface) pair a report observed passing.

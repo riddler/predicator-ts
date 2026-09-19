@@ -61,15 +61,36 @@ export function throughTier(items, tier) {
  * The manifest says which files exist and what tier each one carries, so
  * nothing here globs a directory: a tier file the manifest does not list is
  * drift, and the corpus check is where drift is caught.
+ *
+ * A line that does not parse is reported rather than thrown raw. The file and
+ * the line number are known here and nowhere above, so they are what this adds;
+ * the parser's own message is kept, because a refusal that loses the reason is
+ * worse for whoever is debugging a real corpus than the stack trace it
+ * replaces. It throws rather than exits: this module is a reader with no
+ * console and no process of its own, and a caller that is a script decides what
+ * a refusal looks like.
+ *
+ * Sabotage: removing the try around the parse turns the ratchet's
+ * unreadable-corpus case red - the refusal still prints, but with the parser's
+ * bare message where the file and the line belong, so the case that asserts the
+ * tier file's path fails. It was run and reverted.
  */
 export function loadCases(tier, manifest = loadManifest()) {
   const files = throughTier(manifest.tiers, tier).sort((left, right) => left.tier - right.tier);
   const cases = [];
   for (const entry of files) {
-    const text = readFileSync(join(conformanceRoot, entry.file), "utf8");
-    for (const line of text.split("\n")) {
+    const path = join(conformanceRoot, entry.file);
+    const text = readFileSync(path, "utf8");
+    const lines = text.split("\n");
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
       if (line === "") continue;
-      const record = JSON.parse(line);
+      let record;
+      try {
+        record = JSON.parse(line);
+      } catch (error) {
+        throw new Error(`${path} line ${index + 1} is not JSON: ${error.message}`);
+      }
       cases.push({
         id: record.id,
         tier: record.tier,
