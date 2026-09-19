@@ -136,9 +136,12 @@ export interface Span {
  * set grows, which is the whole benefit of closing it and the whole cost of
  * widening it.
  *
- * Each member names one message family, and the message text a refusal
- * carries is the reference's own, verbatim. A caller switches on the reason
- * and never matches on the text.
+ * Members are of two kinds. Most name one message family of the reference and
+ * carry its message verbatim, and those are the reference's to reword. The
+ * rest are this package's own, for a source the reference does not answer for
+ * at all, and their message is authored here. A caller switches on the reason
+ * either way and never matches on the text, which is what lets one union hold
+ * both kinds.
  *
  * One member per line, and the members grouped by the stage that produces
  * them, so that the stages still to be written append to this union instead
@@ -174,7 +177,11 @@ export type ParseReason =
   | "expected_now"
   | "expected_duration"
   | "duration_fraction"
-  | "duration_unit_twice";
+  | "duration_unit_twice"
+  // Emission: what building the domain value for a literal refuses. The
+  // reference raises here rather than answering, so this member's message is
+  // this package's own and not one quoted from it.
+  | "number_out_of_range";
 
 /**
  * A source string the grammar refused.

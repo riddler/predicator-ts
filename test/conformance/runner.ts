@@ -154,14 +154,17 @@ export function sameValue(left: Value, right: Value): boolean {
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!(Array.isArray(left) && Array.isArray(right))) return false;
     if (left.length !== right.length) return false;
-    return left.every((item, at) => sameValue(item, right[at] ?? Undefined));
+    // The member is read by index and not defaulted: the lengths are equal, so
+    // there is a member at every index, and a `??` here would read a member
+    // that IS the null literal as the absence - which compares false against
+    // the same null on the other side, and true against a genuine absence.
+    return left.every((item, at) => sameValue(item, right[at] as Value));
   }
   if (isMap(left) && isMap(right)) {
     const keys = Object.keys(left);
     if (keys.length !== Object.keys(right).length) return false;
     return keys.every(
-      (key) =>
-        Object.hasOwn(right, key) && sameValue(left[key] ?? Undefined, right[key] ?? Undefined),
+      (key) => Object.hasOwn(right, key) && sameValue(left[key] as Value, right[key] as Value),
     );
   }
   return left === right;
