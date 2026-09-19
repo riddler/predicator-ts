@@ -562,10 +562,16 @@ describe("locating a fault in a JSON text", () => {
 // and a comment is the one thing here that nothing executes against, which is
 // why more than one of them has had to be corrected. What CAN be executed is
 // this package's side of each claim, and that is what this block does. The
-// reference's side stays a recorded observation, read at its pinned toolchain,
-// because the reference cannot run here - and that is exactly the half the
-// corrections have been in, so a pin beside a declaration is not a substitute
-// for writing the declaration carefully.
+// reference cannot run here, and its side is exactly the half the corrections
+// have been in, so a pin beside a declaration is not a substitute for writing
+// the declaration carefully.
+//
+// For the declarations this block pins - the float rendering, the unit of a
+// string position, and trimming - the reference's side is a transcript rather
+// than a reading: `conformance/transcript/` holds what the reference answered,
+// run at the vendored tag, and `test/reference-transcript.test.ts` diffs both
+// sides row by row. The declarations pinned elsewhere, named below, are not in
+// the transcript.
 //
 // Declarations pinned elsewhere are not repeated here: the memoized clock, the
 // refusal to serialize a value JSON has no form for, and the ones the
@@ -593,7 +599,8 @@ describe("the declared divergences, on the side that can be executed", () => {
     // Two neighbouring small magnitudes that fall on OPPOSITE SIDES of the
     // reference's choice, which is why both of them are here. The reference
     // writes the first out in full, character for character what this package
-    // writes; it writes the second with an exponent, where this package still
+    // writes (the transcript row `float-json/1e-4`); it writes the second with
+    // an exponent (the row `float-json/1e-5`), where this package still
     // writes it out. Neither of the two says anything about the other, and
     // that is what having no threshold means. Both assertions below are this
     // package's own rendering, which writes both of them in full.

@@ -459,3 +459,78 @@ sentences of the Decision section carry such a clause:
 In each, the rule the sentence states is what the Decision decides; the named
 clause decides nothing further, and where it and the Context or Consequences
 sections read differently, the Context reading governs.
+
+## Amendment: a transcript of the reference, diffed in the suite (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+Recorded for `pts-bx8`. This amendment is appended, and removes no line above.
+Code is cited as this change leaves it.
+
+What this amends. The decision above makes the vendored corpus the one record
+here of what the reference answers. Where this package declares that it
+answers differently from the reference and no vendored case reaches the
+difference, the reference's half of that declaration was prose, read off a run
+of the reference, and nothing in this repository executed against it. This
+amendment adds a second record beside the corpus: a transcript of the
+reference's own answers, generated at the vendored tag and diffed in the suite.
+
+**The transcript is vendored beside the corpus, at the corpus's tag.**
+`conformance/transcript/transcript.json` holds one row per line, each in the
+shape of a corpus case, whose `expected_result` is what the reference answered.
+`conformance/transcript/SOURCE.json` records the upstream repository, the tag,
+the commit `conformance/SOURCE.json` names for that tag, the corpus hash, the
+toolchain the reference ran on, the command that wrote the file, and the file's
+sha256.
+
+**This repository writes the questions and the reference answers them.** Each
+row is authored as a source and a context in
+`scripts/lib/reference-transcript.exs`, and the reference's own corpus
+generator, `Predicator.Conformance.Generator.generate/1`, compiles it, runs it
+and records the answer, in an export of the tag. A row is not a corpus case:
+the decision above that this repository authors no case is about the corpus,
+and the transcript is not part of it.
+
+**The transcript is written only by `scripts/reference-transcript.mjs`, run by
+a person**, and its diff is read like any other. No build step, test or gate
+stage runs the reference or rewrites the transcript. The script refuses an
+export whose `mix.exs` declares a version other than the tag's, a tag other
+than the one `conformance/SOURCE.json` records, and an export whose corpus hash
+is not the vendored one. A refresh of the corpus to a later tag is therefore
+followed by a regeneration of the transcript at that tag.
+
+**The suite diffs every row** (`test/reference-transcript.test.ts`). The
+transcript's sha256 equals the one its `SOURCE.json` records, and that file's
+tag, commit and corpus hash equal `conformance/SOURCE.json`'s. A row the test's
+`DECLARED` table does not name must agree: this package's answer is the
+reference's, compared in the value domain as the runner compares a case
+(`sameValue` in `test/conformance/runner.ts`). A row the table names is a
+declared divergence, and its entry carries both answers; the row fails when the
+reference's answer is not the entry's, when this package's answer is not the
+entry's, and when the two answers agree.
+
+**A row that differs is declared, never edited away.** The transcript is not
+edited to make a row agree, and the table is where a difference is recorded.
+Each entry names the place in `src/` where the difference is declared.
+
+**A declaration of how this package differs from the reference cites the
+transcript rows that show it**, where the transcript carries any. The comments
+declaring how a float is written (`floatText` in `src/floats.ts`, and the
+header of `src/functions/json.ts`) and the unit of a string position and the
+set trimming removes (the header of `src/functions/string.ts`) cite them.
+
+**The transcript is not a conformance record.** It is outside the hash rule,
+the registry names none of its rows, and a row that agrees is not a claim of
+conformance: the corpus remains the contract, and the transcript records what
+the reference answered to questions the corpus does not ask.
+
+What was observed, on 2026-09-19, by running it: the script, run on an export
+of predicator-ex `v9.4.1` under Elixir 1.18.3 and OTP 27, wrote the transcript
+this change vendors, and a second run wrote the same bytes.
+
+Consequences. A sentence about the reference's half of a declared divergence
+can now go red: a regeneration at a later tag that moves the reference's
+answer, and a change here that moves this package's, each fail the row that
+shows it. A declaration no row covers is still a reading, and covering it is a
+row added to the value set in `scripts/lib/reference-transcript.exs` and a
+regeneration, not a sentence rewritten.

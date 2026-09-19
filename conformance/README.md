@@ -1,9 +1,10 @@
 # The vendored conformance corpus
 
-Everything in this directory except this file and `registry.json` is a
-byte-for-byte copy of the reference implementation's conformance material,
-taken at a named tag. Nothing here is authored in this repository: no case, no
-schema, not a reformat and not a trailing-newline fix.
+Everything in this directory except this file, `registry.json` and
+`transcript/` is a byte-for-byte copy of the reference implementation's
+conformance material, taken at a named tag. Nothing in that copy is authored
+in this repository: no case, no schema, not a reformat and not a
+trailing-newline fix.
 
 `SOURCE.json` says which copy this is - the upstream repository, the tag, the
 commit that tag resolves to, and the corpus hash and instruction-set version
@@ -21,9 +22,19 @@ which is why a tag is what is recorded.
 - `schema/*.json` - the upstream schemas for a case, the corpus, the manifest,
   the registry and a runner report.
 - `SOURCE.json` - the vendoring record described above.
-- `registry.json` - ours, and the only file here this repository writes. It is
-  the record of which cases this package passes, on which surface. It is
-  written by the ratchet script from an observed run and is never hand-edited.
+- `registry.json` - ours. It is the record of which cases this package passes,
+  on which surface. It is written by the ratchet script from an observed run
+  and is never hand-edited.
+- `transcript/` - what the reference answered, run at the same tag, over
+  values chosen for what this package declares it answers differently where
+  no case reaches: how a float is written as text, the unit a string position
+  is counted in, and what trimming removes. `transcript/transcript.json` holds
+  the rows, one per line in the shape of a case; `transcript/SOURCE.json`
+  records the tag, the toolchain the reference ran on, the command that wrote
+  the file and the file's sha256. It is written only by
+  `scripts/reference-transcript.mjs`, from an export of the reference at the
+  tag, and never hand-edited; `test/reference-transcript.test.ts` diffs this
+  package's answer against each row.
 
 The tag carries other conformance material beside those - the authored case
 sources the tier files are generated from, and a worked-example registry - and
@@ -36,6 +47,7 @@ pnpm corpus:check     # the hash rule; a stage of the full gate
 pnpm run test         # the runner, its report, and the registry checks
 pnpm ratchet          # verify-then-add, the only writer of registry.json
 pnpm corpus:refresh --from <path-to-predicator-ex> --tag <tag>
+node scripts/reference-transcript.mjs --from <export of the tag> --tag <tag>
 ```
 
 A refresh is a deliberate, reviewed change. It is run by a person, its diff is
