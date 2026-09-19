@@ -774,14 +774,28 @@ type TakenDate =
  * closing marker is unterminated whichever it would have been, and the
  * reference reports that with the date wording.
  *
- * One divergence is declared rather than closed, and it is the same one the
- * date and instant readers already declare: the reference reads a leading
- * minus on a body as the sign of the year, and this refuses it. A second is
- * narrower and is only visible in message text: the reference truncates each
- * character of a body to a single byte, so a body holding a character outside
- * the ASCII range is mangled before it is parsed, and this keeps the
- * character. Both bodies are refused either way; only the text of the refusal
- * differs.
+ * Two divergences from the reference are declared rather than closed, and the
+ * first of them changes the answer and not only its wording.
+ *
+ * The reference admits a leading sign on a body and reads it as the sign of
+ * the year. Run at the vendored tag, `#-0001-01-01#` answers a date token
+ * whose year is negative, the instant spelling answers a datetime token, and a
+ * leading plus is admitted too and simply dropped. This refuses every one of
+ * those, because the calendar and instant readers in `src/iso.ts` refuse a
+ * leading sign - a divergence that module declares for the cast, and which
+ * this inherits by routing through it. So for a signed body the two token
+ * streams differ in kind rather than in wording: the reference accepts where
+ * this refuses. The refusal is what this package wants, because the `::string`
+ * direction writes a year as four unsigned digits and a negative year would
+ * therefore read in and fail to write back out; what is declared here is that
+ * the streams are not the same for that construct.
+ *
+ * The second is narrower and is visible only in message text: the reference
+ * truncates each character of a body to a single byte before parsing it, so a
+ * body holding a character outside the ASCII range is mangled before it is
+ * refused - at the tag the resulting message is not even well-formed text -
+ * and this keeps the character. Such a body is refused either way; only the
+ * text of the refusal differs.
  */
 function takeDate(
   chars: readonly string[],
