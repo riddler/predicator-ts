@@ -84,13 +84,27 @@ import { builtin, isString, refuse } from "./support.js";
  * Serializes a value.
  *
  * A temporal member and the absence have no JSON form at all, and this refuses
- * them. THAT IS A DECLARED DIVERGENCE: the reference never fails here, falling
- * back to its host language's own inspect rendering for a value its serializer
- * cannot take, and this package has no analogue of that rendering to fall back
- * to - inventing one would put a format nobody specified into a string a host
- * might store. No conformance case serializes a value outside the JSON shapes,
- * so this too is pinned only on the side that can be executed: the suite
- * asserts the refusal, and that it names the member of the domain it refused.
+ * them. THAT IS A DECLARED DIVERGENCE: the reference never fails here, and
+ * this package has no form to answer with that the instruction set or the
+ * corpus fixes - inventing one would put a format nobody specified into a
+ * string a host might store.
+ *
+ * WHAT THE REFERENCE ANSWERS INSTEAD IS A TRANSCRIPT ROW, NOT A READING, and
+ * it is not one answer but two kinds. Asked at the vendored tag, it wrote a
+ * date and an instant each as a JSON string holding its ISO text, a duration
+ * as a JSON object of its parts, and the absence as the JSON string
+ * `"undefined"` - which is what its host encoder makes of the value that
+ * stands for the absence, and not a form of the domain. ITS ENCODER SUCCEEDED
+ * ON ALL FOUR: the arm that falls back to the host language's own inspect
+ * rendering ran for none of them, and that rendering of the absence is a
+ * different text again, carrying no quotation marks at all. Those are the
+ * rows whose ids begin `json-form/` in `conformance/transcript/`, and
+ * `test/reference-transcript.test.ts` declares each with both answers, so a
+ * row fails when either side moves.
+ *
+ * No conformance case serializes a value outside the JSON shapes, so this
+ * package's half is pinned on the side that can be executed: the suite asserts
+ * the refusal, and that it names the member of the domain it refused.
  */
 function serialize(value: Value): string {
   if (value === null) return "null";

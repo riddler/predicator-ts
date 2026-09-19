@@ -63,7 +63,13 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
  * a minus before a year of four zeroes, which makes no year negative; each is
  * refused beside the negative year so that the sign is one rule rather than
  * two.
- * That divergence is declared rather than closed.
+ * That divergence is declared rather than closed, and the reference's half of
+ * it is a run: the transcript row `leading-sign/datetime-plus` in
+ * `conformance/transcript/` holds the instant the reference answers for a
+ * leading plus, against the absence this parse answers. A minus is not a row
+ * there, because the value the reference answers for one - a negative year, or
+ * the year zero - is outside the wire form a row is read back through; the
+ * refusal of a minus stays pinned on the side that can be executed.
  *
  * Nor does it admit an offset whose hour or minute field holds a sign where
  * the field's first digit belongs, and the reference does: its parser reads
@@ -148,6 +154,12 @@ export function formatDateTime(value: PDateTime): string {
  * not write back. A plus names a year this shape already admits without it,
  * and so does a minus before a year of four zeroes; each is refused beside the
  * negative year so that the sign is one rule rather than two.
+ *
+ * The reference's half is a run, not a reading: the transcript row
+ * `leading-sign/date-plus` in `conformance/transcript/` holds the date the
+ * reference answers for a leading plus, against the absence this parse
+ * answers. A minus is not a row there for the reason the datetime shape gives
+ * above.
  */
 export function readDate(text: string): PDate | undefined {
   const match = DATE_TEXT.exec(text);

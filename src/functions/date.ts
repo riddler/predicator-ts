@@ -47,6 +47,15 @@ const day = builtin("Date.day()", [1], (args) => civilDate("Date.day()", args[0]
  * the clock twice inside one evaluation, asserts the two calls answer the same
  * instant, and asserts the host's own clock was asked once per evaluation
  * rather than once per call.
+ *
+ * THE REFERENCE HALF IS A TRANSCRIPT ROW, NOT A READING. The reference cannot
+ * run here, so it was asked, at the vendored tag, whether two reads of its
+ * clock inside one expression answer the same instant. It answered that they
+ * do not. That answer is the row `clock/two-reads-in-one-evaluation` in
+ * `conformance/transcript/`, which `test/reference-transcript.test.ts`
+ * declares with both answers: false there, true here. It is the one row in
+ * that file whose reference answer is a property of the run rather than of
+ * the tag, and the transcript's generator says so where the case is authored.
  */
 export function clockFunction(readNow: () => PDateTime): HostFunction {
   return builtin("Date.now()", [0], () => readNow());
