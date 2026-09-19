@@ -556,10 +556,13 @@ above and decides nothing, so it carries no Status line. Code is cited as this
 change leaves it.
 
 **The sentence "No other declaration cites the transcript." no longer holds,
-and this note supersedes it.** It closes the amendment's paragraph that begins
-"The code and test comments that declare the divergences the transcript covers
-cite its rows". One further comment now cites the transcript's rows: the
-comment on `DATETIME_TEXT` in `src/iso.ts`, which cites the rows whose ids
-begin `datetime-offset/`, for the UTC offset spellings the datetime cast
-reads, as agreeing with the reference except where it declares a difference.
-The rest of that paragraph stands.
+and this note supersedes it.** It sits in the amendment's paragraph that
+begins "The code and test comments that declare the divergences the transcript
+covers cite its rows". The comment on `DATETIME_TEXT` in `src/iso.ts` also
+cites the transcript's rows: the rows whose ids begin `datetime-offset/`,
+which put spellings of a UTC offset to the datetime cast, and which it cites
+as agreeing with the reference except where it declares a difference.
+
+**This note extends that paragraph's list of citing comments**, the sentence
+beginning "Those are the comments declaring", by the comment on
+`DATETIME_TEXT` in `src/iso.ts`. The paragraph's other sentences stand.
