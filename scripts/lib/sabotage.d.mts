@@ -8,6 +8,7 @@ export declare const INVALID: {
   readonly MALFORMED_REPORT: "malformed-report";
   readonly STALE_REPORT: "stale-report";
   readonly FAILED_SUITE: "failed-suite";
+  readonly FAILED_COUNT_MISMATCH: "failed-count-mismatch";
   readonly NO_BASELINE: "no-baseline";
   readonly BELOW_BASELINE: "below-baseline";
   readonly ERROR_OUTSIDE_TESTS: "error-outside-tests";

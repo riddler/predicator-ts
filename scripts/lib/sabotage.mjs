@@ -22,6 +22,8 @@
 //     left on disk by an earlier run is not evidence of this one);
 //   - no test file failed to load - a file whose result is failed while none
 //     of its tests failed is a suite that never ran its tests;
+//   - the aggregate count of failed tests is the one the per-file results add
+//     up to, so a verdict is never read off a count no test accounts for;
 //   - the number of tests that actually ran is at or above a recorded
 //     baseline, and the baseline itself is above zero;
 //   - the runner's exit status and its own success flag agree with the tests
@@ -46,6 +48,7 @@ export const INVALID = Object.freeze({
   MALFORMED_REPORT: "malformed-report",
   STALE_REPORT: "stale-report",
   FAILED_SUITE: "failed-suite",
+  FAILED_COUNT_MISMATCH: "failed-count-mismatch",
   NO_BASELINE: "no-baseline",
   BELOW_BASELINE: "below-baseline",
   ERROR_OUTSIDE_TESTS: "error-outside-tests",
@@ -78,6 +81,23 @@ export function failedSuites(report) {
     }
   }
   return out;
+}
+
+/**
+ * The number of individual tests the per-file results record as failed.
+ *
+ * This is the second account of a number the report also states in aggregate,
+ * and the two are compared rather than one being trusted.
+ */
+function failedAssertions(report) {
+  let count = 0;
+  for (const file of report.testResults) {
+    const assertions = Array.isArray(file.assertionResults) ? file.assertionResults : [];
+    for (const assertion of assertions) {
+      if (assertion.status === "failed") count += 1;
+    }
+  }
+  return count;
 }
 
 /**
@@ -119,6 +139,27 @@ export function classifyRun(run, baseline) {
     return invalid(
       INVALID.FAILED_SUITE,
       `a test file failed without running its tests: ${broken.join("; ")}`,
+      executed,
+      failed,
+    );
+  }
+
+  // The aggregate counts are the runner's summary of the per-file results,
+  // and every decision from here down is made on them - including the verdict
+  // itself, which is "caught" exactly when the aggregate failed count is above
+  // zero. A report whose aggregate claims a failed test that none of its files
+  // records is therefore read as a caught mutation with nothing having caught
+  // anything: the same shape as the faults above, a verdict reached where the
+  // evidence for it is absent. So the aggregate is checked against the results
+  // it claims to summarise before it is read.
+  //
+  // The failed count is the one compared, because it is the one the verdict
+  // rests on.
+  const recorded = failedAssertions(report);
+  if (failed !== recorded) {
+    return invalid(
+      INVALID.FAILED_COUNT_MISMATCH,
+      `the report counts ${failed} failed, its files record ${recorded}`,
       executed,
       failed,
     );

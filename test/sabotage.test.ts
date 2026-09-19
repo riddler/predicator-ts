@@ -90,7 +90,18 @@ function run(r: Run["report"], exitStatus: number | null = 0): Run {
 describe("classifyRun on constructed reports", () => {
   // Sabotage: reading `failed > 0` as survived and 0 as caught swaps both verdicts.
   it("reads a valid run as caught when a test failed and survived when none did", () => {
-    const caught = report({ numPassedTests: 2, numFailedTests: 1, success: false });
+    const caught = report({
+      numPassedTests: 2,
+      numFailedTests: 1,
+      success: false,
+      testResults: [
+        {
+          name: "a.test.mjs",
+          status: "failed",
+          assertionResults: [{ status: "failed" }, { status: "passed" }],
+        },
+      ],
+    });
     expect(classifyRun(run(caught, 1), 3)).toMatchObject({ valid: true, verdict: "caught" });
     expect(classifyRun(run(report()), 3)).toMatchObject({ valid: true, verdict: "survived" });
   });
@@ -146,6 +157,37 @@ describe("classifyRun on constructed reports", () => {
       ],
     });
     expect(classifyRun(run(r, 1), 3).verdict).toBe("caught");
+  });
+
+  // The aggregate counts and the per-file results are two accounts of the same
+  // run, and the verdict is read off the aggregate. These two reports are the
+  // disagreements that matter, and every other check here passes both of them:
+  // the file loaded, the count meets the baseline, and the success flag and the
+  // exit status agree with the aggregate. On the aggregate alone the first is a
+  // caught mutation with nothing caught, and the second a surviving one with a
+  // test failing.
+  // Sabotage: dropping the comparison of the failed count with the per-file
+  // results turns this red - the first report reads as caught, the second as
+  // survived.
+  it("calls a report whose failed count its files do not account for invalid", () => {
+    const claimsOne = report({ numPassedTests: 2, numFailedTests: 1, success: false });
+    const c = classifyRun(run(claimsOne, 1), 3);
+    expect(c).toMatchObject({ verdict: "invalid", reason: INVALID.FAILED_COUNT_MISMATCH });
+    expect(c.detail).toBe("the report counts 1 failed, its files record 0");
+
+    const claimsNone = report({
+      testResults: [
+        {
+          name: "a.test.mjs",
+          status: "failed",
+          assertionResults: [{ status: "failed" }, { status: "passed" }],
+        },
+      ],
+    });
+    expect(classifyRun(run(claimsNone), 3)).toMatchObject({
+      verdict: "invalid",
+      reason: INVALID.FAILED_COUNT_MISMATCH,
+    });
   });
 
   // Sabotage: comparing against the baseline with `<=` or not at all turns this red.
