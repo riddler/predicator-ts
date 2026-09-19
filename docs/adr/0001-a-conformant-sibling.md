@@ -274,24 +274,27 @@ the import rules would change no outcome.
 
 ## Note: four Decision sentences read as Context, and the upstream sentence on copying the tagged encoding (2026-09-19)
 
-Recorded for pts-206. This note says how four sentences of the Decision above
-are read, where the record index's promise of extra sections stands for this
-record, and how the tagged-encoding paragraph stands beside an upstream
-sentence it did not cite. It changes nothing the Decision decides, and no
-sentence it names is removed; what it supersedes, in each case, is the reading
-of the sentence it names.
+Recorded for pts-206. This note says how four sentences of the Decision above,
+and the first clause of a fifth, are read, where the record index's promise of
+extra sections stands for this record, and how the tagged-encoding paragraph
+stands beside an upstream sentence it did not cite. It changes nothing the
+Decision decides, and no sentence of this record is removed. For each Decision
+sentence it names, what it supersedes is how that sentence is read. The index
+sentence it names was replaced in the index itself, which is not a record, and
+the upstream clause it names is placed beside this record, not superseded.
 
-**Four sentences in the Decision are Context, not rules.** Each sits beside a
-rule that stands without it.
+**Four sentences in the Decision read as Context, not rules.** Each sits beside
+a rule that stands without it.
 
 The sentence opening "Each of those is absent or differently behaved", in the
-engine-neutrality paragraph, is the reason for that paragraph's rule. The rule
-is the sentence before it, opening "So under `src/`".
+engine-neutrality paragraph, is a reason. The rule it gives the reason for is
+the sentence before it, opening "So under `src/`".
 
 The sentence opening "Four members of the value domain do not survive", in the
 tagged-encoding paragraph, states the fact that paragraph answers and cites the
-upstream text it follows. The rule is the paragraph's bold heading and the
-sentence opening "This package offers a codec for it".
+upstream text it follows. The paragraph's rule is its bold heading and the two
+sentences after it, opening "This package offers a codec for it" and
+"The main entry point neither emits".
 
 The sentence opening "This follows `px-ADR-0004`", in the errors-are-values
 paragraph, gives that paragraph's source and its reason. The rule is the
@@ -304,12 +307,13 @@ longer true: ADR-0002 (`0002-the-value-domain-and-the-host-boundary.md`) and
 ADR-0003 (`0003-the-conformance-apparatus.md`) are written. The delegation and
 the sentence opening "A rule stated here is binding on both" stand.
 
-One further sentence has the same standing as that last one: the one opening
-"The mechanical check that `src/` holds to it is not in place yet", in the
-engine-neutrality paragraph. The check is now in place as the stage the note
-above on what the engine-neutrality stage scans describes
-(`scripts/engine-neutrality.mjs`), and the rule that the paragraph's rule
-stands whether or not the check is in place is unchanged.
+One further sentence, in the engine-neutrality paragraph, opens with a status
+of the same kind: the one opening "The mechanical check that `src/` holds to
+it is not in place yet". That first clause is no longer true; the check is now
+in place as the stage the note above on what the engine-neutrality stage scans
+describes (`scripts/engine-neutrality.mjs`). The sentence's second clause,
+that the paragraph's rule stands whether or not the check is in place, is a
+rule, and it is unchanged.
 
 **The index's promise of extra sections.** The record index
 (`docs/adr/README.md`) said that a new record carries typespecs and
@@ -317,25 +321,26 @@ worked-example sections beyond the three standard ones. Its sentence now asks
 for a Typespecs section in a record that states a public signature, and for a
 Worked example section in a record that states one or defines the shape of a
 JSON document. This record states no signature and defines no document's shape,
-so it carries neither section, and the index's earlier sentence is superseded
-for it by the narrowed one.
+so it carries neither section. The narrowed sentence replaced the earlier one
+in the index.
 
 **The upstream sentence on copying the tagged encoding.** At the vendored tag
 `v9.4.1`, predicator-ex's `conformance/README.md` and its `docs/isa.md`
 section 3 each call the tagged encoding corpus apparatus and say, in the same
 words, that "a consumer adopting it copies it rather than calls it". The
-tagged-encoding paragraph above did not cite that clause. The clause says what
-predicator-ex offers: the encoding is not a published API there, so a consumer
-has nothing upstream to call and implements the encoding from its
-specification. This package is such a consumer. Its codec (`decodeTagged` and
-`encodeTagged` in `src/tagged.ts`, read at `8711dcd`) is written here, in
-TypeScript, from that specification, so it is a copy in the clause's sense. A
+tagged-encoding paragraph above did not cite that clause. This record reads
+the clause as saying what predicator-ex offers: the encoding is not a
+published API there, so a consumer has nothing upstream to call and
+implements the encoding from its specification. On that reading this package
+is such a consumer. Its codec (`decodeTagged` and `encodeTagged` in
+`src/tagged.ts`, read at `8711dcd`) is written here, in TypeScript, from that
+specification, and this record reads it as a copy in the clause's sense. A
 consumer of this package that imports the codec from `./tagged` calls this
 package's code, not predicator-ex's. The tagged-encoding paragraph above
 bounds that offer: the encoding stays the corpus's and is revised by
-regenerating the corpus. The upstream `conformance/README.md` gives the
-encoding the same standing: nothing about it becomes normative outside the
-corpus, and it stays free to be revised by regenerating the corpus. If
-predicator-ex means the clause to bar a sibling from offering its copy to its
-own consumers, that is a question to raise there, as the Consequences above
-say of a behavior this package cannot derive from predicator-ex.
+regenerating the corpus. The upstream `conformance/README.md` says that
+nothing about the encoding becomes normative outside the corpus and that it
+stays free to be revised by regenerating the corpus, which this record reads
+as the same standing. If predicator-ex means the clause to bar a sibling from
+offering its copy to its own consumers, that is a question to raise there,
+and this note does not settle it.
