@@ -156,9 +156,10 @@ function isDurationKey(key: string): key is DurationKey {
  * value domain holds such a date and does arithmetic on it, so the refusal is
  * this encoding's rather than the domain's, and it is stated here rather than
  * in the shared calendar test because widening it would change what this codec
- * accepts off the wire. A date in those years therefore writes to wire text
- * that does not read back, which is a hole in this encoding and not in the
- * cast.
+ * accepts off the wire. The encoder reads the text it writes back through this
+ * test and refuses a date that fails it, so a date in those years is refused
+ * on the way out as it is on the way in, and no text is written that this
+ * decoder will not read.
  */
 function isWireDate(year: number, month: number, day: number): boolean {
   return year >= 100 && isCivilDate(year, month, day);
