@@ -32,7 +32,18 @@ import {
 import { evaluate } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
 import { DEPTH_LIMIT } from "../src/nesting.js";
-import { Duration, Float, float, PDate, PDateTime, Undefined, type Value } from "../src/values.js";
+import { decodeTagged } from "../src/tagged.js";
+import {
+  Duration,
+  Float,
+  float,
+  fromHost,
+  isInteger,
+  PDate,
+  PDateTime,
+  Undefined,
+  type Value,
+} from "../src/values.js";
 
 const APPROVED = [
   ["load", "authorization"],
@@ -862,6 +873,54 @@ describe("unary minus", () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.reason).toBe("unary_minus");
+  });
+
+  // Unary minus applies no safe-range test of its own. It needs none only
+  // because the admitted integer range is symmetric, so negating an admitted
+  // integer cannot leave it. This package states the range only through the
+  // host's safe-integer predicate, and this test pins that premise. It asks
+  // the domain's integer predicate, and four sites that admit an integer -
+  // the host boundary, a literal, an arithmetic result and the tagged
+  // decoder - whether each takes a number, for the numbers at and next to
+  // each power of two up to just past the bound, and holds each answer for a
+  // number to its answer for the negation. It probes those numbers and no
+  // others, so a site answering one unprobed number differently from its
+  // negation is not caught here.
+  //
+  // Sabotage: moving either end of the range, in or out, at any one of those
+  // five sites, or making one of them answer a probed number differently from
+  // its negation, falsifies the rule that an integer is admitted exactly when
+  // its negation is, and turns this test red. Each of those mutations was run
+  // at each site and reverted.
+  it("admits an integer exactly when it admits its negation", () => {
+    const bound = Number.MAX_SAFE_INTEGER;
+    const admits: ReadonlyArray<readonly [string, (n: number) => boolean]> = [
+      ["isInteger", (n) => isInteger(n)],
+      ["fromHost", (n) => fromHost(n).ok],
+      ["lit", (n) => evaluateToValue([["lit", n]]).ok],
+      [
+        "add",
+        (n) => {
+          const left = Math.max(-bound, Math.min(bound, n));
+          return evaluateToValue([["lit", left], ["lit", n - left], ["add"]]).ok;
+        },
+      ],
+      ["decodeTagged", (n) => decodeTagged(String(n)).ok],
+    ];
+    const probes = [2 ** 53 + 2];
+    for (let power = 0; power <= 53; power += 1) {
+      probes.push(2 ** power - 1, 2 ** power, 2 ** power + 1);
+    }
+    for (const [site, admitted] of admits) {
+      const lopsided = probes.filter((n) => admitted(n) !== admitted(-n));
+      expect({ site, lopsided }).toEqual({ site, lopsided: [] });
+      expect({ site, ends: [admitted(bound), admitted(bound + 1)] }).toEqual({
+        site,
+        ends: [true, false],
+      });
+    }
+    expect(evaluateToValue([["lit", -bound], ["unary_minus"]])).toEqual({ ok: true, value: bound });
+    expect(evaluateToValue([["lit", bound], ["unary_minus"]])).toEqual({ ok: true, value: -bound });
   });
 });
 
