@@ -35,6 +35,14 @@
 // this one refuses. This script reads the package's version out of the reports,
 // which is where the run recorded it.
 //
+// A REPORT IS READ ONLY WHEN ITS STAMP TIES IT TO WHAT IS ON DISK. Reports
+// live under an ignored directory, so the one there is whatever was last
+// written, by whatever build was checked out or mutated at the time. The
+// runner writes a stamp beside each report, and this script refuses a report
+// with no stamp, a stamp written for other bytes, or a stamp whose digest of
+// the package source and the vendored corpus is not the digest of those files
+// now. What the stamp covers is `scripts/lib/build-stamp.mjs`'s to say.
+//
 // The encoding is not decided here either: `scripts/lib/registry-encoding.mjs`
 // is the one implementation of it, and the registry check re-encodes through
 // the same module and compares bytes.
@@ -42,6 +50,7 @@
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stampProblem } from "./lib/build-stamp.mjs";
 import { loadCases, loadManifest, runnableCases, surfaceCaseSet } from "./lib/corpus.mjs";
 import { encodeRegistry } from "./lib/registry-encoding.mjs";
 
@@ -88,18 +97,37 @@ function parseArguments(argv) {
   return { reports, claims, registry };
 }
 
-function readJson(path, what) {
-  let text;
+function readBytes(path, what) {
   try {
-    text = readFileSync(path, "utf8");
+    return readFileSync(path);
   } catch {
     die(`cannot read ${what} at ${path}`);
   }
+}
+
+function parseJson(bytes, path, what) {
   try {
-    return JSON.parse(text);
+    return JSON.parse(bytes.toString("utf8"));
   } catch (error) {
     die(`${what} at ${path} is not JSON: ${error.message}`);
   }
+}
+
+function readJson(path, what) {
+  return parseJson(readBytes(path, what), path, what);
+}
+
+// A report is refused before a field of it is read when its stamp does not
+// tie these bytes to the build and corpus on disk.
+function readReport(path) {
+  const bytes = readBytes(path, "a report");
+  const problem = stampProblem(path, bytes);
+  if (problem !== null) {
+    die(problem, [
+      "A report is evidence only about the build and corpus it was run against. Re-run the suite.",
+    ]);
+  }
+  return parseJson(bytes, path, "a report");
 }
 
 function reportPaths(requested) {
@@ -140,7 +168,7 @@ const tierOf = new Map(cases.map((item) => [item.id, item.tier]));
 const candidates = new Map();
 const claimedVersions = new Set();
 for (const path of reportPaths(requestedReports)) {
-  const report = readJson(path, "a report");
+  const report = readReport(path);
   if (!Number.isInteger(report.isa_version)) {
     die(`${path} records no integer isa_version`, [
       "A report says which instruction-set version the package claimed, and a claim is scoped by it.",

@@ -16,8 +16,9 @@
 // next tier's opcodes does, and the suite then holds the same property over the
 // wider set rather than gaining a case of its own per opcode.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { stampPath, stampProblem } from "../../scripts/lib/build-stamp.mjs";
 import { loadCases, loadManifest, surfaceCaseSet } from "../../scripts/lib/corpus.mjs";
 import { isaVersion } from "../../src/index.js";
 import { decodeCase, reportProblems, runEvaluator, writeReport } from "./runner.js";
@@ -100,5 +101,20 @@ describe("the report on disk", () => {
     const path = writeReport(report);
     const written: unknown = JSON.parse(readFileSync(path, "utf8"));
     expect(reportProblems(written)).toEqual([]);
+  });
+
+  // The stamp written beside the report is the one the ratchet accepts: it
+  // names this report's bytes and the build and corpus on disk now. A stamp an
+  // earlier run left in the ignored directory would match the same bytes, so it
+  // is removed first and the stamp read is the one this write produced.
+  //
+  // Sabotage: deleting the stamp write from `writeReport` in
+  // test/conformance/runner.ts turns this red - the report is written and
+  // nothing ties it to a build. Without the removal it survived, read from the
+  // stamp a previous run left.
+  it("is stamped with the build and corpus it was run against", () => {
+    rmSync(stampPath(writeReport(report)), { force: true });
+    const path = writeReport(report);
+    expect(stampProblem(path, readFileSync(path))).toBeNull();
   });
 });
