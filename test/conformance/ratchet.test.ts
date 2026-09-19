@@ -140,6 +140,33 @@ describe("the fixtures", () => {
   });
 });
 
+describe("the registry's own isa_version field", () => {
+  // The field is the vendored corpus's version, which the registry contract
+  // defines it as, and not the version a claim beside it was scoped by. The
+  // two are told apart only by a write whose reports record an earlier
+  // version than the corpus's: the claim here is complete at the earlier
+  // version, which runs the retired cases too, and the file still records the
+  // corpus's version.
+  //
+  // Sabotage: writing the reports' claimed version where the script takes the
+  // manifest's for the field turns this red - the file records the earlier
+  // version - and leaves every other case in this file green.
+  it("records the corpus's version, not the version a claim was scoped by", () => {
+    const report = writeReport("evaluator.json", {
+      isa_version: earlierVersion,
+      results: passes(tierOne),
+    });
+    const run = ratchet("--report", report, "--claim", "evaluator:1");
+    expect(run.stderr).toBe("");
+    expect(run.status).toBe(0);
+    const written = JSON.parse(registryText());
+    expect(written.claims).toEqual([{ surface: "evaluator", tier: 1 }]);
+    expect(written.entries.length).toBe(tierOne.length);
+    expect(written.isa_version).toBe(manifest.isa_version);
+    expect(written.isa_version).not.toBe(earlierVersion);
+  });
+});
+
 describe("the ratchet refuses a report nothing ties to the build and corpus on disk", () => {
   // Sabotage: replacing the stamp check's null test in scripts/ratchet.mjs
   // with a constant null turns this red - the unstamped report is read and
