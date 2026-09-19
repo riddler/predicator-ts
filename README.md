@@ -288,8 +288,8 @@ boundary are the ones a host meets first:
   instruction set makes a cast total, so a conversion that cannot produce a
   value of the target type answers the absence instead of failing. A **`lit`
   operand is held to the rule** like a host's context value: an out-of-range
-  integer written into an instruction list, on its own or inside a list or map
-  operand, is refused at that instruction -
+  integer written into an instruction list, on its own or held as data inside a
+  list or map operand, is refused at that instruction -
   `evaluate([["lit", 9007199254740994]], {})` answers the failing arm with the
   reason `integer_out_of_range`.
 - A JavaScript `Date` normalizes to a `PDateTime`, and JavaScript `undefined`
