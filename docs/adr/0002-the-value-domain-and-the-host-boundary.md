@@ -2458,10 +2458,11 @@ which is not a shift anyone writing that text would mean. No clause of ISO
 
 The second is that reproducing it would make this package's own refusals
 inconsistent. The hour-only spelling `+-5` names an offset of minus five
-hours, and the colonless `+-530` an offset of minus five hours and thirty
-minutes, by the same field read that makes the colon spelling mean something
-else; a package that admitted all three would owe a rule for why two of them
-mean what their digits say and the third does not.
+hours, which is what its digits say, while both two-field spellings, the
+colonless `+-530` and the colon `+-5:30`, name minus four hours and thirty
+minutes instead, by the same field read; a package that admitted all three
+would owe a rule for why the hour-only spelling is read one way and the
+two-field spellings another.
 
 The third is that nothing measured depends on it. The conformance claim is
 measured by the vendored corpus, no corpus case reaches an offset field
