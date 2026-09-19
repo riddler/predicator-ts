@@ -322,3 +322,62 @@ gate.
 
 This note enforces a sentence of the decision above and changes no rule there,
 so it carries no Status line and does not advance this record's status.
+
+## Note: what the registry's `isa_version` field records (2026-09-18)
+
+Recorded for `pts-hu0`. The registry file's own `isa_version` field is the
+vendored manifest's `isa_version` when the ratchet wrote the file: the
+version the corpus was generated at. That is what the decision above
+specifies, and it is predicator-ex's definition of the field in
+`conformance/RATCHET.md`, "The manifest's `isa_version` at pin time". It is
+not the version the file's claims are scoped by. A claim's completeness is
+scoped by the version this package claimed in the run whose reports the
+ratchet read, as the first note above records, and the registry file records
+that version nowhere.
+
+What a reader may conclude from the field: the version of the corpus every
+entry was verified against. That is redundant with the pin: the same
+`RATCHET.md` says `corpus_hash` subsumes the field. The test `names this
+package, the corpus it was written against, and its claims` in
+`test/conformance/registry.test.ts` holds the shipped file's field equal to
+the vendored manifest's.
+
+What a reader may not conclude from it: which version's case set a claim
+covers, or which version this package implements. A claim of tier N says
+that every case the claimed version runs in tiers 1 through N has an entry,
+and a package claiming a version earlier than the corpus's runs the cases the
+corpus's version filters out as retired (`runsAtVersion` in
+`scripts/lib/corpus.mjs`). A file written by such a package names the
+corpus's version while its claims cover the earlier version's case set.
+
+Why the two agree today. The test `claims the version the corpus was
+generated at` in `test/instructions.test.ts` holds `isaVersion()` equal to
+the vendored manifest's `isa_version`, so on a green gate the field also
+names the version the claims were scoped by. That agreement comes from that
+test, not from the field. The gate checks the shipped claims' completeness at
+the `isaVersion()` of the same tree (`completenessProblems` in
+`test/conformance/registry.test.ts`), so that is where a reader finds the
+version a shipped claim covers, not in the registry file.
+
+Why the field is left as it is rather than made the package's version.
+Predicator-ex's `conformance/schema/registry.json` defines the field as the
+manifest's version and admits no property it does not name, and this record
+defers to that contract where the two could disagree. `RATCHET.md` carries
+the field so that a reader learns the version without fetching the manifest,
+and asks that nothing key a rule on it that `corpus_hash` already enforces
+more tightly.
+
+One reading there does not survive this record's scoping unqualified.
+`RATCHET.md` says the field lets a reader learn "which ISA the claim is
+against". With a claim scoped by the version this package claims, that holds
+only as long as that version equals the corpus's. The difference is the seam
+the Consequences above name, and it is a question for predicator-ex rather
+than a reading settled here.
+
+The test `records the corpus's version, not the version a claim was scoped
+by` in `test/conformance/ratchet.test.ts` pins this answer: a write whose
+report records a version earlier than the corpus's, carrying a claim complete
+at that earlier version, records the corpus's version in the field.
+
+This note states what the field already is and changes no rule above, so it
+carries no Status line and does not advance this record's status.
