@@ -464,3 +464,247 @@ is the reference's behaviour at the tag and is the behaviour the corpus pins.
 The corpus refresh that carries the reference's refusal is where it changes,
 and until then a divergence here would be a red conformance run, which
 ADR-0001's Consequences section says is never fixed by touching the corpus.
+
+## Amendment: a numeric literal the domain cannot represent is refused, under a member this package authors (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+Recorded for `pts-zfre`. This amendment is appended, and removes no line above.
+
+What this amends. This entry's decision falsifies six statements in the body
+above, at four places, and each of them is superseded by it. They are named
+here rather than edited, so no line above is removed.
+
+In "A parse failure is a value, with a closed reason", one: the second item of
+the `ParseError` field list, "`message`, the reference's message for that site
+verbatim,". That item is the field definition a reader implements from and it
+is stated universally; for a member of the kind this entry adds there is no
+reference message for the site, and the message is this package's.
+
+In "The closed reason union", three: the sentence that opens it, "Each member
+names one message family of the reference at the tag."; the clause directly
+after it, which is the first half of a semicolon-joined sentence, "The message
+text is the reference's, verbatim, and the compiler reproduces it byte for
+byte"; and the sentence that closes the two tables, "Twenty-two members, six
+and sixteen, and the union admits no twenty-third."
+
+Only that first half falls. The remainder of the same sentence, which makes
+the `reason` token this package's own and the thing a caller switches on so
+that it never has to match on message text, is untouched and holds of a member
+of either kind - it is what makes a member whose message this package authors
+usable at all. The clause is named beside the sentence before it deliberately:
+the verbatim rule is the load-bearing half, and naming only the sentence
+before it would leave that rule reading as intact.
+
+In "Consequences", one: the paragraph opening "The verbatim-message rule ties
+this package's text to the reference's.", including its statement that "this
+package has no license to improve a message it finds unclear". Both hold of a
+member whose message the reference supplies. Neither holds of a member whose
+message this package authors, and nothing outside predicator-ex can reword the
+first kind or is obliged to leave the second kind alone.
+
+In "Worked example", one: the clause narrating the editor, "it never matches on
+the message, which is the reference's and may be reworded there". It is listed
+last because it is the weakest in kind - narration inside an illustration of a
+first-kind member, not a rule a reader implements from - but it is stated as a
+universal about the message, and for a second-kind member the message is this
+package's and predicator-ex cannot reword it. What the clause is really about,
+that an editor switches on the reason rather than matching message text,
+survives intact; it is the account of whose the message is that does not.
+
+The union's discipline is otherwise unchanged: it is still closed, a grammar
+failure outside it is still a defect in this package, and adding a member is
+still an amendment here and a version decision.
+
+### What the closed set is, which this entry changes
+
+Until now the union was one thing, and the record said so in its first sentence:
+the reference's message families, derived by running the reference and keeping
+what came back. Every member named a family the reference has, and carried the
+reference's message verbatim, and the whole of the union's authority came from
+that derivation.
+
+**It is that no longer. The union is now the reference's message families plus
+this package's own members, for the cases the reference does not answer at
+all.** That is a change in what the set is, not an addition to it. A member of
+the first kind is discovered by running the reference and is the reference's to
+reword; a member of the second kind is decided here and carries a message this
+package authors, because there is no reference message to reproduce. Both kinds
+sit in one union and a caller switches on both the same way, but they are
+answerable to different things, and a later reader deciding whether some
+behaviour may change needs to know which kind a member is.
+
+This entry adds the first member of the second kind. It is stated here rather
+than shown only as a table row because a row would have made a widening of the
+set look like a filling-in of it.
+
+### The decision
+
+**A numeric literal whose value this package's value domain cannot represent is
+refused, as a value, on the failing arm.** The `ParseError` carries
+
+- `reason`, `"number_out_of_range"`,
+- `message`, `Number literal is outside the range this implementation can
+  represent`,
+- `position` and `span` at the literal, under the same rules every other member
+  follows.
+
+The message is this package's own. It interpolates nothing: the literal that
+provokes it is a long run of digits by construction, and a message that quoted
+it would be unreadable at the only length it occurs at.
+
+One member covers both numeric types, and the message does not name which:
+
+- a decimal literal whose magnitude falls outside the finite double range, which
+  is the range `Float` in `src/values.ts` (read at `042b9d0`) admits;
+- an integer literal whose magnitude is past the safe-integer bound, which is
+  the integer range ADR-0002's Decision fixed as the magnitudes at or below
+  `Number.MAX_SAFE_INTEGER`, and which its amendment headed
+  "a `lit` operand refuses an integer outside the safe range" applies at an
+  operand.
+
+Twenty-three members: the six from the reference's lexer, the sixteen from its
+parser, and this one. The union admits no twenty-fourth.
+
+### Why refused, rather than raised or passed through
+
+The reference is not total here, so matching it and keeping this record's
+promise that `compile` never throws are not the same thing, and one of them has
+to give. This record's promise wins, and the divergence is declared here rather
+than inherited silently.
+
+Run against a detached export of `v9.4.1` (`mix.exs` `@version` reads `9.4.1`
+in that export) on 2026-09-19, `Predicator.compile/1` on the source `1` followed
+by four hundred zeros and `.0` raises `ArgumentError`. Its message, whole, and
+with a trailing newline this quotation cannot show:
+
+```
+errors were found at the given arguments:
+
+  * 1st argument: not a textual representation of a float
+```
+
+The clause naming the fault is `not a textual representation of a float`, which
+is a fragment of that message and not the message. It matters that the whole is
+quoted here: a record whose discipline is reproducing a message byte for byte is
+the last place to show a fragment as though it were one. The raise does not
+answer the failing arm; it leaves the call.
+
+**Digit count is not what triggers it, and the counter-example is worth keeping
+because a first reading of this behaviour got the trigger wrong.** At the same
+tag, `0.` followed by four hundred ones compiles, answering the float
+`0.1111111111111111`, and a four-hundred-digit integer compiles to the exact
+integer. What raises is magnitude, bisected to the largest finite double itself:
+`17976931348623157` followed by two hundred ninety-two zeros and `.0`, three
+hundred eleven characters, compiles to `1.7976931348623157e308`, and
+`17976931348623159` followed by the same two hundred ninety-two zeros and `.0`,
+the same three hundred eleven characters, raises. Two sources of one length, one
+answered and one not.
+
+The literal has to be spelled in full digits to reach this at all. The
+reference's expression grammar has no exponent form for a float literal: at the
+tag, `1.0e309` answers the `trailing_token` family, `Unexpected token identifier
+'e309' after expression`.
+
+The integer half of the same question has no raise in it. At the tag, the same
+magnitude written without the `.0` compiles, and answers the exact integer,
+because the reference's integers are arbitrary-precision and this package's are
+not. There the divergence is in the answer rather than in whether there is one.
+
+### The tagged wire form cannot carry an infinity, which forecloses passing one through
+
+This was established by running rather than by reading the encoder, because it
+decides an option independently of the decision above.
+
+Run at `042b9d0`: `encodeTagged` in `src/tagged.ts` refuses the host's infinity,
+answering the reason `non_finite_number`, and so does its negation.
+`decodeTagged` in the same file refuses the text `1e400` with the same reason,
+and refuses `1` followed by four hundred zeros with `integer_out_of_range`. A
+finite magnitude at the same order of magnitude passes both ways: `encodeTagged`
+of the float `1e308` answers the text `1e+308`, and `decodeTagged` of the text
+`1e308` answers that float.
+
+So no case in the corpus could name such a value on either side, whatever this
+record decided, and a pass-through would have produced values the conformance
+apparatus cannot express. `Float` in `src/values.ts` (read at `042b9d0`) refuses
+one earlier still: constructed with the host's infinity it throws a `TypeError`,
+`a float wraps a finite number; the domain has no non-finite member`.
+
+What pass-through would have cost downstream is worth one sentence, because it
+is not obvious. Run at `042b9d0`, `evaluate` in `src/index.ts` answers the
+succeeding arm, with the host's infinity as the value, for a program whose only
+instruction is a `lit` carrying it; the operand walk `literalFault` in
+`src/evaluator.ts` tests only an integral number, as ADR-0002's `lit` amendment
+says of itself. The same call on a `lit` carrying `9007199254740992` is refused,
+with the evaluation reason `integer_out_of_range`. So a decimal passed through
+would have reached a caller as a value the domain has no member for, with
+nothing between the compiler and that caller to stop it.
+
+### The integer half, in this entry rather than a later one
+
+Both numeric types are one question - what this package does with a numeric
+literal it cannot represent - and two rules written apart would drift.
+
+Today, before this entry is implemented, an integer literal is converted with
+the host's ordinary number conversion. Run at `042b9d0`, that conversion answers
+the host's infinity for `1` followed by four hundred zeros, and answers
+`9007199254740992` for the sixteen-digit literal `9007199254740993`, which is
+the silent precision loss any literal past the safe-integer bound takes. The
+reference answers the exact integer in both cases. That divergence follows from
+the value domain ADR-0002 fixed, which has no arbitrary-precision integer and
+says so; what was missing was not the capability but the declaration, and this
+entry is the declaration.
+
+The integer half needs no new behaviour past the compiler. An out-of-range
+integer already reaching an operand is refused at evaluation by the amendment
+named above. What this entry adds is that the compiler refuses the literal
+instead of emitting a program that could not run, and that a caller is told at
+compile time, with a position and a span pointing at the literal, rather than at
+evaluation with an instruction index.
+
+### Typespecs
+
+The union in the Typespecs section above gains one member, appended after
+`duration_unit_twice`:
+
+```typescript
+export type ParseReason =
+  // the twenty-two members above, unchanged, and:
+  | "number_out_of_range";
+```
+
+Nothing else in that section changes. `ParseError` keeps the same five members,
+and this member's instances carry a position and a span like every other.
+
+### What this does not decide
+
+The conversion this package performs for a literal inside the bounds is not
+decided here, nor is any arithmetic bound: an arithmetic result outside the
+finite range is refused at evaluation by `numericResult` in `src/evaluator.ts`
+(read at `042b9d0`) under its own reason, and this entry neither narrows nor
+widens that. It adds no opcode and changes no wire format. Whether a later
+release grows an arbitrary-precision integer is ADR-0002's question, not this
+one.
+
+### Consequences
+
+The union is a compatibility surface, and it gained a member. For a caller that
+switched exhaustively this is a breaking change, exactly as the Consequences
+section above already says of the reference growing a new grammar failure. The
+difference is the cause: here the set grew because this package decided
+something, not because the reference did.
+
+A source the reference raises on now answers a value here. That is a declared
+divergence and not a conformance gap, because there is nothing to diverge from
+where the reference does not answer at all, and no vendored corpus case reaches
+either bound: a scan of `conformance/corpus/` at `042b9d0` for a run of sixteen
+or more consecutive digits finds one, `4142135623730951`, which is the
+fractional part of a float and not a magnitude. The conformance run is unchanged
+by this entry.
+
+Until this entry is implemented, a decimal literal outside the range parses to a
+node carrying the host's infinity, so where such a literal sits inside a
+construct that refuses for its own reason, the refusal's message spells the
+number the way the host spells an infinity - a spelling no reference message
+contains. That is an artefact of the gap between this decision and its
+implementation, and it goes away with the implementation.
