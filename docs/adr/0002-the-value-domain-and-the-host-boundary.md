@@ -1646,11 +1646,32 @@ this package did not define included; that test is `isPlainMap` in
 `src/evaluator.ts`, which the opcodes that read a map use. It follows every
 own string-keyed data property of a list or map, enumerable or not, because a
 member access reads any own string-keyed property. It reads each value from
-the property's descriptor and never calls a getter, so it runs no host code.
-It visits a container once however many paths reach it, and it counts levels
-as the nesting check does: an operand whose properties nest past the depth
-limit is refused with `"depth_limit_exceeded"`. Only non-enumerable
-properties, which the nesting check does not follow, can reach that refusal.
+the property's descriptor and never calls a getter; the only host code it can
+run is a proxy's traps, which the map test and the property reads invoke on a
+proxy operand.
+
+**The walk visits a container once, at the level of the first path that
+reaches it**, the outermost container being level one. A container it first
+reaches past the depth limit refuses the operand with
+`"depth_limit_exceeded"`. This is not the nesting check's rule, which measures
+every path: a deeper path to a container the walk has already visited is not
+measured, so for a container shared between a shallow and a deep path the
+order of the properties decides whether the deep path is seen. The walk takes
+this rule because it keeps a shared container's cost to one visit; measuring
+every path would walk a shared container once per path again. Every path
+through enumerable members has already passed the nesting check, so only a
+non-enumerable property, which that check does not follow, or a proxy's trap
+can lead the walk past the limit.
+
+**The walk visits at most 65536 distinct containers**, the constant
+`LITERAL_CONTAINER_LIMIT` in `src/evaluator.ts`, added with this amendment,
+and refuses an operand holding more with `"depth_limit_exceeded"`. A proxy's
+trap can answer a new container every time it is asked, so without a count a
+hand-built operand could keep the walk going without end while never nesting
+past the depth limit. The number is this package's own and far above what a
+compiled instruction list carries. The reason is the depth limit's because
+both bound how much of a value the machine will walk; no reason token is
+added.
 
 **The nesting check runs first.** The nesting amendment above puts a shape
 check at the same instruction; it still decides only the shape, and it runs
@@ -1668,8 +1689,9 @@ the limit passed the check and raised the engine's stack-overflow error when
 it was compared or handed back. `nestingFault` now takes the caller's map
 test, and every caller of it in `src/evaluator.ts` and `src/index.ts` passes
 `isPlainMap`, so such an object is counted as a map level and refused on its
-shape like any other. What the walk enumerates is unchanged: the own
-enumerable string-keyed members, which are what those walks recurse into.
+shape like any other. What the walk enumerates is unchanged: a map's own
+enumerable string-keyed members and a list's elements, which are what those
+walks recurse into.
 
 **Only an integral number is tested.** A raw non-integral or non-finite number
 in a `lit` operand is not a member of the domain either, but it is not an
@@ -1703,12 +1725,13 @@ leaves admitted.
 the boundary's reason, on either side of zero", through the main entry point as
 well as the machine's; "is refused wherever the operand carries it"; "admits an
 integer at the bound, and a float past it"; "is refused inside any object the
-machine reads as a map"; "admits the bound inside any object the machine
-reads as a map"; "never calls a getter on the operand"; and "refuses an
-operand whose hidden properties nest past the limit". The nesting walk's map
-test is pinned in
-`test/nesting.test.ts` by "refuses a class-built literal operand past the
-limit, or cyclic".
+machine reads as a map"; "admits the bound inside any object the machine reads
+as a map"; "never calls a getter on the operand"; "refuses an operand whose
+hidden properties nest past the limit"; "answers an operand whose traps mint
+containers, in bounded work"; "counts distinct containers against its limit";
+and "admits an operand whose hidden property refers back to it". The nesting
+walk's map test is pinned in `test/nesting.test.ts` by "refuses a class-built
+literal operand past the limit, or cyclic".
 
 Consequences. An instruction list that a host builds by hand and that carries
 an integer past the safe range now answers the failing arm where it answered a
