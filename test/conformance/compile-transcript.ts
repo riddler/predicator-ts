@@ -14,12 +14,23 @@
  * transcript's version of it lives, because the second transcript has more
  * than one reader and a check written into a reader covers only that reader.
  *
- * `compileTranscriptLines` is the only sanctioned way to reach the file, and
- * it throws rather than returning a line when any of the four disagrees.
- * `compile-transcript.test.ts` asserts the four equalities one at a time, so a
- * mismatch reads as a stamp failure rather than as every row failing at once,
- * and it pins a guard that turns red if any other file under `test/` reads the
- * transcript directly.
+ * `compileTranscriptLines` is the only SANCTIONED route to the file's rows,
+ * and it throws rather than returning a line when any of the four disagrees.
+ * It is not the only conceivable route, and this module does not pretend
+ * otherwise - see the limits below.
+ *
+ * WHAT THIS DOES NOT STOP, stated here because the next reader will trust
+ * whatever this comment claims. This module does not expose the transcript's
+ * bytes or its text, so reaching a row without the check means reading the
+ * file, and `compile-transcript.test.ts` carries a guard that fails when a
+ * file under `test/` names the file outside a comment. Between them they
+ * catch what a reader would do by accident. They do not catch a determined
+ * bypass, and two are known and deliberately not chased, because a scan
+ * cannot decide them and a longer guard would only carry the same false
+ * claim: a filename assembled from pieces or held in a variable, and a read
+ * from outside `test/`. `scripts/` is the live instance of the second -
+ * `scripts/reference-compile.mjs` writes this file, so "no direct reads
+ * there" is not the rule, and what the rule should be is not settled here.
  */
 
 import { createHash } from "node:crypto";
@@ -44,14 +55,19 @@ export interface CorpusStamp {
 
 const conformanceRoot = fileURLToPath(new URL("../../conformance/", import.meta.url));
 
-/** The transcript's bytes, hashed rather than parsed. */
-export const compileTranscriptBytes = readFileSync(
+/**
+ * The transcript's text. Deliberately NOT exported: an export of the file's
+ * raw content is an unchecked route to every row, and it would be this
+ * module's own hand that offered it.
+ */
+const compileTranscriptText = readFileSync(
   join(conformanceRoot, "transcript", "compile.json"),
+  "utf8",
 );
 
-/** The sha256 of those bytes, in the spelling the stamp is written in. */
+/** The sha256 of the transcript, in the spelling the stamp is written in. */
 export const compileTranscriptHash = `sha256:${createHash("sha256")
-  .update(compileTranscriptBytes)
+  .update(compileTranscriptText)
   .digest("hex")}`;
 
 export const compileTranscriptStamp = JSON.parse(
@@ -91,12 +107,16 @@ export function compileTranscriptStampFaults(
 }
 
 /**
- * The lines of a transcript whose stamp holds, or a throw naming every way it
- * is not the file its SOURCE.json records. The artefacts are arguments so that
- * the refusal can be exercised without touching `conformance/`.
+ * The non-empty lines of some transcript text, or a throw naming every way its
+ * stamp disagrees.
+ *
+ * Exported for one reason only: it lets the refusal be exercised on FABRICATED
+ * text and stamps, without touching `conformance/`. It is not a route to a row
+ * of the vendored transcript, because that transcript's text is not available
+ * outside this module - a caller has to supply its own.
  */
-export function transcriptLinesFrom(
-  bytes: Buffer,
+export function stampedLinesOfText(
+  text: string,
   hash: string,
   stamp: CompileTranscriptStamp,
   corpus: CorpusStamp,
@@ -106,16 +126,13 @@ export function transcriptLinesFrom(
     throw new Error(
       `the compile transcript is not the file its SOURCE.json records: ${faults.join("; ")}`,
     );
-  return bytes
-    .toString("utf8")
-    .split("\n")
-    .filter((line) => line.trim() !== "");
+  return text.split("\n").filter((line) => line.trim() !== "");
 }
 
 /** The vendored compile transcript's lines, one JSON record each. */
 export function compileTranscriptLines(): readonly string[] {
-  return transcriptLinesFrom(
-    compileTranscriptBytes,
+  return stampedLinesOfText(
+    compileTranscriptText,
     compileTranscriptHash,
     compileTranscriptStamp,
     corpusStamp,
