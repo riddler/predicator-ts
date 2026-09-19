@@ -142,8 +142,13 @@ export interface Span {
  *
  * One member per line, and the members grouped by the stage that produces
  * them, so that the stages still to be written append to this union instead
- * of rewriting it. Only the lexical stage exists so far; the expression
- * grammar's own families join the list below it when that stage is written.
+ * of rewriting it.
+ *
+ * There is no end-of-input member, at either stage. The scanner appends an
+ * end-of-input token rather than running out, so a failure there is reported
+ * by whichever site was reading, with that token named in the message as the
+ * words `end of input`. End of input is a token spelling here and never a
+ * reason of its own.
  */
 export type ParseReason =
   // Lexical: what the scanner refuses before any grammar runs.
@@ -152,7 +157,24 @@ export type ParseReason =
   | "unsupported_escape"
   | "unterminated_date"
   | "invalid_date"
-  | "invalid_datetime";
+  | "invalid_datetime"
+  // Grammatical: what the expression grammar refuses over the token stream.
+  | "expected_primary"
+  | "trailing_token"
+  | "statement_keyword"
+  | "assignment_in_expression"
+  | "expected_close_paren"
+  | "expected_close_bracket"
+  | "expected_close_brace"
+  | "expected_object_key"
+  | "expected_object_colon"
+  | "expected_property_name"
+  | "expected_type_name"
+  | "unknown_cast_type"
+  | "expected_now"
+  | "expected_duration"
+  | "duration_fraction"
+  | "duration_unit_twice";
 
 /**
  * A source string the grammar refused.
