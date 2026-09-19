@@ -1439,3 +1439,111 @@ statement entry point exists, and the machine executes no opcode that writes a
 context - `store` is declared in the instruction registry and the machine has
 no case for it. Every rule above is therefore an obligation on the change that
 implements it rather than a description of live code.
+
+## Amendment: cycles, nesting, and the one depth limit (2026-09-18)
+
+Status: proposed (2026-09-18)
+
+Recorded for `pts-yop`, under the ruling that a cyclic or over-deep host value
+is fixed with guards and a declared depth limit rather than by narrowing the
+promise that failure is a value, and that a host's own code throwing is said
+to be outside that promise wherever the promise is stated. This amendment is
+appended, because an amendment to a merged record here removes no line of it.
+
+What this amends. The normalization section above rules that normalization is
+"a total function on the inputs below", and its two container rows - an array
+and a plain object, each member normalized - say nothing about a structure
+that contains itself or nests without bound. Neither did the projection, the
+tagged codec or the `lit` operand. Every one of those walks recursed once per
+level with no guard, so a cycle, or nesting deep enough, raised the engine's
+own stack-overflow error out of a public entry point instead of answering a
+result. This amendment adds rules for both shapes and removes none.
+
+### A value that contains itself is refused
+
+**Every walk over a structure a host supplied refuses a value that contains
+itself, with the reason token `"cyclic_value"`.** A container is a cycle when
+it is its own ancestor on the path down from the root. A value reached by two
+paths without being its own ancestor is a shared reference and is not refused:
+it is normalized, or written, at each place it appears. The ancestor test is
+`enterContainer` in `src/nesting.ts`, added with this amendment.
+
+### One depth limit, declared
+
+**This package declares one depth limit, `DEPTH_LIMIT` in `src/nesting.ts`,
+of 256 levels, and every walk counts against that constant rather than
+declaring its own.** The outermost list or map is level one and each list or
+map inside it one more; any other member is a leaf. A value at the limit
+answers normally, and a value one level deeper is refused with the reason
+token `"depth_limit_exceeded"`.
+
+**The limit is declared rather than inherited from the host's stack, because
+the inherited one was measured to vary.** Before this amendment the deepest
+context `evaluate` could normalize moved by about a thousand levels between
+two programs on one machine and one engine version - one calling it directly,
+one calling it from further down its own stack - so the same context answered
+in one program and raised in another, and a reviewer, a test runner and a
+phone would each have drawn the line somewhere else. A declared limit makes the answer a
+property of the input. 256 sits well below the roughly two thousand levels at
+which the first of the unguarded walks to give out overflowed, measured on the
+toolchain this repository pins. It is not a measurement of any other engine's
+stack, and changing it is a change to this amendment rather than a tuning.
+
+**Where the limit is counted.**
+
+- A context counts as the outermost map, so a root may nest one level fewer
+  than the limit. The context passes through `fromHost` in `src/values.ts`,
+  which refuses a structure past the limit with that reason, and so does a
+  host function's answered value.
+- A `lit` operand is refused at its own instruction, before any opcode walks
+  it; the check is in the machine's `lit` method in `src/evaluator.ts`. That
+  check is on the operand's shape alone, and it decides nothing else about
+  what a `lit` operand admits.
+- A `store` that would nest the context past the limit fails at its own
+  instruction, so the context a statement run answers is never deeper than
+  one a host may supply; the check is in the machine's `store` method in
+  `src/evaluator.ts`. Its failing arm carries the context as it stood before
+  that store, as the statement-mode amendment above requires of a failure
+  after the program started.
+- A result nested past the limit is refused rather than handed back:
+  `evaluateToValue` in `src/evaluator.ts` answers it as an `EvaluationError`,
+  and `executeValue` in `src/index.ts` refuses a value past it onto the
+  failing arm, carrying the context.
+- In the tagged wire text the count is of brackets and braces, a tag's own
+  included. `decodeTagged` in `src/tagged.ts` refuses at the offset of the
+  first bracket or brace past the limit, and `encodeTagged` in the same file
+  refuses a value whose text would nest past it, so every text the encoder
+  writes is one the decoder reads back.
+
+**The two reason tokens are this package's, at its own boundary.** Like
+`"integer_out_of_range"`, neither is an ISA reason, neither is offered
+upstream as one, and neither adds an opcode or changes the wire format. They
+join the refusal reasons of the value boundary and of the codec's encode
+direction; the decode direction gains only `"depth_limit_exceeded"`, since a
+text cannot contain itself.
+
+### A host's own code throwing is outside the promise
+
+**A getter or a proxy trap on a value this package walks is the host's own
+code, and an error it throws propagates out of the walk unchanged.** It is
+not turned into a refusal, because the error is the host's rather than an
+outcome of the value, and a refusal carrying a token of this package's in its
+place would swallow what the host's code said. A change that states the
+promise that failure is a value states this exception beside it. It is
+stated beside the promise in the `evaluate` and `execute` doc comments in
+`src/index.ts`, in the doc comments of `fromHost` in `src/values.ts` and of
+`encodeTagged` in `src/tagged.ts`, in the README's evaluation and codec
+sections, and here.
+
+**ADR-0001's sentence that errors are values is not amended.** It governs
+what this package's own code does when it fails. A host's getter throwing is
+not a failure of this package's code, and a walk that lets that error through
+is not this package throwing, so the sentence stands as written.
+
+### What this does not decide
+
+**The projection itself, `toHost` in `src/values.ts`, gains no guard.** Its
+return type has no failing arm, and every entry point above checks what it
+hands to the projection before projecting it. A host calling `toHost`
+directly on a value it built by hand, outside the domain's tree shape, is
+outside this amendment.

@@ -29,21 +29,32 @@ import { EvaluationError } from "./errors.js";
 import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
+import { DEPTH_LIMIT, enterContainer } from "./nesting.js";
 import { Duration, Float, PDate, PDateTime, toHost, Undefined, type Value } from "./values.js";
 
-/** Why a text could not be decoded. */
+/**
+ * Why a text could not be decoded. `"depth_limit_exceeded"` is a text whose
+ * brackets and braces nest past the depth limit this package declares.
+ */
 export type DecodeReason =
   | "malformed_json"
   | "integer_out_of_range"
   | "non_finite_number"
-  | "invalid_tagged_value";
+  | "invalid_tagged_value"
+  | "depth_limit_exceeded";
 
-/** Why a value could not be encoded. */
+/**
+ * Why a value could not be encoded. `"cyclic_value"` is a value that contains
+ * itself, and `"depth_limit_exceeded"` one whose text would nest past the
+ * depth limit this package declares.
+ */
 export type EncodeReason =
   | "reserved_map_key"
   | "integer_out_of_range"
   | "non_finite_number"
-  | "unsupported_host_value";
+  | "unsupported_host_value"
+  | "cyclic_value"
+  | "depth_limit_exceeded";
 
 /** The result of decoding one text. `offset` is where in the text it went wrong. */
 export type DecodeResult =
@@ -159,6 +170,8 @@ function isWireDate(year: number, month: number, day: number): boolean {
 class Scanner {
   private readonly text: string;
   private pos = 0;
+  /** How many brackets and braces are open at the current position. */
+  private depth = 0;
 
   constructor(text: string) {
     this.text = text;
@@ -191,14 +204,26 @@ class Scanner {
 
   private readValue(): Value {
     const c = this.text.charAt(this.pos);
-    if (c === "{") return this.readObject();
-    if (c === "[") return this.readArray();
+    if (c === "{" || c === "[") return this.readNested(c);
     if (c === '"') return this.readString();
     if (c === "t") return this.readKeyword("true", true);
     if (c === "f") return this.readKeyword("false", false);
     if (c === "n") return this.readKeyword("null", null);
     if (c === "-" || (c >= "0" && c <= "9")) return this.readNumber();
     return this.fail("malformed_json");
+  }
+
+  /**
+   * Reads a list or a map one level deeper, refusing at the opening bracket or
+   * brace that would nest past the depth limit, so a deep text answers a
+   * failure at a fixed depth rather than wherever the stack runs out.
+   */
+  private readNested(opening: "{" | "["): Value {
+    this.depth += 1;
+    if (this.depth > DEPTH_LIMIT) this.fail("depth_limit_exceeded");
+    const value = opening === "{" ? this.readObject() : this.readArray();
+    this.depth -= 1;
+    return value;
   }
 
   private readKeyword<T extends Value>(word: string, value: T): T {
@@ -410,6 +435,10 @@ class Scanner {
  *
  * The text is read by this module's own scanner rather than by `JSON.parse`,
  * so that `1.0` decodes to a float and `1` to an integer.
+ *
+ * A text whose brackets and braces nest past the depth limit is refused as
+ * `"depth_limit_exceeded"`, at the offset of the first one past it, so the
+ * same text answers the same way on every engine.
  */
 export function decodeTagged(text: string): DecodeResult {
   try {
@@ -428,10 +457,19 @@ export function decodeTagged(text: string): DecodeResult {
  * It answers text rather than a JSON-able structure for the same reason the
  * decoder reads text: `JSON.stringify` writes an integral float as `1`, and
  * the round trip has to survive it.
+ *
+ * A value that contains itself is refused as `"cyclic_value"`, and one whose
+ * text would nest past the depth limit as `"depth_limit_exceeded"`. The limit
+ * is counted in the text, where a tag's own braces are a level, so everything
+ * this writes is text the decoder reads back. A value reached twice by two
+ * different paths is not a cycle and is written at each place it appears.
+ *
+ * A getter or a proxy trap on the value that throws propagates its own error
+ * unchanged: that is the host's code failing, not an outcome of the value.
  */
 export function encodeTagged(value: Value): EncodeResult {
   try {
-    return { ok: true, text: encodeValue(value) };
+    return { ok: true, text: encodeValue(value, 1, new Set()) };
   } catch (error) {
     if (error instanceof EncodeSignal) {
       return { ok: false, reason: error.reason };
@@ -453,20 +491,34 @@ export function encodeTagged(value: Value): EncodeResult {
  * The parameter admits the language's absence so that an array hole, which is
  * read as `undefined` however it is visited, is refused by name here rather
  * than written as nothing between two commas.
+ *
+ * `depth` is the level of the text this value's own bracket or brace would
+ * open at, the outermost being level one; `ancestors` holds the lists and maps
+ * on the path down to it.
  */
-function encodeValue(value: Value | undefined): string {
-  if (value === Undefined) return '{"$type":"undefined"}';
+function encodeValue(value: Value | undefined, depth: number, ancestors: Set<object>): string {
+  if (value === Undefined) return tagAt(depth, 0, '{"$type":"undefined"}');
   if (value === null) return "null";
   if (value instanceof Float) return encodeFloat(value);
-  if (value instanceof PDate) return `{"$type":"date","value":"${formatDate(value)}"}`;
-  if (value instanceof PDateTime) {
-    return `{"$type":"datetime","value":"${formatDateTime(value)}"}`;
+  if (value instanceof PDate) {
+    return tagAt(depth, 0, `{"$type":"date","value":"${formatDate(value)}"}`);
   }
-  if (value instanceof Duration) return encodeDuration(value);
-  // Array.from rather than map: map leaves a hole in the mapped array, which
-  // join then writes as nothing between two commas - text this module's own
-  // decoder rejects as malformed.
-  if (Array.isArray(value)) return `[${Array.from(value, encodeValue).join(",")}]`;
+  if (value instanceof PDateTime) {
+    return tagAt(depth, 0, `{"$type":"datetime","value":"${formatDateTime(value)}"}`);
+  }
+  // A duration's tag carries its value as a map of its own, one level deeper.
+  if (value instanceof Duration) return tagAt(depth, 1, encodeDuration(value));
+  if (Array.isArray(value)) {
+    enter(value, depth, ancestors);
+    // Array.from rather than map: map leaves a hole in the mapped array, which
+    // join then writes as nothing between two commas - text this module's own
+    // decoder rejects as malformed.
+    const members = Array.from(value, (member: Value | undefined) =>
+      encodeValue(member, depth + 1, ancestors),
+    );
+    ancestors.delete(value);
+    return `[${members.join(",")}]`;
+  }
   switch (typeof value) {
     case "string":
       return JSON.stringify(value);
@@ -475,10 +527,29 @@ function encodeValue(value: Value | undefined): string {
     case "number":
       return encodeInteger(value);
     case "object":
-      return encodeMap(value);
+      return encodeMap(value, depth, ancestors);
     default:
       throw new EncodeSignal("unsupported_host_value");
   }
+}
+
+/**
+ * Enters one list or map on the way down, refusing it when it closes a cycle
+ * or its bracket would nest past the depth limit.
+ */
+function enter(container: object, depth: number, ancestors: Set<object>): void {
+  const fault = enterContainer(container, depth, ancestors);
+  if (fault !== undefined) throw new EncodeSignal(fault);
+}
+
+/**
+ * Answers a tag's text when its braces fit under the depth limit. A tag opens
+ * a brace at `depth`, and `inner` more levels inside it; a tag written past
+ * the limit would be text the decoder refuses, so it is refused here instead.
+ */
+function tagAt(depth: number, inner: number, text: string): string {
+  if (depth + inner > DEPTH_LIMIT) throw new EncodeSignal("depth_limit_exceeded");
+  return text;
 }
 
 function encodeInteger(value: number): string {
@@ -498,12 +569,14 @@ function encodeFloat(value: Float): string {
   return EXPONENT_OR_POINT.test(spelling) ? spelling : `${spelling}.0`;
 }
 
-function encodeMap(value: object): string {
+function encodeMap(value: object, depth: number, ancestors: Set<object>): string {
   if (!isPlainMap(value)) throw new EncodeSignal("unsupported_host_value");
   if (Object.hasOwn(value, "$type")) throw new EncodeSignal("reserved_map_key");
+  enter(value, depth, ancestors);
   const members = Object.entries(value).map(
-    ([key, member]) => `${JSON.stringify(key)}:${encodeValue(member)}`,
+    ([key, member]) => `${JSON.stringify(key)}:${encodeValue(member, depth + 1, ancestors)}`,
   );
+  ancestors.delete(value);
   return `{${members.join(",")}}`;
 }
 

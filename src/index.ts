@@ -15,9 +15,11 @@ import {
   type ExecuteValueResult,
   evaluateToValue,
   executeToContext,
+  nestingError,
   projectContext,
 } from "./evaluator.js";
 import type { Program } from "./instructions.js";
+import { nestingFault } from "./nesting.js";
 import { toHost } from "./values.js";
 
 export type { UnboundPolicy } from "./context.js";
@@ -46,7 +48,14 @@ export * from "./values.js";
  *
  * Failure is a value: a refused context, an instruction the evaluator does not
  * recognize, an operand of the wrong type and an unbound variable all come
- * back as the failing arm of the result, never as a throw.
+ * back as the failing arm of the result, never as a throw. That includes a
+ * context or a result that contains itself or nests past the depth limit this
+ * package declares, each refused with its own reason token.
+ *
+ * The one thing outside that promise is the host's own code running inside
+ * the call: a getter or a proxy trap on the context that throws propagates
+ * its own error unchanged, because it is the host failing rather than an
+ * outcome of the evaluation.
  *
  * Asking for the corpus's tagged encoding is not available here. That request
  * belongs to the `./tagged` subpath's entry point, and a host that wants it
@@ -81,11 +90,14 @@ export function evaluate(
  * so a caller that wants all-or-nothing on failure ignores what comes back and
  * keeps the one it already had.
  *
- * Failure is a value here too, and the failing arm carries the context as far
- * as the program got: every write completed before the failing statement is
- * handed back rather than dropped. The one failing arm with no context is a
- * context the value boundary refused, which is answered before any program
- * runs.
+ * Failure is a value here too, with the same one exception - a throwing
+ * getter or proxy trap on the context propagates - and the failing arm
+ * carries the context as far as the program got: every write completed
+ * before the failing statement is handed back rather than dropped. The one
+ * failing arm with no context is a context the value boundary refused, which
+ * is answered before any program runs. A store that would nest the context
+ * past the depth limit fails at its own instruction, so the context handed
+ * back is the one before it.
  */
 export function execute(
   instructions: Program,
@@ -115,7 +127,9 @@ export function execute(
  * back as the language's own `undefined`.
  *
  * The failing arm is `execute`'s - the error and the context the program got
- * as far as binding, with no value at all.
+ * as far as binding, with no value at all. A value nested past the depth limit
+ * is refused onto that arm, with the context it ran to, rather than handed
+ * back.
  */
 export function executeValue(
   instructions: Program,
@@ -124,6 +138,14 @@ export function executeValue(
 ): ExecuteValueResult {
   const outcome = executeToContext(instructions, context, options);
   if (outcome.ok) {
+    const fault = nestingFault(outcome.value);
+    if (fault !== undefined) {
+      return {
+        ok: false,
+        error: nestingError(fault, "the value"),
+        context: projectContext(outcome.context),
+      };
+    }
     return { ok: true, value: toHost(outcome.value), context: projectContext(outcome.context) };
   }
   if (outcome.context === undefined) return { ok: false, error: outcome.error };
