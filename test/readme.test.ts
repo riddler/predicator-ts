@@ -35,11 +35,27 @@
 // further out. Each is matched against the file it quotes, and a block this
 // suite has no rule for fails rather than passing unexamined.
 //
+// RUNNING AN EXAMPLE IS NOT TYPECHECKING IT either. The runner strips the
+// types rather than checking them, and `tsc` covers `src/` and `test/`, where
+// no example lives, so an example that would not compile ran clean. So every
+// example is also handed to the TypeScript checker, as its own module and
+// with its text unchanged, and a type error in it turns this suite red
+// printing the checker's message. Its package specifiers resolve the way the
+// `exports` map in `package.json` resolves them, except that each lands on the
+// source module the build generates that entry's declarations from rather than
+// on the built declaration file: the suite runs before the build in the full
+// gate, so there are no built declarations to read yet. The compiler options
+// are the ones `tsconfig.json` sets, with two changes: its two unused-name
+// checks are off, because they refuse a name that is imported and never read,
+// which is the shape of an example listing the imports an entry point offers;
+// and every example is read as a module, whether or not it imports anything.
+//
 // WHAT THIS ASSERTS AND WHAT IT DOES NOT. Of a `ts` block it asserts that the
-// block runs to completion and that every name it imports is bound. The runner
-// strips the types rather than checking them, so a type error inside an
-// example is not caught here; `tsc` covers `src/` and `test/`, and an example
-// lives in neither. Of a `json` block it asserts the match stated above. A
+// block runs to completion, that every name it imports is bound, and that it
+// typechecks under the options above. A defect the declaration build alone
+// would introduce is not caught, because the types checked are the source's,
+// and neither is a type error that only a consumer's different compiler
+// options would raise. Of a `json` block it asserts the match stated above. A
 // fence in any other language is examined only far enough to fail: it is
 // neither run nor compared, and unless the ignore list carries its language it
 // turns this suite red.
@@ -47,21 +63,25 @@
 // The rewrite an example undergoes before it runs is its import specifier,
 // which is pointed at `src/` because the package is not installed into itself,
 // and the appended epilogue. The example text is otherwise the file's, byte
-// for byte.
+// for byte. The text the checker reads is the file's with no rewrite at all.
 //
 // Every check below that reads the README is paired with a constructed input.
 // In every case but one that input is one the check must report; the exception
 // is the block discovery the two counts rest on, whose constructed input is a
 // page with no fence in it and which fails by returning something rather than
-// nothing. Two helpers, `fenceOpeners` and `runnable`, are reached only
-// through their callers and have no constructed input of their own. A check
-// that has only ever seen a passing input is not a check yet.
+// nothing. Five helpers, `fenceOpeners`, `runnable`, `typePaths`,
+// `typecheckOptions` and `typeErrorsOf`, are reached only through their
+// callers and have no constructed input of their own. A check that has only
+// ever seen a passing input is not a check yet.
 //
 // Sabotage: answering the comparison opcode's greater-than with the less-than
 // order turns this red at the example whose own check then threw, and prints
 // that example's message. Adding to the page a fence the extraction does not
 // read - a `typescript` opener, an info string with a title in it, a tilde
 // fence, an indented closing fence - turns it red at the fence checks.
+// Retyping a binding in an example so that its value no longer fits, a change
+// the runner cannot see because it strips the annotation, turns it red at
+// that example's typecheck and not at its run.
 // All were run and reverted.
 
 import { spawnSync } from "node:child_process";
@@ -69,6 +89,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { afterAll, describe, expect, it } from "vitest";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -235,6 +256,88 @@ function run(code: string): { readonly status: number | null; readonly output: s
   return { status: result.status, output: `${result.stdout ?? ""}${result.stderr ?? ""}` };
 }
 
+type ExportsMap = Record<string, { readonly import: { readonly default: string } }>;
+
+/**
+ * Each package specifier, mapped to the source module its `exports` entry is
+ * built from - `./dist/tagged.js` from `src/tagged.ts`, and so on - which is
+ * where the checker reads that entry's types.
+ */
+function typePaths(): Record<string, string[]> {
+  const manifest = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+    readonly name: string;
+    readonly exports: ExportsMap;
+  };
+  const paths: Record<string, string[]> = {};
+  for (const [subpath, entry] of Object.entries(manifest.exports)) {
+    const match = /^\.\/dist\/(.+)\.js$/.exec(entry.import.default);
+    if (match === null) throw new Error(`cannot map exports ${subpath} to a source module`);
+    const specifier = subpath === "." ? manifest.name : `${manifest.name}${subpath.slice(1)}`;
+    paths[specifier] = [join(repoRoot, "src", `${match[1]}.ts`)];
+  }
+  return paths;
+}
+
+function typecheckOptions(): ts.CompilerOptions {
+  const configPath = join(repoRoot, "tsconfig.json");
+  const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (error !== undefined) {
+    throw new Error(ts.flattenDiagnosticMessageText(error.messageText, "\n"));
+  }
+  const { options } = ts.parseJsonConfigFileContent(
+    config,
+    ts.sys,
+    repoRoot,
+    undefined,
+    configPath,
+  );
+  return {
+    ...options,
+    noEmit: true,
+    noUnusedLocals: false,
+    noUnusedParameters: false,
+    // An example with no import or export would otherwise be a script, and two
+    // of those would share one global scope.
+    moduleDetection: ts.ModuleDetectionKind.Force,
+    paths: typePaths(),
+  };
+}
+
+/**
+ * The checker's complaints about each of the given examples, in order: an
+ * empty list for one that typechecks. All of them are checked in one program,
+ * each as its own module under its own file name, so that a complaint is laid
+ * on the example it is about.
+ */
+function typeErrors(codes: readonly string[]): string[][] {
+  const files = codes.map((code) => {
+    written += 1;
+    const file = join(workspace, `typed-${written}.ts`);
+    writeFileSync(file, code, "utf8");
+    return file;
+  });
+  const program = ts.createProgram(files, typecheckOptions());
+  const byFile = new Map<string, string[]>(files.map((file) => [file, []]));
+  const elsewhere: string[] = [];
+  for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
+    const text = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+    const file = diagnostic.file;
+    if (file === undefined) {
+      elsewhere.push(text);
+      continue;
+    }
+    const { line } = file.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
+    const message = `line ${line + 1}: TS${diagnostic.code} ${text}`;
+    const own = byFile.get(file.fileName);
+    if (own === undefined) elsewhere.push(`${file.fileName} ${message}`);
+    else own.push(message);
+  }
+  // A complaint the checker lays on no example - a bad option, or a type error
+  // in the source the examples import - is laid on every one of them, so that
+  // no example reads as typechecked when the program that checked it failed.
+  return files.map((file) => [...elsewhere, ...(byFile.get(file) ?? [])]);
+}
+
 /**
  * What a quoted JSON block disagrees with in the file it quotes.
  *
@@ -353,8 +456,18 @@ describe("the README's TypeScript examples", () => {
     expect(runtimeBindings(code)).toEqual([]);
   });
 
+  let exampleTypeErrors: string[][] | null = null;
+  function typeErrorsOf(index: number): string[] {
+    exampleTypeErrors ??= typeErrors(examples.map((block) => block.code));
+    return exampleTypeErrors[index] ?? ["no typecheck result for this example"];
+  }
+
   for (const [index, block] of examples.entries()) {
     const ordinal = index + 1;
+    it(`typechecks example ${ordinal} against the package's own types`, () => {
+      expect(typeErrorsOf(index)).toEqual([]);
+    }, 60_000);
+
     it(`runs example ${ordinal} and its own checks pass`, () => {
       const result = run(block.code);
       // The example's own output is the failure message: a block that checks
@@ -379,6 +492,24 @@ describe("the README's TypeScript examples", () => {
   it("passes an example that imports only names the package does export", () => {
     const result = run('import { evaluate } from "@riddler/predicator";\nvoid evaluate;\n');
     expect(result.status, result.output).toBe(0);
+  }, 60_000);
+
+  // The constructed halves of the typecheck: an example that runs clean and
+  // does not compile is reported, and so is one importing a name the package
+  // does not export or a subpath it does not have, while a well-typed one is
+  // not. Without these, an empty list per example would read the same
+  // whether the checker had looked at anything or not.
+  it("reports an example that runs but does not typecheck", () => {
+    const [illTyped, missingName, missingSubpath, wellTyped] = typeErrors([
+      'import { isaVersion } from "@riddler/predicator";\nconst version: string = isaVersion();\nvoid version;\n',
+      'import { noSuchExport } from "@riddler/predicator";\nvoid noSuchExport;\n',
+      'import { evaluate } from "@riddler/predicator/untagged";\nvoid evaluate;\n',
+      'import { isaVersion } from "@riddler/predicator";\nconst version: number = isaVersion();\nvoid version;\n',
+    ]);
+    expect(illTyped).toEqual([expect.stringMatching(/^line 2: TS2322 /)]);
+    expect(missingName).toEqual([expect.stringMatching(/^line 1: TS2305 /)]);
+    expect(missingSubpath).toEqual([expect.stringMatching(/^line 1: TS2307 /)]);
+    expect(wellTyped).toEqual([]);
   }, 60_000);
 
   it("reports an import shape it cannot read as named bindings", () => {
