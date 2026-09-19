@@ -82,8 +82,11 @@ name this package stops exporting, fails the gate. What the suite runs is
 pointed at this repository's own source rather than at the installed package,
 so `package.json`'s `exports` map is not exercised by it; a specifier of this
 package that the suite has no rewrite for fails there rather than resolving.
-Its types are not checked there, because the runner strips them rather than
-checking them.
+Each example is also typechecked, against the source module each entry of
+`exports` is built from rather than the built declarations, so an example that
+would not compile fails the gate too. Not caught there: a defect only the
+declaration build would introduce, and a type error only a consumer's
+different compiler options would raise.
 
 ### The ISA version
 
