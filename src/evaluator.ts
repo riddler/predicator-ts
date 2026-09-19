@@ -1190,10 +1190,28 @@ class Machine {
     return { ok: true, next: at + 1 };
   }
 
+  /**
+   * Refuses a pair of operands before an equality or ordering helper walks
+   * them.
+   *
+   * Those helpers recurse once per level, and a program can build a value
+   * deeper than any a host may hand in by wrapping one in lists or maps, so a
+   * pair nested past the depth limit is refused here, at the instruction that
+   * would walk it, rather than left to exhaust the stack. A pair at the limit
+   * is walked as before.
+   */
+  private refuseNested(left: Value, right: Value, at: number): Step | undefined {
+    const fault = nestingFault(left) ?? nestingFault(right);
+    if (fault === undefined) return undefined;
+    return { ok: false, error: nestingError(fault, "an operand", at) };
+  }
+
   private compare(operator: ComparisonOperator, at: number): Step {
     if (this.stack.length < 2) return insufficientOperands("compare", at);
     const right = this.stack.pop() as Value;
     const left = this.stack.pop() as Value;
+    const refused = this.refuseNested(left, right, at);
+    if (refused !== undefined) return refused;
     this.stack.push(compareValues(operator, left, right));
     return { ok: true, next: at + 1 };
   }
@@ -1364,6 +1382,8 @@ class Machine {
     const list = operation === "in" ? right : left;
     if (!Array.isArray(list)) return typeMismatch(operation, "list", list, at);
     const sought = operation === "in" ? left : right;
+    const refused = this.refuseNested(list, sought, at);
+    if (refused !== undefined) return refused;
     this.stack.push(list.some((item) => valuesEqual(item, sought)));
     return { ok: true, next: at + 1 };
   }
@@ -1482,6 +1502,15 @@ class Machine {
         error: new EvaluationError("protected_root", `${String(root)} is a protected root`, at),
       };
     }
+    // The context is the outermost level and each segment one more, so the
+    // last container the path passes through sits at the path's length and
+    // the written value one past it. A write that would nest the context past
+    // the depth limit is refused here, at its own instruction and before the
+    // write walks the path, so the context a run hands back is never deeper
+    // than one a host may hand in. Every other branch is as deep as it was.
+    const fault =
+      path.length > DEPTH_LIMIT ? "depth_limit_exceeded" : nestingFault(value, path.length + 1);
+    if (fault !== undefined) return { ok: false, error: nestingError(fault, "the write", at) };
     const written = writePath(this.context, path, value);
     if (!written.ok) {
       return {
@@ -1489,13 +1518,6 @@ class Machine {
         error: new EvaluationError(written.reason, writeMessage(written.reason), at),
       };
     }
-    // The context is the outermost level and each segment one more, so the
-    // written value sits at one past the path's length. A write that would nest
-    // the context past the depth limit is refused here, at its own instruction,
-    // so the context a run hands back is never deeper than one a host may hand
-    // in. Every other branch of the context is as deep as it was.
-    const fault = nestingFault(value, path.length + 1);
-    if (fault !== undefined) return { ok: false, error: nestingError(fault, "the write", at) };
     this.context = written.context;
     return { ok: true, next: at + 1 };
   }

@@ -1444,20 +1444,23 @@ implements it rather than a description of live code.
 
 Status: proposed (2026-09-18)
 
-Recorded for `pts-yop`, under the ruling that a cyclic or over-deep host value
-is fixed with guards and a declared depth limit rather than by narrowing the
-promise that failure is a value, and that a host's own code throwing is said
-to be outside that promise wherever the promise is stated. This amendment is
-appended, because an amendment to a merged record here removes no line of it.
+Recorded for `pts-yop`, under the ruling that a cyclic or over-deep value is
+fixed with guards and a declared depth limit rather than by narrowing the
+promise that failure is a value, and that host code throwing while this
+package reads it is said to be outside that promise wherever the promise is
+stated. It also carries `pts-0d7`, the same guard for a value a program
+builds. This amendment is appended, because an amendment to a merged record
+here removes no line of it.
 
 What this amends. The normalization section above rules that normalization is
 "a total function on the inputs below", and its two container rows - an array
 and a plain object, each member normalized - say nothing about a structure
 that contains itself or nests without bound. Neither did the projection, the
-tagged codec or the `lit` operand. Every one of those walks recursed once per
-level with no guard, so a cycle, or nesting deep enough, raised the engine's
-own stack-overflow error out of a public entry point instead of answering a
-result. This amendment adds rules for both shapes and removes none.
+tagged codec, the `lit` operand, the `store` write or the equality and
+ordering the comparison and membership opcodes use. Each of those recursed
+once per level with no guard, so a cycle, or nesting deep enough, raised the
+engine's own stack-overflow error out of a public entry point instead of
+answering a result. This amendment adds rules for both shapes and removes none.
 
 ### A value that contains itself is refused
 
@@ -1471,25 +1474,25 @@ it is normalized, or written, at each place it appears. The ancestor test is
 ### One depth limit, declared
 
 **This package declares one depth limit, `DEPTH_LIMIT` in `src/nesting.ts`,
-of 256 levels, and every walk counts against that constant rather than
-declaring its own.** The outermost list or map is level one and each list or
-map inside it one more; any other member is a leaf. A value at the limit
-answers normally, and a value one level deeper is refused with the reason
-token `"depth_limit_exceeded"`.
+of 256 levels, and the walks and checks listed below count against that
+constant rather than declaring their own.** The outermost list or map is
+level one and each list or map inside it one more; any other member is a
+leaf. A value at the limit answers normally, and a value one level deeper is
+refused with the reason token `"depth_limit_exceeded"`.
 
 **The limit is declared rather than inherited from the host's stack, because
-the inherited one was measured to vary.** Before this amendment the deepest
+the inherited one was measured to vary.** Measured on 2026-09-18 on one
+machine under node 24.21.0, before this amendment's guards: the deepest
 context `evaluate` could normalize moved by about a thousand levels between
-two programs on one machine and one engine version - one calling it directly,
-one calling it from further down its own stack - so the same context answered
-in one program and raised in another, and a reviewer, a test runner and a
-phone would each have drawn the line somewhere else. A declared limit makes the answer a
-property of the input. 256 sits well below the roughly two thousand levels at
-which the first of the unguarded walks to give out overflowed, measured on the
-toolchain this repository pins. It is not a measurement of any other engine's
-stack, and changing it is a change to this amendment rather than a tuning.
+two programs - one calling it directly, one calling it from further down its
+own stack - so the same context answered in one program and raised in the
+other. The first of the unguarded walks to give out overflowed at roughly two
+thousand levels, and 256 sits well below that. No other engine and no other
+machine was measured; the limit is declared so that the answer is a property
+of the input rather than of wherever it runs, and changing it is a change to
+this amendment rather than a tuning.
 
-**Where the limit is counted.**
+**What counts against the limit.**
 
 - A context counts as the outermost map, so a root may nest one level fewer
   than the limit. The context passes through `fromHost` in `src/values.ts`,
@@ -1499,12 +1502,18 @@ stack, and changing it is a change to this amendment rather than a tuning.
   it; the check is in the machine's `lit` method in `src/evaluator.ts`. That
   check is on the operand's shape alone, and it decides nothing else about
   what a `lit` operand admits.
-- A `store` that would nest the context past the limit fails at its own
-  instruction, so the context a statement run answers is never deeper than
-  one a host may supply; the check is in the machine's `store` method in
+- A `store` whose path, or whose value placed at the end of that path, would
+  nest the context past the limit fails at its own instruction, before the
+  write walks the path; the check is in the machine's `store` method in
   `src/evaluator.ts`. Its failing arm carries the context as it stood before
-  that store, as the statement-mode amendment above requires of a failure
-  after the program started.
+  that store, as the statement-mode note above requires of a failure after
+  the program started.
+- A program can build a value deeper than any a host may supply, by wrapping
+  one in lists or maps. A comparison or a membership test whose operand nests
+  past the limit fails at its own instruction, before `valuesEqual`,
+  `strictlyEqual` or `compareOrder` in `src/evaluator.ts` walks it; the check
+  is the machine's `refuseNested` method, called by its `compare` and
+  `membership` methods.
 - A result nested past the limit is refused rather than handed back:
   `evaluateToValue` in `src/evaluator.ts` answers it as an `EvaluationError`,
   and `executeValue` in `src/index.ts` refuses a value past it onto the
@@ -1515,6 +1524,15 @@ stack, and changing it is a change to this amendment rather than a tuning.
   refuses a value whose text would nest past it, so every text the encoder
   writes is one the decoder reads back.
 
+**What does not count against it.** The projection, `toHost` in
+`src/values.ts`, walks without the limit; every entry point above checks what
+it hands to the projection first, and the last section below says why the
+projection itself is not guarded. The two JSON builtins in
+`src/functions/json.ts` walk their own argument without the limit too; a
+stack overflow inside either is caught by the machine's `call` method like
+any function's failure and answered as the failing arm, carrying the engine's
+message as its reason rather than a token of this package's.
+
 **The two reason tokens are this package's, at its own boundary.** Like
 `"integer_out_of_range"`, neither is an ISA reason, neither is offered
 upstream as one, and neither adds an opcode or changes the wire format. They
@@ -1522,23 +1540,32 @@ join the refusal reasons of the value boundary and of the codec's encode
 direction; the decode direction gains only `"depth_limit_exceeded"`, since a
 text cannot contain itself.
 
-### A host's own code throwing is outside the promise
+### A throwing getter, proxy trap or `now` option is outside the promise
 
-**A getter or a proxy trap on a value this package walks is the host's own
-code, and an error it throws propagates out of the walk unchanged.** It is
-not turned into a refusal, because the error is the host's rather than an
-outcome of the value, and a refusal carrying a token of this package's in its
-place would swallow what the host's code said. A change that states the
-promise that failure is a value states this exception beside it. It is
-stated beside the promise in the `evaluate` and `execute` doc comments in
-`src/index.ts`, in the doc comments of `fromHost` in `src/values.ts` and of
-`encodeTagged` in `src/tagged.ts`, in the README's evaluation and codec
-sections, and here.
+**A getter or a proxy trap on a value this package walks, and the `now`
+option when a relative date reads the clock, are host code this package runs
+while it reads what the host handed it, and an error any of them throws
+propagates unchanged.** It is not turned into a refusal, because the error is
+the host's rather than an outcome of the value, and a refusal carrying a token
+of this package's in its place would swallow what the host's code said.
 
-**ADR-0001's sentence that errors are values is not amended.** It governs
-what this package's own code does when it fails. A host's getter throwing is
-not a failure of this package's code, and a walk that lets that error through
-is not this package throwing, so the sentence stands as written.
+**A function the host registers under `functions` is not in that exception.**
+Its throw is caught by the machine's `call` method in `src/evaluator.ts`, at
+`answered = implementation(args)`, and answered as the failing arm carrying
+its message, as every function's failure is.
+
+**A change that states the promise that failure is a value states this
+exception beside it.** It is stated beside the promise in the `evaluate` and
+`execute` doc comments in `src/index.ts`, in the doc comments of `fromHost` in
+`src/values.ts` and of `encodeTagged` in `src/tagged.ts`, in the README's
+evaluation and codec sections, in the Conventions of `CLAUDE.md`, and here.
+
+**ADR-0001 is not edited, and this exception scopes its rule.** ADR-0001 says
+errors are values and that throwing is reserved for a violated internal
+invariant. A getter, a proxy trap or a `now` option throwing is none of this
+package's own throwing: this package lets the host's error through, so that
+rule does not reach it, and ADR-0001's sentences are read as scoped by this
+section rather than contradicted by it.
 
 ### What this does not decide
 

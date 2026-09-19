@@ -7,8 +7,8 @@ import { fromHost, PDate, type Value, zeroDuration } from "../src/values.js";
 // The nesting guards: a value that contains itself, or whose lists and maps
 // nest past the declared depth limit, answers a failing arm with a named
 // reason at every entrance and exit, and a value at the limit still answers.
-// The one thing outside that promise - the host's own code throwing inside a
-// walk - is pinned at the foot of this file.
+// What is outside that promise - host code that throws while it is read: a
+// getter, a proxy trap, the now option - is pinned at the foot of this file.
 
 /**
  * A charge amount wrapped in `depth` lists, so the value's own depth is
@@ -344,7 +344,148 @@ function wrapIn(leaf: Value, depth: number): Value {
   return value;
 }
 
-describe("outside the promise: the host's own code throwing", () => {
+/**
+ * Every entry point that takes a host value, as one table. `rootLevel` is the
+ * level a value handed to it sits at: one where the value stands alone, two
+ * where it is a root of a context, which is itself the outermost map.
+ */
+const HOST_ENTRY_POINTS: ReadonlyArray<{
+  readonly name: string;
+  readonly rootLevel: number;
+  readonly run: (value: unknown) => { ok: boolean; reason?: string; error?: { reason: string } };
+}> = [
+  { name: "fromHost", rootLevel: 1, run: (value) => fromHost(value) },
+  { name: "encodeTagged", rootLevel: 1, run: (value) => encodeTagged(value as Value) },
+  { name: "evaluate", rootLevel: 2, run: (value) => evaluate([["lit", true]], { value }) },
+  { name: "execute", rootLevel: 2, run: (value) => execute([], { value }) },
+  { name: "executeValue", rootLevel: 2, run: (value) => executeValue([], { value }) },
+  {
+    name: "evaluateTagged",
+    rootLevel: 2,
+    run: (value) => evaluateTagged([["lit", true]], { value }, { tagged: true }),
+  },
+];
+
+describe("every entry point that takes a host value", () => {
+  // Sabotage: dropping the ancestor test from enterContainer turns every row
+  // into a raise. It was run and reverted.
+  it.each(HOST_ENTRY_POINTS)("$name refuses a self-cycle and a mutual cycle", ({ run }) => {
+    expect(reasonOf(run(selfCycle()))).toBe("cyclic_value");
+    expect(reasonOf(run(mutualCycle()))).toBe("cyclic_value");
+  });
+
+  // Sabotage: leaving a map in the normalizer's ancestor set after it leaves
+  // it refuses every row but encodeTagged's; leaving one in the encoder's
+  // refuses that row. Each was run and reverted.
+  it.each(HOST_ENTRY_POINTS)("$name answers a value shared by two paths", ({ run }) => {
+    const card = { brand: "visa" };
+    expect(run({ primary: card, backup: card }).ok).toBe(true);
+  });
+
+  // Sabotage: testing the depth with >= refuses every row at the limit. It
+  // was run and reverted.
+  it.each(HOST_ENTRY_POINTS)(
+    "$name answers at the limit and refuses one level past it",
+    ({ run, rootLevel }) => {
+      const atLimit = DEPTH_LIMIT - rootLevel + 1;
+      expect(run(nested(atLimit)).ok).toBe(true);
+      expect(reasonOf(run(nested(atLimit + 1)))).toBe("depth_limit_exceeded");
+    },
+  );
+
+  // Sabotage: removing the depth test from enterContainer lets every row
+  // recurse until the stack runs out. It was run and reverted.
+  it.each(HOST_ENTRY_POINTS)("$name refuses a value 100000 levels deep", ({ run }) => {
+    expect(reasonOf(run(nested(100_000)))).toBe("depth_limit_exceeded");
+  });
+});
+
+/**
+ * An instruction list that builds a charge amount wrapped in `depth` lists,
+ * one `make_list` per level, so the value is the program's own and no host
+ * handed it in.
+ */
+function built(depth: number): Program {
+  const program: Program[number][] = [["lit", 4200]];
+  for (let level = 0; level < depth; level += 1) program.push(["make_list", 1]);
+  return program;
+}
+
+describe("a value the program built past the limit", () => {
+  /** Two built values of `depth`, one compared against the other. */
+  const pairThen = (depth: number, opcode: Program[number]): Program => [
+    ...built(depth),
+    ...built(depth),
+    opcode,
+  ];
+
+  // Each row is one helper path: loose equality, strict equality, ordering
+  // (which walks by equality and then by order), and membership either way
+  // round. `program(depth)` holds its deepest operand at `depth`: the
+  // membership rows wrap one side in a list, so their pair is built one level
+  // shallower. Sabotage: dropping the operand check from the comparison opcode
+  // makes the first three rows answer past the limit and raise at 20000
+  // levels; dropping it from membership does the same to the last two. Each
+  // was run and reverted.
+  const rows: ReadonlyArray<{
+    readonly name: string;
+    readonly program: (depth: number) => Program;
+  }> = [
+    { name: "EQ", program: (depth) => pairThen(depth, ["compare", "EQ"]) },
+    { name: "STRICT_EQ", program: (depth) => pairThen(depth, ["compare", "STRICT_EQ"]) },
+    { name: "LTE", program: (depth) => pairThen(depth, ["compare", "LTE"]) },
+    {
+      name: "in",
+      program: (depth) => [...built(depth - 1), ...built(depth - 1), ["make_list", 1], ["in"]],
+    },
+    {
+      name: "contains",
+      program: (depth) => [
+        ...built(depth - 1),
+        ["make_list", 1],
+        ...built(depth - 1),
+        ["contains"],
+      ],
+    },
+  ];
+
+  it.each(rows)("$name compares a pair at the limit normally", ({ program }) => {
+    expect(evaluate(program(DEPTH_LIMIT))).toEqual({ ok: true, value: true });
+  });
+
+  it.each(rows)("$name refuses a pair past the limit at its own instruction", ({ program }) => {
+    const past = program(DEPTH_LIMIT + 1);
+    const outcome = evaluate(past);
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("depth_limit_exceeded");
+    expect(outcome.error.position).toBe(past.length - 1);
+  });
+
+  it.each(rows)("$name refuses a pair 20000 levels deep rather than raising", ({ program }) => {
+    expect(reasonOf(evaluate(program(20_000)))).toBe("depth_limit_exceeded");
+  });
+
+  /** A store through `segments` map keys of a plain amount. */
+  const deepStore = (segments: number): Program => [
+    ...Array.from({ length: segments }, (): Program[number] => ["lit", "next"]),
+    ["lit", 4200],
+    ["store", segments],
+  ];
+
+  // The last map the path passes through sits at the path's length, the
+  // context being level one. Sabotage: dropping the path-length test lets
+  // the long path recurse through the write until the stack runs out. It was
+  // run and reverted.
+  it("refuses a store whose path alone nests past the limit, before walking it", () => {
+    expect(execute(deepStore(DEPTH_LIMIT)).ok).toBe(true);
+    const past = execute(deepStore(DEPTH_LIMIT + 1));
+    expect(reasonOf(past)).toBe("depth_limit_exceeded");
+    expect(reasonOf(execute(deepStore(20_000)))).toBe("depth_limit_exceeded");
+  });
+});
+
+describe("outside the promise: host code throwing while it is read", () => {
   // A getter or a proxy trap is host code running inside the walk. Its error
   // is the host's, and it propagates unchanged rather than being turned into a
   // refusal. Sabotage: answering a refusal for every error fromHost catches,
@@ -367,5 +508,38 @@ describe("outside the promise: the host's own code throwing", () => {
       },
     );
     expect(() => encodeTagged(visitor as Value)).toThrow(declined);
+  });
+
+  // The `now` option is read when a relative date needs the clock, outside
+  // any function call, so its error propagates too. Sabotage: wrapping that
+  // read in a catch that answers a failing arm turns this red. It was run and
+  // reverted.
+  it("propagates a throwing now option read for a relative date", () => {
+    const clockDown = new Error("the clock is unavailable");
+    const program: Program = [
+      ["duration", [[1, "d"]]],
+      ["relative_date", "ago"],
+    ];
+    expect(() =>
+      evaluate(program, undefined, {
+        now: () => {
+          throw clockDown;
+        },
+      }),
+    ).toThrow(clockDown);
+  });
+
+  // A function the host registers is the other side of the line: its throw is
+  // caught and answered. Sabotage: rethrowing from the call dispatch's catch
+  // turns this into a raise. It was run and reverted.
+  it("answers a throwing host function as the failing arm", () => {
+    const outcome = evaluate([["call", "authorize", 0]], undefined, {
+      functions: {
+        authorize: () => {
+          throw new Error("the card issuer is unreachable");
+        },
+      },
+    });
+    expect(reasonOf(outcome)).toBe("the card issuer is unreachable");
   });
 });

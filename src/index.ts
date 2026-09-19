@@ -49,13 +49,16 @@ export * from "./values.js";
  * Failure is a value: a refused context, an instruction the evaluator does not
  * recognize, an operand of the wrong type and an unbound variable all come
  * back as the failing arm of the result, never as a throw. That includes a
- * context or a result that contains itself or nests past the depth limit this
- * package declares, each refused with its own reason token.
+ * context, a literal, an operand the program built or a result that contains
+ * itself or nests past the depth limit this package declares, each refused
+ * with its own reason token. A function the host registers under `functions`
+ * that throws is answered the same way.
  *
- * The one thing outside that promise is the host's own code running inside
- * the call: a getter or a proxy trap on the context that throws propagates
- * its own error unchanged, because it is the host failing rather than an
- * outcome of the evaluation.
+ * Outside that promise is host code that throws while the evaluation reads
+ * what the host handed it: a getter or a proxy trap on a value the evaluation
+ * walks, such as the context, and the `now` option when a relative date reads
+ * the clock. Its error propagates unchanged, because it is the host failing
+ * rather than an outcome of the evaluation.
  *
  * Asking for the corpus's tagged encoding is not available here. That request
  * belongs to the `./tagged` subpath's entry point, and a host that wants it
@@ -90,14 +93,14 @@ export function evaluate(
  * so a caller that wants all-or-nothing on failure ignores what comes back and
  * keeps the one it already had.
  *
- * Failure is a value here too, with the same one exception - a throwing
- * getter or proxy trap on the context propagates - and the failing arm
- * carries the context as far as the program got: every write completed
- * before the failing statement is handed back rather than dropped. The one
- * failing arm with no context is a context the value boundary refused, which
- * is answered before any program runs. A store that would nest the context
- * past the depth limit fails at its own instruction, so the context handed
- * back is the one before it.
+ * Failure is a value here too, with the same exception - a throwing getter or
+ * proxy trap on a walked value, or a throwing `now` option, propagates - and
+ * the failing arm carries the context as far as the program got: every write
+ * completed before the failing statement is handed back rather than dropped.
+ * The one failing arm with no context is a context the value boundary
+ * refused, which is answered before any program runs. A store that would nest
+ * the context past the depth limit fails at its own instruction, so the
+ * context handed back is the one before it.
  */
 export function execute(
   instructions: Program,
