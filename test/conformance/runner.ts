@@ -18,15 +18,35 @@
  * the claimed version retired - is not reported either way, and that is
  * absence rather than a skip.
  *
- * WHAT RUNNING A CASE MEANS. The case is decoded, its instruction list is run
- * through the package's own published entry point against its context, and
- * what comes back is compared with what the case expects. The comparison is
- * made in the value domain rather than over text: the run asks for the
- * corpus's own encoding and reads it back with the corpus's own decoder, so an
- * integral float stays a float and a map whose keys were written in another
- * order still matches. An expectation the run does not meet is a fail carrying
- * the difference, and an opcode this build does not implement reaches the same
- * arm as any other failure rather than a third value.
+ * WHAT RUNNING A CASE MEANS. On the evaluator surface the case is decoded, its
+ * instruction list is run through the package's own published entry point
+ * against its context, and what comes back is compared with what the case
+ * expects. The comparison is made in the value domain rather than over text:
+ * the run asks for the corpus's own encoding and reads it back with the
+ * corpus's own decoder, so an integral float stays a float and a map whose
+ * keys were written in another order still matches. An expectation the run
+ * does not meet is a fail carrying the difference, and an opcode this build
+ * does not implement reaches the same arm as any other failure rather than a
+ * third value.
+ *
+ * On the compiler surface the case's source is compiled and the program that
+ * comes back is compared with the case's own instruction list. That comparison
+ * is made in the value domain too, and for the same reason: `compile` answers
+ * operands as domain values, so an integer operand and a float operand are
+ * different programs here, a date operand is a date, and a jump target is
+ * compared as the number it is. Comparing the two as text, or through a
+ * round trip in the corpus's tagged encoding, would throw away exactly the
+ * distinctions this surface is run to catch. A failing case carries both
+ * lists, because which instruction diverged is what a reader needs.
+ *
+ * ONE CONSTRUCTOR WRITES A REPORT. Both surfaces run through the same private
+ * function, which is the only place a report's fields are written and the only
+ * caller of the version accessor here. A surface that built its own report
+ * literal could write a version from somewhere else - the corpus manifest's,
+ * or a constant - and the report would still satisfy the schema while saying
+ * something untrue about the build that produced it. The qualifier matters:
+ * this is about reports of a run over the corpus, not about the fixtures other
+ * suites construct to exercise a reader.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -36,7 +56,7 @@ import { writeStamp } from "../../scripts/lib/build-stamp.mjs";
 import type { CaseMetadata, Surface } from "../../scripts/lib/corpus.mjs";
 import { loadCases, loadManifest, runnableCases } from "../../scripts/lib/corpus.mjs";
 import type { PredicatorError } from "../../src/errors.js";
-import { isaVersion } from "../../src/index.js";
+import { compile, isaVersion } from "../../src/index.js";
 import type { Instruction, Program } from "../../src/instructions.js";
 import { decodeTagged, encodeTagged, evaluateTagged } from "../../src/tagged.js";
 import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "../../src/values.js";
@@ -271,25 +291,79 @@ export function runCase(decoded: DecodedCase): CaseResult {
 }
 
 /**
- * Runs the evaluator surface over tiers 1 through `tier` and answers the
- * report.
+ * Compiles one case's source and answers what to write down about it.
  *
- * Each case is decoded first, because the decoder is implemented and a case it
+ * The comparison is against the case's own instruction list, decoded rather
+ * than read as JSON, so an integer operand and an integral float operand are
+ * the different programs they are. A refusal from the compiler is a fail
+ * carrying the reason and the message the refusing stage gave, because a
+ * source the corpus holds a program for is one this package is expected to
+ * compile.
+ *
+ * A case with no source never reaches here: the compiler surface's case set
+ * does not hold one, which is absence rather than a skip.
+ */
+export function runCompileCase(item: CaseMetadata): CaseResult {
+  if (item.source === null) {
+    throw new Error(`corpus case ${item.id} has no source and is not a compiler case`);
+  }
+  const decoded = decodeCase(item);
+  const compiled = compile(item.source);
+  if (!compiled.ok) {
+    return {
+      id: item.id,
+      result: "fail",
+      reason: `the source did not compile: ${compiled.error.reason} (${compiled.error.message}); the case holds ${describe(decoded.instructions)}`,
+    };
+  }
+  // The program is copied into plain arrays rather than cast: an instruction
+  // list IS a value of the domain, and spelling that out lets the comparison
+  // below be the domain's own rather than a structural walk over host objects.
+  const answered: Value = compiled.instructions.map((instruction) => [...instruction]);
+  if (sameValue(answered, decoded.instructions)) {
+    return { id: item.id, result: "pass" };
+  }
+  return {
+    id: item.id,
+    result: "fail",
+    reason: `compiled ${describe(answered)} and the case holds ${describe(decoded.instructions)}`,
+  };
+}
+
+/**
+ * Runs one surface over tiers 1 through `tier` and answers the report.
+ *
+ * This is the one place a report is built, and the one caller of the version
+ * accessor here: a surface that wrote its own literal could write a version
+ * from somewhere other than the build being reported on. Each case is decoded
+ * first on both surfaces, because the decoder is implemented and a case it
  * refuses is a different problem that has to be visible as itself rather than
  * buried under the same reason as everything else.
  */
-export function runEvaluator(tier: number): Report {
+function runSurface(surface: Surface, tier: number): Report {
   const manifest = loadManifest();
   const claimed = isaVersion();
   const cases = loadCases(tier, manifest);
-  const attempted = runnableCases(cases, "evaluator", claimed, manifest.isa_version);
+  const attempted = runnableCases(cases, surface, claimed, manifest.isa_version);
   return {
     isa_version: claimed,
     corpus_hash: manifest.corpus_hash,
     tier,
-    surface: "evaluator",
-    results: attempted.map((item) => runCase(decodeCase(item))),
+    surface,
+    results: attempted.map((item) =>
+      surface === "compiler" ? runCompileCase(item) : runCase(decodeCase(item)),
+    ),
   };
+}
+
+/** Runs the evaluator surface over tiers 1 through `tier`. */
+export function runEvaluator(tier: number): Report {
+  return runSurface("evaluator", tier);
+}
+
+/** Runs the compiler surface over tiers 1 through `tier`. */
+export function runCompiler(tier: number): Report {
+  return runSurface("compiler", tier);
 }
 
 /**

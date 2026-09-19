@@ -39,7 +39,7 @@ import type { Registry, RegistryEntry } from "../../scripts/lib/registry-encodin
 import { encodeRegistry } from "../../scripts/lib/registry-encoding.mjs";
 import { isaVersion } from "../../src/index.js";
 import type { Report } from "./runner.js";
-import { runEvaluator } from "./runner.js";
+import { runCompiler, runEvaluator } from "./runner.js";
 
 const registryPath = fileURLToPath(new URL("../../conformance/registry.json", import.meta.url));
 const registryBytes = readFileSync(registryPath, "utf8");
@@ -203,6 +203,18 @@ function withEntries(entries: readonly RegistryEntry[], claims: Registry["claims
   };
 }
 
+/**
+ * A run per surface, looked up by the surface an entry names.
+ *
+ * The currency check below reads this rather than naming the surfaces it runs,
+ * so the set of runs follows the registry's entries. Adding a surface to the
+ * conformance runner adds its row here and nothing else.
+ */
+const runs: Readonly<Record<Surface, (tier: number) => Report>> = {
+  compiler: runCompiler,
+  evaluator: runEvaluator,
+};
+
 const nullSourceCase = cases.find((item) => item.source === null);
 const sourceBearingCase = cases.find((item) => item.source !== null);
 if (nullSourceCase === undefined || sourceBearingCase === undefined) {
@@ -256,9 +268,29 @@ describe("the registry this package ships", () => {
     expect(encodingProblems(registry, registryBytes)).toEqual([]);
   });
 
+  // Which runs this makes is DERIVED from the surfaces the entries name, so a
+  // surface whose entries land brings its own run with no edit here. Naming
+  // the surfaces instead would make this test go red for a scheduled change -
+  // the day compiler entries land it would report that nothing ran the
+  // compiler surface - and a test that reddens for a planned change teaches a
+  // reader to edit it rather than to read it.
+  //
+  // A surface the runs table does not know contributes no run, which is the
+  // honest answer: currency then says nothing ran it, rather than this test
+  // failing to name what went wrong.
+  //
+  // No sabotage distinguishes the derived form from a named one while the
+  // shipped registry holds entries on one surface only, and none is claimed
+  // here. What was run is the hand-added compiler entry the note at the top of
+  // this block describes: it still turns membership and currency red, and now
+  // does so because a compiler run observed no such pass rather than because
+  // nothing ran the surface. It was run and reverted.
   it("passes currency", () => {
     const surfaces = new Set(registry.entries.map((entry) => entry.surface));
-    const reports = surfaces.has("evaluator") ? [runEvaluator(topTier)] : [];
+    const reports = [...surfaces].flatMap((surface) => {
+      const run = runs[surface as Surface];
+      return run === undefined ? [] : [run(topTier)];
+    });
     expect(currencyProblems(registry, reports)).toEqual([]);
   });
 
