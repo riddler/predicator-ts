@@ -18,10 +18,11 @@
   leading sign on the whole text, which the reference reads as the sign of the
   year. Either sign is refused. `::string` writes a year as four unsigned
   digits, so a negative year would read in and not write back; a positive one
-  names a year the unsigned spelling already admits, and is refused beside it
-  so that the sign is one rule rather than two. A host that needs a negative
-  year builds the date or the datetime itself rather than casting a string to
-  it.
+  names a year the unsigned spelling already admits, and so does a minus
+  before a year of four zeroes, which makes no year negative; each is refused
+  beside the negative year so that the sign is one rule rather than two. A
+  host that needs a negative year builds the date or the datetime itself
+  rather than casting a string to it.
 
 ### Changed
 

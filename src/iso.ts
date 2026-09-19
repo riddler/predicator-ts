@@ -54,8 +54,10 @@ const DATE_TEXT = /^(\d{4})-(\d{2})-(\d{2})$/;
  * the whole text, which the reference reads as the sign of the year. The
  * `::string` direction writes a year as four unsigned digits, so admitting a
  * negative year here would make a text this package can read and cannot write
- * back. A plus names a year this shape already admits without it, and is
- * refused beside the minus so that the sign is one rule rather than two.
+ * back. A plus names a year this shape already admits without it, and so does
+ * a minus before a year of four zeroes, which makes no year negative; each is
+ * refused beside the negative year so that the sign is one rule rather than
+ * two.
  * That divergence is declared rather than closed.
  */
 const DATETIME_TEXT =
@@ -128,10 +130,11 @@ export function formatDateTime(value: PDateTime): string {
  * One divergence from the reference is declared rather than closed, the same
  * one the datetime shape declares: the reference reads a leading sign on the
  * whole text as the sign of the year, and this refuses either sign. A minus
- * is refused for the round trip - `::string` writes a year as four unsigned
- * digits, so a negative year would read in and not write back. A plus names a
- * year this shape already admits without it, and is refused beside the minus
- * so that the sign is one rule rather than two.
+ * is refused for the round trip where it makes the year negative - `::string`
+ * writes a year as four unsigned digits, so a negative year would read in and
+ * not write back. A plus names a year this shape already admits without it,
+ * and so does a minus before a year of four zeroes; each is refused beside the
+ * negative year so that the sign is one rule rather than two.
  */
 export function readDate(text: string): PDate | undefined {
   const match = DATE_TEXT.exec(text);

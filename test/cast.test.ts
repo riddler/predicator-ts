@@ -361,11 +361,12 @@ describe("the offset and separator spellings, read off the reference's parser", 
 
   // A declared divergence rather than a rule of the instruction set: the
   // reference reads a leading sign on the whole text as the sign of the year,
-  // and this refuses either sign. A minus is refused for the round trip -
-  // `::string` writes a year as four unsigned digits, so a negative year would
-  // read in and not write back. A plus names a year this shape already admits
-  // without it, and is refused beside the minus so that the sign is one rule
-  // rather than two.
+  // and this refuses either sign. A minus is refused for the round trip where
+  // it makes the year negative - `::string` writes a year as four unsigned
+  // digits, so a negative year would read in and not write back. A plus names
+  // a year this shape already admits without it, and so does a minus before a
+  // year of four zeroes; each is refused beside the negative year so that the
+  // sign is one rule rather than two.
   //
   // Sabotage: admitting a leading sign in either pattern falsifies the
   // declaration these assert, and turns them red with a value. It was run and
@@ -374,6 +375,8 @@ describe("the offset and separator spellings, read off the reference's parser", 
     expectValue(cast("-2026-08-09", "date"), Undefined);
     expectValue(cast("-2026-08-09T08:30:00Z", "datetime"), Undefined);
     expectValue(cast("+2026-08-09", "date"), Undefined);
+    expectValue(cast("-0000-01-01", "date"), Undefined);
+    expectValue(cast("-0000-01-01T00:00:00Z", "datetime"), Undefined);
   });
 });
 
