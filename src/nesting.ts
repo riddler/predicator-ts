@@ -14,8 +14,9 @@
  * checks a literal, a store, the operands of a comparison or a membership test
  * and a result against it before anything walks them; a value past the limit
  * or with a cycle is answered as a failing arm with a named reason rather than
- * left to the stack. The projection itself and the JSON builtins' own walks
- * do not count against it; the record below says why.
+ * left to the stack. The projection itself and the JSON serializer's own walk
+ * do not count against it, and the JSON parser's fault locator does; the
+ * record below says why.
  *
  * This module is internal: neither entry point re-exports it. A walk that
  * lives elsewhere imports the constant from here rather than declaring its
