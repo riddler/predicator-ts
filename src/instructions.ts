@@ -50,10 +50,9 @@ export type Program = readonly Instruction[];
  *
  * The reference states one rule that makes these load-bearing rather than
  * documentation: a malformed operand is an unknown instruction, not a bad
- * operand. Every opcode's clause is guarded on its operand's shape, so an
- * out-of-range or wrong-typed operand falls through to the catch-all and comes
- * back as `unknown_instruction`. Naming the shape here is what lets the
- * evaluator apply that rule once instead of at each opcode.
+ * operand. In this evaluator an operand outside its row's shape comes back as
+ * `unknown_instruction` before its opcode runs, and naming the shape here is
+ * what lets that rule apply once instead of at each opcode.
  *
  * A shape is sometimes wider than the set of operands its opcode will take,
  * and what decides how wide is section 5 rather than taste. Throughout, an
@@ -73,7 +72,10 @@ export type Program = readonly Instruction[];
  * description of the rows below:
  *
  * - where section 5 gives the opcode no error of its own, the shape must be
- *   tight enough that an operand the opcode would refuse never reaches it;
+ *   tight enough that an operand the opcode would refuse never reaches it,
+ *   except a refusal that depends on evaluation state rather than on the
+ *   operand - `jump_backward`'s target before index zero is one - which the
+ *   opcode makes itself, since a shape reads the operand alone;
  * - where section 5 gives the opcode its own error, the shape must be loose
  *   enough that the operand does reach the opcode, which then names it.
  *
