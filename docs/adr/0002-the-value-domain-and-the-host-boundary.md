@@ -2123,19 +2123,13 @@ this record names each:
   `normalizeObject` in the same file for an object whose prototype is neither
   the object prototype nor null.
 
-**A host `Date` that names no instant is refused with `"non_finite_number"`
-too.** The table's `Date` row normalizes a `Date` at the same instant, and
-such a `Date` has none: its time value is `NaN`. The refusal is in the `Date`
-arm of `normalize` in `src/values.ts`, read at `f38ab76`.
-
 **Each reason is pinned by a shipped test** in `test/values.test.ts`: "refuses
 a non-finite number in all three spellings" expects `"non_finite_number"` for
-each spelling; "refuses a value it has no row for" expects
+each spelling, and "refuses a value it has no row for" expects
 `"unsupported_host_value"` for a function, a symbol other than the `Undefined`
 singleton, a `bigint`, a `Map`, a `Set` and a class instance this package did
-not define; and "refuses a host Date that names no instant" expects
-`"non_finite_number"`. Run at `f38ab76`, respelling the reason at any one of
-the refusals above turned at least one of these tests red.
+not define. Run at `f38ab76`, respelling the reason at any one of the refusals
+the two bullets above name turned at least one of these tests red.
 
 **The reference emits no reason for either case, so there is none to match.**
 Neither token appears in any file of predicator-ex at tag `v9.4.1`, its
@@ -2152,5 +2146,4 @@ that tag (Elixir 1.18.3, OTP 27):
   `:other`, a `MapSet` or a host struct, and evaluating `x` against it
   answered that value itself.
 
-So neither reason is one the reference has, and neither adds an opcode or
-changes the wire format.
+So neither reason is one the reference has.
