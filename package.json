@@ -42,7 +42,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "gate": "pnpm run typecheck && pnpm run lint && pnpm run neutrality && vitest run --coverage && pnpm run corpus:check && pnpm run build",
+    "gate": "node --version && pnpm run typecheck && pnpm run lint && pnpm run neutrality && vitest run --coverage && pnpm run corpus:check && pnpm run build",
     "gate:loop": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",

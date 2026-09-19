@@ -28,49 +28,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Single source of truth for the toolchain: a version duplicated into
-      # this file drifts the first time mise.toml moves. mise itself is not
-      # used to provision CI - the setup actions are faster and cached.
-      - name: Read the toolchain out of mise.toml
-        id: toolchain
-        run: |
-          set -euo pipefail
-          node="$(sed -n 's/^node *= *"\(.*\)".*$/\1/p' mise.toml | head -1)"
-          pnpm="$(sed -n 's/^pnpm *= *"\(.*\)".*$/\1/p' mise.toml | head -1)"
-          test -n "$node" || { echo "no node version in mise.toml" >&2; exit 1; }
-          test -n "$pnpm" || { echo "no pnpm version in mise.toml" >&2; exit 1; }
-          echo "node=$node" >> "$GITHUB_OUTPUT"
-          echo "pnpm=$pnpm" >> "$GITHUB_OUTPUT"
-
-      - uses: pnpm/action-setup@v4
+      # The toolchain comes from mise.toml, provisioned by mise itself, so CI
+      # runs the gate through the same `mise exec --` command an agent runs
+      # locally (.claude/wurk.json gate.full), on the node and pnpm pinned
+      # there. A node or pnpm version written into this file would drift the
+      # first time mise.toml moves. The action installs mise at the version
+      # below, runs `mise install` against mise.toml, and caches the tools.
+      - uses: jdx/mise-action@v4
         with:
-          version: ${{ steps.toolchain.outputs.pnpm }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ steps.toolchain.outputs.node }}
+          version: 2026.8.2
 
       # The pnpm store is the whole dependency cache. The key is derived from
       # pnpm-lock.yaml, which is the whole pin: every dependency here is a
       # public npm package, so nothing authenticates to anything and the
       # default GITHUB_TOKEN with the read-only `contents` permission above is
       # all this job needs.
-      - name: Resolve the pnpm store path
+      - name: Resolve the toolchain and the pnpm store path
         id: store
         run: |
           set -euo pipefail
-          echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+          echo "node=$(mise exec -- node --version)" >> "$GITHUB_OUTPUT"
+          echo "path=$(mise exec -- pnpm store path --silent)" >> "$GITHUB_OUTPUT"
 
       - name: Cache the pnpm store
         uses: actions/cache@v4
         with:
           path: ${{ steps.store.outputs.path }}
-          key: pnpm-${{ runner.os }}-node${{ steps.toolchain.outputs.node }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: pnpm-${{ runner.os }}-node${{ steps.store.outputs.node }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            pnpm-${{ runner.os }}-node${{ steps.toolchain.outputs.node }}-
+            pnpm-${{ runner.os }}-node${{ steps.store.outputs.node }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: mise exec -- pnpm install --frozen-lockfile
 
       # The gate is the whole job: typecheck, lint, the suite with coverage
       # against the manifest's floor, the corpus check, and the build.
