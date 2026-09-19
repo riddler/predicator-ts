@@ -1,8 +1,10 @@
 {
   ".": [
+    "Ast",
     "CompileResult",
     "CompileWithPositionsResult",
     "CompileWithSpansResult",
+    "DecompileOptions",
     "Duration",
     "DurationParts",
     "EvaluateOptions",
@@ -19,6 +21,7 @@
     "PDateTime",
     "ParseError",
     "ParseReason",
+    "ParseResult",
     "Position",
     "PredicatorError",
     "Program",
@@ -35,6 +38,7 @@
     "compile",
     "compileWithPositions",
     "compileWithSpans",
+    "decompile",
     "evaluate",
     "execute",
     "executeValue",
@@ -43,6 +47,7 @@
     "isFloat",
     "isInteger",
     "isaVersion",
+    "parse",
     "toHost",
     "typeName"
   ],

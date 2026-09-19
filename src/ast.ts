@@ -18,10 +18,12 @@
  *
  * The node shapes are deliberately regular: every node is an object with a
  * `kind` discriminant, its own fields, and the two metadata members, so a
- * consumer walks the tree by switching on one field. Nothing here is a
- * compatibility promise yet - the tree is internal to this package until an
- * entry point answers one - but it is written as though it will be published,
- * because the rendering direction takes this tree as its input.
+ * consumer walks the tree by switching on one field. The entry point now
+ * answers this tree, under the alias `Ast`, because the rendering direction
+ * takes it as its input - and none of it is a compatibility promise even so:
+ * only the alias and the two functions that speak it are public, and a
+ * consumer that switches on a `kind` is writing against an internal detail
+ * that may change without a major version.
  *
  * A literal's value is the token's, not the domain's: a decimal literal
  * carries an ordinary number here and the stage that emits instructions builds
