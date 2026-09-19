@@ -360,12 +360,14 @@ the `isaVersion()` of the same tree (`completenessProblems` in
 version a shipped claim covers, not in the registry file.
 
 Why the field is left as it is rather than made the package's version.
-Predicator-ex's `conformance/schema/registry.json` defines the field as the
-manifest's version and admits no property it does not name, and this record
-defers to that contract where the two could disagree. `RATCHET.md` carries
-the field so that a reader learns the version without fetching the manifest,
-and asks that nothing key a rule on it that `corpus_hash` already enforces
-more tightly.
+`RATCHET.md`'s table of the registry's fields defines it as "The manifest's
+`isa_version` at pin time", and the decision above rules that where this
+record and `RATCHET.md` disagree, `RATCHET.md` wins. Recording the package's
+version in a separate field is not open either:
+`conformance/schema/registry.json` admits no property it does not name.
+`RATCHET.md` carries the field so that a reader learns the version without
+fetching the manifest, and asks that nothing key a rule on it that
+`corpus_hash` already enforces more tightly.
 
 One reading there does not survive this record's scoping unqualified.
 `RATCHET.md` says the field lets a reader learn "which ISA the claim is
