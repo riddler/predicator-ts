@@ -5,7 +5,9 @@
 //
 // The strongest is the block that reads `conformance/transcript/compile.json`:
 // those rows are instruction lists the reference answered when it was run at
-// the tag, and this suite diffs against them rather than restating them. Each
+// the tag, and this suite diffs against them rather than restating them. The
+// rows come from `test/conformance/compile-transcript.ts`, which refuses to
+// hand out a line until the file is the one its SOURCE.json records. Each
 // row's operands are decoded through the corpus decoder and compared with the
 // runner's value comparison, because that comparison is the one that keeps an
 // integer and an integral float apart - a byte comparison of the row's text
@@ -24,8 +26,6 @@
 // the reference RAISES on the sources it covers rather than answering, which is
 // the whole reason this package decides an answer of its own for them.
 
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { emit } from "../src/emitter.js";
 import type { Position, Span } from "../src/errors.js";
@@ -34,6 +34,7 @@ import { tokenize } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
 import { decodeTagged } from "../src/tagged.js";
 import { Float, PDate, PDateTime, Undefined, type Value } from "../src/values.js";
+import { compileTranscriptLines } from "./conformance/compile-transcript.js";
 import { sameValue } from "./conformance/runner.js";
 
 /** The program a source compiles to, or a failure loud enough to read. */
@@ -137,12 +138,7 @@ interface TranscriptRow {
   readonly source: string;
 }
 
-const transcriptLines = readFileSync(
-  fileURLToPath(new URL("../conformance/transcript/compile.json", import.meta.url)),
-  "utf8",
-)
-  .trim()
-  .split("\n");
+const transcriptLines = compileTranscriptLines();
 
 describe("the compile transcript", () => {
   const rows = transcriptLines

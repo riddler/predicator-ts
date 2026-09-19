@@ -32,6 +32,7 @@ import type { ParseError, Position, Span } from "../src/errors.js";
 import { formatDate, formatDateTime } from "../src/iso.js";
 import { type Token, type TokenType, tokenize } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
+import { compileTranscriptLines } from "./conformance/compile-transcript.js";
 
 /** The tree, or a failure loud enough to read. */
 function treeOf(source: string): Node {
@@ -941,14 +942,10 @@ describe("the reference's own answers at the tag", () => {
   // refusal rows are the ones this stage can be held to whole: a refusal is
   // the grammar's answer and needs nothing downstream of it. The rows that
   // compile are held to what this stage decides - that the source parses -
-  // and their instructions are the emitting stage's to match.
-  const transcript = readFileSync(
-    fileURLToPath(new URL("../conformance/transcript/compile.json", import.meta.url)),
-    "utf8",
-  )
-    .split("\n")
-    .filter((line) => line.trim() !== "")
-    .map((line) => JSON.parse(line) as TranscriptRow);
+  // and their instructions are the emitting stage's to match. The rows come
+  // from `test/conformance/compile-transcript.ts`, which refuses to hand out a
+  // line until the file is the one its SOURCE.json records.
+  const transcript = compileTranscriptLines().map((line) => JSON.parse(line) as TranscriptRow);
 
   // Sabotage: rewording any message, or moving any position, turns this red;
   // dropping the trailing full stop of the statement-keyword message was the
