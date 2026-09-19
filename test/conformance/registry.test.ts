@@ -194,11 +194,25 @@ describe("the registry this package ships", () => {
   // reverted. Note what it did not turn red: the entry was written in the
   // required encoding, so the re-encode still matched. That is the division of
   // labour between the checks, not a gap in either.
+  //
+  // Sabotage, the claim shape: a second claim for a surface already claimed
+  // turns the assertion below red, and a claim for another surface does not.
+  // Both were run and reverted. A duplicate written into the file in the
+  // required encoding is reproduced by re-encoding it, so the encoding check
+  // is not what would catch one.
   it("names this package, the corpus it was written against, and its claims", () => {
     expect(registry.implementation).toBe("predicator-ts");
     expect(registry.isa_version).toBe(manifest.isa_version);
     expect(registry.entries.length).toBeGreaterThan(0);
-    for (const claim of registry.claims) expect(claim.surface).toBe("evaluator");
+    // At most one claim per surface: the rule the corpus's own registry
+    // schema states of the shape, and the one the ratchet keeps by keying its
+    // claims on the surface. Stated as that rule rather than as the surfaces
+    // claimed today, which move as surfaces land - which surfaces a claim may
+    // name is the property the test below states. A second claim for a surface
+    // already claimed is the hand edit every other check here admits:
+    // re-encoding reproduces it, and completeness reads each of the two in turn.
+    const surfaces = new Set(registry.claims.map((claim) => claim.surface));
+    expect(surfaces.size).toBe(registry.claims.length);
   });
 
   // A claim is completeness rather than ambition, so the surfaces a claim
