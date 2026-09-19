@@ -569,7 +569,7 @@ beginning "Those are the comments declaring", by the comment on
 
 ## Amendment: a compile transcript at the tag, and one report constructor (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-g3mm`. This amendment is appended, and removes no line above.
 A file it does not touch is cited as read at commit `a30e50f`; the reference is
@@ -720,3 +720,69 @@ headed "WHAT THIS DOES" names `Predicator.compile/1`, `Predicator.parse/2`,
 `Predicator.isa_version/0`, are named nowhere in that header. Nothing under
 `scripts/` changes here: what is corrected is this record's own text, which
 claimed less of the script than the script claims of itself.
+
+## Note: the compile-transcript amendment's acceptance (2026-09-19)
+
+Recorded for `pts-rrz1`. This note records that the amendment above moved
+from proposed to accepted. It decides nothing, so it carries no Status line,
+and it removes no line. Code is cited as read at commit `c49af38`; the
+reference is cited as run at its tag `v9.4.1`.
+
+**Every claim the amendment makes was re-checked before the status word
+moved**, against the tree at `c49af38` rather than against the tree it was
+appended over: the second transcript itself, the parser, the emitter and the
+stamp check all landed afterwards. Each claim was re-located by anchor, and a
+claim about the reference was run in a detached export of the tag whose
+`mix.exs` declares version `9.4.1`, under Elixir 1.18.3 and OTP 27, rather
+than read.
+
+**The corpus generator still gives a refusal no oracle.**
+`Predicator.Conformance.Generator.generate/1` answered an error carrying an
+id and a problem for an authored source that does not compile, and the error
+arm of `scripts/lib/reference-transcript.exs` prints each problem and halts
+with a non-zero status.
+
+**A rendering is still not among the fields that generator derives.** A case
+it completed carried `context`, `expected_result`, `features`, `id`,
+`instructions`, `source` and `tier`, and nothing else.
+
+**The second transcript's names still stand beside the first's without
+collision.** `conformance/transcript/` holds `SOURCE.json` and
+`transcript.json` for the first pair and `compile.json` and
+`compile-SOURCE.json` for the second.
+
+**The hash rule is made.** `compileTranscriptLines` in
+`test/conformance/compile-transcript.ts` answers no row until the file's
+sha256 is the one `compile-SOURCE.json` records and that file's tag, commit
+and corpus hash are `conformance/SOURCE.json`'s, and every reader of the
+transcript takes that route.
+
+**The one-constructor rule is now implemented, not merely decided.** Since
+the amendment was written the shared constructor it calls for has landed, so
+this claim is cited as read at commit `32af195` rather than at the commit
+named above: `runSurface` in `test/conformance/runner.ts` builds every report
+of a run over the corpus, and `runEvaluator` and `runCompiler` are each a
+delegation to it. `runSurface` holds that file's sole write of a report's
+`isa_version` and its sole call of `isaVersion()`.
+`test/conformance/compiler.test.ts`, at the same commit, reads the runner's
+own text and asserts that shape: one site writing the field, one call of the
+accessor, and the field written from the binding that call produces. The
+other writers of such a field are fixtures, which is what the qualifier is
+for. The amendment's decision is better satisfied now than when it was
+written.
+
+**The range observation holds as written.** At the tag, a literal of one
+followed by three hundred and eight zeros with a fractional part compiles and
+the same literal with one more zero raises; four hundred digits after the
+point compile; and the bisected pair, one point seven and one point eight
+times ten to the three hundred and eighth spelled in digits, compiles and
+raises respectively. So the boundary is the range and not the digit count.
+
+**The clause the note above supersedes was read as superseded rather than as
+a claim of the amendment**, so what is accepted here is the amendment as that
+note corrects it.
+
+**The acceptance settles nothing the amendment left open.** An amendment to
+ADR-0004, at proposed, records what this package answers for a source naming
+a magnitude the domain cannot represent; it says nothing about whether a row
+for such a source belongs in this transcript, and neither does this record.
