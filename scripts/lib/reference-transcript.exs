@@ -78,6 +78,10 @@ precomposed = "Zo\u00EB"
 # A credit card emoji: one code point outside the basic plane, four bytes in
 # UTF-8, two UTF-16 code units.
 astral = "\u{1F4B3}"
+# A carriage return and a line feed: two code points, both ASCII, one grapheme.
+crlf = "\r\n"
+# A flag: two regional indicator symbols, two code points, one grapheme.
+flag = "\u{1F1FA}\u{1F1F8}"
 
 string_cases = [
   {"string-unit/len-ascii", "len(name)", "visa"},
@@ -93,6 +97,10 @@ string_cases = [
   {"string-unit/slice-after-combining", "substring(name, 5)", "#{combining} Visa"},
   {"string-unit/slice-length-over-combining", "substring(name, 0, 4)", "#{combining} Visa"},
   {"string-unit/slice-after-astral", "substring(name, 2)", "#{astral} visa"},
+  {"string-unit/len-crlf", "len(name)", "visa#{crlf}gold"},
+  {"string-unit/slice-after-crlf", "substring(name, 5)", "visa#{crlf}gold"},
+  {"string-unit/len-flag", "len(name)", "#{flag} visa"},
+  {"string-unit/slice-after-flag", "substring(name, 2)", "#{flag} visa"},
   {"trim/ascii", "trim(name)", "  visa  "},
   {"trim/zero-width-no-break-space", "trim(name)", "\uFEFFvisa\uFEFF"},
   {"trim/next-line", "trim(name)", "\u0085visa\u0085"}

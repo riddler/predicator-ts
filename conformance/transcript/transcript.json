@@ -69,6 +69,10 @@
 {"context":{"name":"José Visa"},"expected_result":"Visa","features":["functions"],"id":"string-unit/slice-after-combining","instructions":[["load","name"],["lit",5],["call","substring",2]],"source":"substring(name, 5)","tier":5}
 {"context":{"name":"José Visa"},"expected_result":"José","features":["functions"],"id":"string-unit/slice-length-over-combining","instructions":[["load","name"],["lit",0],["lit",4],["call","substring",3]],"source":"substring(name, 0, 4)","tier":5}
 {"context":{"name":"💳 visa"},"expected_result":"visa","features":["functions"],"id":"string-unit/slice-after-astral","instructions":[["load","name"],["lit",2],["call","substring",2]],"source":"substring(name, 2)","tier":5}
+{"context":{"name":"visa\r\ngold"},"expected_result":9,"features":["functions"],"id":"string-unit/len-crlf","instructions":[["load","name"],["call","len",1]],"source":"len(name)","tier":5}
+{"context":{"name":"visa\r\ngold"},"expected_result":"gold","features":["functions"],"id":"string-unit/slice-after-crlf","instructions":[["load","name"],["lit",5],["call","substring",2]],"source":"substring(name, 5)","tier":5}
+{"context":{"name":"🇺🇸 visa"},"expected_result":6,"features":["functions"],"id":"string-unit/len-flag","instructions":[["load","name"],["call","len",1]],"source":"len(name)","tier":5}
+{"context":{"name":"🇺🇸 visa"},"expected_result":"visa","features":["functions"],"id":"string-unit/slice-after-flag","instructions":[["load","name"],["lit",2],["call","substring",2]],"source":"substring(name, 2)","tier":5}
 {"context":{"name":"  visa  "},"expected_result":"visa","features":["functions"],"id":"trim/ascii","instructions":[["load","name"],["call","trim",1]],"source":"trim(name)","tier":5}
 {"context":{"name":"﻿visa﻿"},"expected_result":"﻿visa﻿","features":["functions"],"id":"trim/zero-width-no-break-space","instructions":[["load","name"],["call","trim",1]],"source":"trim(name)","tier":5}
 {"context":{"name":"visa"},"expected_result":"visa","features":["functions"],"id":"trim/next-line","instructions":[["load","name"],["call","trim",1]],"source":"trim(name)","tier":5}

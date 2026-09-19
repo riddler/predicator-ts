@@ -9,12 +9,16 @@
  * points, which is the widest unit a JavaScript engine supplies without a
  * locale database - and consulting one is refused under this package's own
  * rules, since locale data is absent or stubbed on the engines it has to run
- * on. The three units agree for every input whose characters are ASCII, which
- * is every input the conformance corpus pins, so nothing here is a conformance
- * failure. A code point and a grapheme part at a combining mark, and a code
- * point and a byte part at any character outside ASCII, and no case in a
- * language-neutral corpus pins either today. The question of which unit the
- * language means belongs upstream rather than here.
+ * on. A code point and a byte agree for every character in ASCII and part at
+ * any character outside it. A code point and a grapheme part wherever one
+ * grapheme holds more than one code point: the transcript below shows it at a
+ * combining mark, at a carriage return followed by a line feed, which are both
+ * ASCII, and at a flag made of two regional indicator symbols, and those rows
+ * are not a list of every such case. Every string the vendored corpus pins is
+ * ASCII and none holds a carriage return followed by a line feed, so the three
+ * units agree over the corpus and nothing here is a conformance failure; no
+ * case in a language-neutral corpus pins the difference today. The question
+ * of which unit the language means belongs upstream rather than here.
  *
  * A THIRD AND SMALLER DIVERGENCE sits in the trimming function, which calls
  * the host's own trim, while the reference trims the characters carrying the
@@ -34,8 +38,9 @@
  * rows whose ids begin `string-unit/` and `trim/`.
  * `test/reference-transcript.test.ts` diffs this package's answer against
  * each of those rows, and declares every row where the two differ with both
- * answers, so it fails when either side moves. The grapheme count is the row
- * `string-unit/len-combining`, the grapheme slice the rows beginning
+ * answers, so it fails when either side moves. The grapheme counts are the rows
+ * `string-unit/len-combining`, `string-unit/len-crlf` and
+ * `string-unit/len-flag`, the grapheme slice the rows beginning
  * `string-unit/slice-`, the byte offset the rows beginning
  * `string-unit/index-after-`, and the two trimming directions the rows
  * `trim/zero-width-no-break-space` and `trim/next-line`.
