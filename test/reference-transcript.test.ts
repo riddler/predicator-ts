@@ -2,10 +2,11 @@
 //
 // `conformance/transcript/transcript.json` holds rows in the shape of a corpus
 // case, each carrying the answer the reference gave when it ran that row at
-// the tag `conformance/transcript/SOURCE.json` records. The rows cover what
-// this package declares it answers differently from the reference where no
+// the tag `conformance/transcript/SOURCE.json` records. The rows cover where
+// this package states how its answer compares with the reference's and no
 // vendored case reaches: how a float is written as text, the unit a string
-// position is counted in, and what trimming removes. The file is written by
+// position is counted in, what trimming removes, and which spellings of a
+// UTC offset the datetime cast reads. The file is written by
 // `scripts/reference-transcript.mjs` and by nothing else; the suite never
 // runs the reference, it reads what the reference answered.
 //
@@ -27,7 +28,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Program } from "../src/instructions.js";
 import { decodeTagged, evaluateTagged } from "../src/tagged.js";
-import type { Value } from "../src/values.js";
+import { PDateTime, Undefined, type Value } from "../src/values.js";
 import { type DecodedCase, decodeCase, sameValue } from "./conformance/runner.js";
 
 const conformanceRoot = fileURLToPath(new URL("../conformance/", import.meta.url));
@@ -70,6 +71,11 @@ const FLOAT_ROWS: readonly (readonly [label: string, reference: string, ours: st
   ["largest", "1.7976931348623157e308", "1.7976931348623157e+308"],
   ["smallest", "5.0e-324", "5e-324"],
 ];
+
+/** An instant on the day the `datetime-offset/` rows are written on, in UTC. */
+function utc(hour: number, minute: number): PDateTime {
+  return new PDateTime(Date.UTC(2026, 8, 19, hour, minute, 0) / 1000, 0);
+}
 
 const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   ...FLOAT_ROWS.flatMap(([label, reference, ours]) => [
@@ -147,6 +153,22 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
       declaredBy: "the header of src/functions/string.ts",
     },
   ],
+  // A UTC offset whose two-character hour or minute field holds a sign where
+  // its first digit belongs: the reference reads each field as a signed
+  // integer and applies it, and this package reads digits only and answers
+  // undefined. Every other `datetime-offset/` row agrees.
+  [
+    "datetime-offset/minus-in-hour-field",
+    { reference: utc(15, 0), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  [
+    "datetime-offset/plus-in-hour-field",
+    { reference: utc(5, 0), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
+  [
+    "datetime-offset/plus-in-minute-field",
+    { reference: utc(5, 27), ours: Undefined, declaredBy: "DATETIME_TEXT in src/iso.ts" },
+  ],
 ]);
 
 /** The transcript's rows, decoded with the corpus decoder. */
@@ -206,7 +228,9 @@ describe("the reference transcript", () => {
   // answer changed in the transcript, an agreeing row and a declared row in
   // turn, turns that row red; so does trimming only the ASCII space in `trim`,
   // counting UTF-16 code units in `len`, and dropping the sign of negative
-  // zero in `floatText`.
+  // zero in `floatText`; so does admitting a sign in an offset field of
+  // `DATETIME_TEXT`, which turns the declared rows red as agreeing, and
+  // admitting a lowercase `z` offset, which turns an agreeing row red.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const expected = row.expectation;
     expect(expected.kind).toBe("result");
