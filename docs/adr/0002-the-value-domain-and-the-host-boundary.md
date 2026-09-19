@@ -1820,15 +1820,20 @@ the absence another copy exports. Its declared type is unchanged, a
 `unique symbol`. The anchor is `Undefined` in `src/values.ts`.
 
 **`instanceof` on `Float`, `PDate`, `PDateTime` or `Duration` answers true for
-an instance that another copy of the class built.** Each class carries a key
-from the global symbol registry on its prototype, and its `instanceof` test
-asks for that key, inherited rather than own; `shareAcrossCopies` in
-`src/values.ts` sets both. The rule that a float and an integer are told apart
-by `instanceof Float` and by nothing else is unchanged: what changes is which
-objects that test admits. An object carrying the key as an own property is not
-an instance, so a plain map cannot claim to be one by holding it. A key names
-one class's representation, and a change to what a class holds takes a new
-key.
+an instance that another copy of the class built.** Each constructor gives
+its instance a key from the global symbol registry as an own data property,
+and the class's `instanceof` test, set by `shareAcrossCopies` in
+`src/values.ts`, asks for the shape every copy's constructor gives an
+instance. An object passes when its prototype is neither `null` nor
+`Object.prototype`, it is frozen, it holds the class's key as an own data
+property whose value is `true`, and it holds each of the class's fields as an
+own data property whose value is a number. The test reads every property
+through its descriptor, so it runs no getter. So a plain map is never an
+instance, whatever it holds, and neither is an object whose key or field is
+inherited or served by a getter. The rule that a float and an integer are told
+apart by `instanceof Float` and by nothing else is unchanged: what changes is
+which objects that test admits. A key names one class's representation, and a
+change to what a class holds takes a new key.
 
 **Why.** Before this amendment a value from another copy reached this one as a
 class it did not define, or as a symbol that was not its absence. Measured on
@@ -1838,10 +1843,13 @@ change: normalization refused a float and an absence from the other copy as
 answered the float as an object holding its field and the absence as the
 other copy's symbol.
 
-**It is pinned by shipped tests** in `test/values.test.ts`, which load a
-second copy of the source modules: "share one absence", "recognize each
-other's floats, dates, datetimes and durations", and "do not take a plain
-object carrying the key for a member". Over the built package it is pinned by
+**It is pinned by shipped tests** in `test/values.test.ts`. Two load a second
+copy of the source modules: "share one absence", and "recognize each other's
+floats, dates, datetimes and durations". Four pin the shape the `instanceof`
+test asks for: "take no plain map for a member, whatever it holds", "take no
+object whose key is inherited or read through a getter", "take no date-shaped
+object that is not frozen", and "take no object whose field is served by a
+getter". Over the built package it is pinned by
 the identity stage of the full gate, `scripts/cross-entry-identity.mjs`,
 which loads the module build and the CommonJS build together and checks each
 format's values against the other's classes.
@@ -1912,9 +1920,10 @@ the cast as that formatting spells it.
 
 Consequences. A host that loads both builds of this package can pass values
 between them. A registered key is readable by any code on the thread, so code
-that deliberately builds an object whose prototype carries one of these keys
-is taken for a member; that is host code impersonating a class of this
-package's, and outside what this record promises.
+that deliberately builds a frozen object with a prototype of its own, the key
+as an own data property and the class's fields as numbers is taken for a
+member; that is host code impersonating a class of this package's, and outside
+what this record promises.
 An evaluation through the `./tagged` subpath whose result is a date or an
 instant this encoding cannot carry now answers the failing arm with
 `"invalid_tagged_value"` where it answered text that did not read back. The
