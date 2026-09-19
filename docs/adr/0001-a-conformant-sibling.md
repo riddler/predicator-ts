@@ -209,9 +209,10 @@ question with it.
 
 Recorded for pts-3kw. The engine-neutrality stage
 (`scripts/engine-neutrality.mjs`) is the mechanical form of the rule in the
-Decision above. This note records the decisions about which files it reads
-and two patterns that fired on code the rule allows. It changes nothing the
-Decision says. Code is cited as read at `065bbfb`.
+Decision above. This note records the decisions about which files it reads,
+about what its bare builtin list holds, and about two patterns that fired on
+code the rule allows. It changes nothing the Decision says. Code is cited as
+read at `065bbfb`.
 
 **The scanned set comes from the build's entry list.** The stage loads
 `tsup.config.ts` and scans the directory of each entry that config lists
@@ -236,15 +237,26 @@ scan of the input does not: a module outside the directory of every entry
 that an entry imports, and the code of a package an entry imports, which the
 bundler inlines because this package lists no dependencies (probed with a
 throwaway package). The stage reads neither. The header of the script states
-the first; no rule refuses the import of a package that is not a Node
-builtin.
+the first. No rule in the stage's rule table (`rules`) refuses the import of
+a package that is not a Node builtin.
+
+**The bare builtin list follows the running Node.** The written list of bare
+builtin specifiers (`listedNodeBuiltins`) is kept, and the running Node's own
+module list is folded in beside it, cut to the name before any subpath
+(`bareNodeBuiltins`), so a builtin that Node has and the written list lacks
+is refused as a bare specifier. The names Node lists only with the `node:`
+prefix are left out of it: without the prefix each is an ordinary package
+name, and the rule for the prefixed spelling refuses them with the prefix.
 
 **A field named for a DOM global no longer fires.** The DOM rule matched the
 name wherever a member access or an index followed it, so a field named for
 a window or a document on an options object, with a member access after it,
 failed the stage. The rule now takes the member lookbehind the Node rule
-already had, and a name reached as a member of `globalThis` still fires
-(`usedAsBareOrGlobalThisMember`).
+already had, plus one alternative: a name written right after `globalThis`
+and a dot still fires (`usedAsBareOrGlobalThisMember`). Two other spellings
+of the global object are not caught by this rule: a name after an optional
+chain on it (`globalThis?.`), and a name after another name for it, such as
+`self`; both are quiet.
 
 **A type-only import of a Node builtin still fires, and that is accepted.**
 Such an import is erased by the build and does no harm on a constrained
