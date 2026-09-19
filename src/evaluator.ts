@@ -528,6 +528,25 @@ function isIntegral(value: Value): value is number {
   return typeof value === "number";
 }
 
+/**
+ * Whether a literal operand carries an integral number outside the safe range,
+ * standing alone or anywhere inside its lists and maps.
+ *
+ * Only an integral number is tested: a number the domain would hold as an
+ * integer if it were in range. The walk descends the domain's two containers
+ * and treats every other member as a leaf. It is called only on an operand
+ * whose shape has already passed the nesting check, so it meets no cycle and
+ * goes no deeper than the depth limit.
+ */
+function carriesUnsafeInteger(value: Value): boolean {
+  if (typeof value === "number") return Number.isInteger(value) && !Number.isSafeInteger(value);
+  if (Array.isArray(value)) return value.some(carriesUnsafeInteger);
+  if (value === null || typeof value !== "object") return false;
+  const proto = Object.getPrototypeOf(value) as unknown;
+  if (proto !== null && proto !== Object.prototype) return false;
+  return Object.values(value as { [key: string]: Value }).some(carriesUnsafeInteger);
+}
+
 /** Whether either operand is a float, which is what makes a result one. */
 function isFloating(left: Value, right: Value): boolean {
   return left instanceof Float || right instanceof Float;
@@ -1167,12 +1186,28 @@ class Machine {
    * An operand is the host's value as much as a context is, so one that
    * contains itself or nests past the depth limit is refused here, before any
    * opcode walks it, rather than left to exhaust the stack in a comparison or
-   * on the way back to the host. Nothing else about the operand is checked
+   * on the way back to the host.
+   *
+   * A literal also admits numbers into the domain as integers, so an integer
+   * outside the safe range is refused here too, wherever the operand carries
+   * it, rather than rounded - the rule the value boundary applies to a host's
+   * context. The shape is checked first, which is what bounds the walk that
+   * looks for such an integer. Nothing else about the operand is checked
    * here.
    */
   private lit(operand: Value, at: number): Step {
     const fault = nestingFault(operand);
     if (fault !== undefined) return { ok: false, error: nestingError(fault, "the literal", at) };
+    if (carriesUnsafeInteger(operand)) {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          "integer_out_of_range",
+          "the literal carries an integer outside the safe range",
+          at,
+        ),
+      };
+    }
     this.stack.push(operand);
     return { ok: true, next: at + 1 };
   }

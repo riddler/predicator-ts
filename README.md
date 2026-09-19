@@ -283,18 +283,15 @@ boundary are the ones a host meets first:
   the safe range is **refused** with the reason `integer_out_of_range` rather
   than rounded into a wrong answer no error names. The record puts that as an
   obligation on a change adding such a site, so the set of sites is the code's
-  to say rather than this page's. Two qualifications the record states travel
-  with the rule, because it misleads without them. A **`cast` is exempt**: the
+  to say rather than this page's. One qualification the record states travels
+  with the rule, because it misleads without it: a **`cast` is exempt**. The
   instruction set makes a cast total, so a conversion that cannot produce a
-  value of the target type answers the absence instead of failing. And a
-  **`lit` operand does not honour the rule today**: a `lit` pushes its operand
-  with no range check, so an out-of-range integer written into an instruction
-  list enters the domain as a successful value rather than being refused -
-  `evaluate([["lit", 9007199254740994]], {})` answers `ok` with that number.
-  The record names that a defect against the rule rather than an exemption from
-  it. A boundary further out can still refuse such a value:
-  `encodeTagged(9007199254740994)` answers `integer_out_of_range`. A host's
-  context value is refused.
+  value of the target type answers the absence instead of failing. A **`lit`
+  operand is held to the rule** like a host's context value: an out-of-range
+  integer written into an instruction list, on its own or inside a list or map
+  operand, is refused at that instruction -
+  `evaluate([["lit", 9007199254740994]], {})` answers the failing arm with the
+  reason `integer_out_of_range`.
 - A JavaScript `Date` normalizes to a `PDateTime`, and JavaScript `undefined`
   normalizes to the absence. Predicator's absence is the singleton and never
   the language's own inside the machine, which is what keeps an absent key and

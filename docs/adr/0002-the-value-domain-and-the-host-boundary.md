@@ -1612,3 +1612,72 @@ refuses it first, with the same reason.
 its argument without the limit, and what the amendment above says of a stack
 overflow inside a JSON builtin still holds for it. That is recorded as an open
 issue, `pts-8di`, and is out of scope for this amendment.
+
+## Amendment: a `lit` operand refuses an integer outside the safe range (2026-09-18)
+
+Status: proposed (2026-09-18)
+
+Recorded for `pts-lvm`. This amendment is appended, and removes no line above.
+
+What this amends. The out-of-range amendment above says that a `lit` operand
+admits a number into the domain, that the rule binds it, and that it does not
+honour the rule, and that the amendment neither narrows the rule nor fixes the
+defect. The defect is now fixed, which changes what this record decides about
+that site: read that paragraph as superseded by this one. The rule itself is
+unchanged and is not narrowed.
+
+**A `lit` operand carrying an integer outside the safe range is refused at its
+own instruction, with the reason `"integer_out_of_range"`.** The refusal is an
+`EvaluationError` at the instruction's position, answered on the failing arm
+and never pushed. The check is in the machine's `lit` method in
+`src/evaluator.ts`, added with this amendment. It is the rule the value
+boundary already applies to a host's context, applied at the other place a
+number is admitted into the domain as an integer.
+
+**The operand is checked wherever it carries such an integer**: standing alone,
+or anywhere inside the lists and maps of a list or map operand. A check of the
+operand's top alone would not keep the number out, because an opcode can take
+a member out of a list or a map that is already on the stack. The walk is
+`carriesUnsafeInteger` in `src/evaluator.ts`, added with this amendment.
+
+**The nesting check runs first.** The nesting amendment above puts a shape
+check at the same instruction; it still decides only the shape, and it runs
+before this one. An operand that both nests past the depth limit or contains
+itself and carries an out-of-range integer answers the nesting reason, and the
+walk for an out-of-range integer never meets a cycle or goes past the limit.
+
+**Only an integral number is tested.** A raw non-integral or non-finite number
+in a `lit` operand is not a member of the domain either, but it is not an
+integer outside the safe range, and this amendment decides nothing about it:
+such an operand is admitted exactly as it was before.
+
+**The literal push was the only site that put an unvalidated value on the
+machine's stack, and it no longer puts an out-of-range integer there.** Every
+push onto the machine's stack in `src/evaluator.ts` was enumerated at
+`0f753ce`. Apart from the `lit` push, each pushes a value it constructs, a
+value read out of the context or out of a value already on the stack, an
+arithmetic result the shared numeric-result helper has tested, a `cast` result
+the cast module has bounded, or a host or builtin function's answer after it
+passed the value boundary. So after this change no integral number outside the
+safe range reaches an opcode. On every integral number the machine can then
+hold, the module-local integer test, `isIntegral` in `src/evaluator.ts` (read
+at `0f753ce`), which tests only that a value is a number, agrees with the
+domain's own predicate, `isInteger` in `src/values.ts` (read at `0f753ce`),
+which also tests the safe range. The sites that classify with the module-local
+test are not changed by this amendment. They still disagree with the domain's
+predicate on the raw non-integral or non-finite number the paragraph above
+leaves admitted.
+
+**It is pinned by shipped tests** in `test/evaluator.test.ts`: "is refused with
+the boundary's reason, on either side of zero", through the main entry point as
+well as the machine's; "is refused wherever the operand carries it"; and
+"admits an integer at the bound, and a float past it".
+
+Consequences. An instruction list that a host builds by hand and that carries
+an integer past the safe range now answers the failing arm where it answered a
+success. No vendored corpus case carries such a literal, since a case is read
+through the tagged decoder, which already refuses the number; the conformance
+run is unchanged. This remains a divergence from the reference, whose integers
+are arbitrary precision, and the bound is this package's own, as the
+reason-token paragraph above already says. Nothing in this amendment adds an
+opcode, a reason token or a wire-format change.
