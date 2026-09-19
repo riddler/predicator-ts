@@ -165,3 +165,41 @@ contains, it is expected to outlive most of the records that follow it. A later
 record that needs to extend the instruction set, take a runtime dependency, ship
 a renderer, or reach for one of the four forbidden constructs is not an
 exception to be argued locally; it supersedes or amends this one, here.
+
+## Note: what the source is typechecked against (2026-09-18)
+
+Recorded for pts-w2z. The engine-neutrality rule in the Decision above is
+enforced in part by the typechecker, and two settings decided how far that
+reached. This note records where the rule now renders in them; it changes
+nothing the Decision says.
+
+The first is which declarations the source is checked against. The root
+`tsconfig.json` is the program the editor and the test files use. Its include
+carries the test files and the tool config files, and through the test runner
+they bring the Node type declarations into that program even though it sets
+`types` to an empty list, so a Node global written under `src/` typechecked
+there. The typecheck script (`typecheck` in `package.json`) now checks
+`tsconfig.src.json` first: a program holding `src/` and nothing else, whose
+only globals are the ones its `lib` declares. A Node global written under
+`src/` fails that check. `test/source-program.test.ts` pins that the program
+is exactly `src/` and that such a global is refused there.
+
+The second is the type library against the emit target. The build emits for
+ES2020 (`target` in `tsup.config.ts`) and downlevels syntax to it, but it adds
+no polyfill, so a runtime library member from a later edition ships as written
+and works only where the engine provides it. The library was ES2022, one
+edition ahead of that target, so such a member typechecked with nothing to
+flag it. The library (`lib` in `tsconfig.json`, which `tsconfig.src.json`
+extends) is now the target's edition, ES2020, plus one named component,
+`ES2022.Object`, which declares `Object.hasOwn` and nothing else. The source
+relies on `Object.hasOwn` to ask whether a key is an object's own - for
+example in `readMember` in `src/evaluator.ts` (read at `54d73ea`) - so that
+one member is admitted by name. Any other member from a later edition fails
+the typecheck of the source program; the same test pins that with an ES2021
+member and an ES2022 member.
+
+What this does not settle. Whether every engine this package runs on provides
+`Object.hasOwn` is not something the gate checks; only running the corpus on
+that engine shows it, and that run has not been made. Admitting a further
+member means adding it to `lib`, a change made on purpose and visible in
+review, and it carries the same question with it.
