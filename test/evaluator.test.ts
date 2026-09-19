@@ -739,6 +739,23 @@ describe("the comparison opcode over the whole value domain", () => {
     expect(compareValues("EQ", march, new PDate(2026, 3, 1))).toBe(true);
   });
 
+  // The epoch second of 0050-01-01 in the proleptic Gregorian calendar, counted
+  // independently of this package; the host's UTC constructor would answer the
+  // one for 1950-01-01 instead.
+  const yearFiftyMidnight = -60589296000;
+
+  // Sabotage: building the date's instant with the host's UTC constructor
+  // instead of the civil day count turns the first three assertions red. It
+  // was run and reverted.
+  it("compares a date in a year below one hundred where its day count puts it", () => {
+    expect(compareValues("LT", new PDate(50, 1, 1), new PDate(1900, 1, 1))).toBe(true);
+    expect(compareValues("EQ", new PDate(50, 1, 1), new PDateTime(yearFiftyMidnight, 0))).toBe(
+      true,
+    );
+    expect(compareValues("LT", new PDate(0, 1, 1), new PDate(100, 1, 1))).toBe(true);
+    expect(compareValues("GT", new PDate(0, 1, 1), new PDate(-1, 12, 31))).toBe(true);
+  });
+
   // Sabotage: comparing lists by length first rather than element-wise turns
   // the first assertion red. It was run and reverted.
   it("compares lists element-wise, and a prefix sorts first", () => {
@@ -1377,8 +1394,8 @@ describe("date arithmetic, which is a day count and not a calendar rule", () => 
   });
 
   // The civil-date arithmetic is written out rather than taken from the host's
-  // UTC constructor, which reads a year below one hundred as that year plus
-  // 1900. These two assertions are what that buys: a leap day crossed exactly,
+  // UTC constructor, which reads a year from zero to ninety-nine as that year
+  // plus 1900. These two assertions are what that buys: a leap day crossed exactly,
   // and a year the host constructor would have moved by nineteen centuries.
   //
   // Sabotage: replacing the day-number pair with the host's UTC constructor and
@@ -1393,6 +1410,32 @@ describe("date arithmetic, which is a day count and not a calendar rule", () => 
     expect(
       answerOf([["lit", new PDate(50, 1, 1)], ["duration", [[1, "d"]]], ["add"]]),
     ).toStrictEqual(new PDate(50, 1, 2));
+  });
+
+  // Subtraction reads both dates through the same day count as the addition
+  // above, so a date minus the day before it is one day in every year.
+  //
+  // Sabotage: building a date's instant with the host's UTC constructor
+  // instead of the civil day count turns all three assertions red. It was run
+  // and reverted.
+  it("subtracts dates in years below one hundred by the same day count", () => {
+    expect(
+      evaluateToValue([
+        ["lit", new PDate(100, 1, 1)],
+        ["lit", new PDate(99, 12, 31)],
+        ["subtract"],
+      ]),
+    ).toEqual({ ok: true, value: new Duration({ days: 1 }) });
+    expect(
+      evaluateToValue([["lit", new PDate(0, 1, 1)], ["lit", new PDate(-1, 12, 31)], ["subtract"]]),
+    ).toEqual({ ok: true, value: new Duration({ days: 1 }) });
+    expect(
+      evaluateToValue([
+        ["lit", new PDateTime(-60589296000 + 3600, 0)],
+        ["lit", new PDate(50, 1, 1)],
+        ["subtract"],
+      ]),
+    ).toEqual({ ok: true, value: new Duration({ seconds: 3600 }) });
   });
 
   // Sabotage: dropping the clause that takes the duration on the left turns

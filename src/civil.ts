@@ -17,12 +17,12 @@ const SECONDS_PER_DAY = 86400;
  * The day number of a civil date, counting 1970-01-01 as zero.
  *
  * This is plain arithmetic rather than a host date object, for two reasons.
- * The host's UTC constructor reads a year below one hundred as that year plus
- * 1900, which would move a date this domain admits; and arithmetic depends on
- * nothing a constrained JavaScript engine might leave out. The algorithm is
- * the standard days-from-civil pair, exact over the proleptic Gregorian
- * calendar, with March taken as the first month of the year so that the leap
- * day lands at the end.
+ * The host's UTC constructor reads a year from zero to ninety-nine as that year
+ * plus 1900, which would move a date this domain admits; and arithmetic
+ * depends on nothing a constrained JavaScript engine might leave out. The
+ * algorithm is the standard days-from-civil pair, exact over the proleptic
+ * Gregorian calendar, with March taken as the first month of the year so that
+ * the leap day lands at the end.
  */
 export function daysFromCivil(year: number, month: number, day: number): number {
   const shiftedYear = month <= 2 ? year - 1 : year;
