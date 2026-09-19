@@ -17,6 +17,14 @@
 // the refusal's own message, and that the fixture registry is byte-for-byte
 // what it was, so a refusal that is removed shows up as a run that exits zero
 // and writes.
+//
+// THE UNCHANGED-REGISTRY ASSERTION ONLY DISCRIMINATES WHEN THE RUN WOULD HAVE
+// WRITTEN SOMETHING ELSE. A report whose results are empty gives the script
+// nothing to add, so a run with the refusal gone rewrites the fixture registry
+// with the same bytes it already held and that assertion passes anyway. Every
+// refusal case below therefore either gives its report passing results, so the
+// rewrite differs from the fixture, or says in its own comment why its
+// registry assertion is a guard rather than a discriminator.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -45,9 +53,12 @@ const tierOne = loadCases(1, manifest);
 
 // The claim cases below need an instruction-set version earlier than the
 // corpus's own, and cases that version runs but the corpus's version does
-// not. Both are facts of the vendored corpus, so they are asserted rather than
-// assumed: if a corpus refresh removed them, the scoping case would pass for
-// the wrong reason.
+// not. The refusal cases need at least two cases the corpus's version runs, so
+// that a report can carry passes and a registry can hold an entry that report
+// leaves out. All three are facts of the vendored corpus, so they are asserted
+// rather than assumed: if a corpus refresh removed them, the scoping case
+// would pass for the wrong reason and a refusal case would have nothing for a
+// run with the refusal gone to write.
 const earlierVersion = manifest.isa_version - 1;
 const retiredAtCorpusVersion = tierOne.filter(
   (item) => !runsAtVersion(item, manifest.isa_version, manifest.isa_version),
@@ -125,9 +136,10 @@ afterEach(() => {
 });
 
 describe("the fixtures", () => {
-  it("hold a version earlier than the corpus's and cases retired at the corpus's", () => {
+  it("hold a version earlier than the corpus's, cases retired at it, and two it runs", () => {
     expect(earlierVersion).toBeGreaterThanOrEqual(1);
     expect(retiredAtCorpusVersion.length).toBeGreaterThan(0);
+    expect(runsAtCorpusVersion.length).toBeGreaterThan(1);
     for (const item of retiredAtCorpusVersion) {
       expect(runsAtVersion(item, earlierVersion, manifest.isa_version)).toBe(true);
     }
@@ -178,13 +190,20 @@ describe("the registry's own isa_version field", () => {
 });
 
 describe("the ratchet refuses a report nothing ties to the build and corpus on disk", () => {
+  // The report carries passes so that a run with the refusal gone has
+  // something to write and the fixture registry does not survive it, which is
+  // what makes the unchanged-registry assertion below able to fail.
+  //
   // Sabotage: replacing the stamp check's null test in scripts/ratchet.mjs
   // with a constant null turns this red - the unstamped report is read and
-  // the fixture registry is rewritten with exit status 0.
+  // the fixture registry is rewritten with its passing cases, at exit status
+  // 0. It was run and reverted, and run again with the exit-status and message
+  // assertions taken out, so that the registry assertion was the one observed
+  // failing.
   it("a report with no stamp beside it", () => {
     const report = writeReport(
       "evaluator.json",
-      { isa_version: manifest.isa_version },
+      { isa_version: manifest.isa_version, results: passes(runsAtCorpusVersion) },
       { stamp: false },
     );
     const run = ratchet("--report", report);
@@ -227,11 +246,21 @@ describe("the ratchet refuses a report nothing ties to the build and corpus on d
   // other build - an earlier commit, a sabotage mutation since reverted, a
   // corpus since refreshed - whose own fields are all still valid.
   //
+  // The report carries passes for the same reason as the case above: with an
+  // empty one the rewritten registry is byte-identical to the fixture and only
+  // the exit status catches the removal.
+  //
   // Sabotage: replacing the build-digest comparison in
   // scripts/lib/build-stamp.mjs with `false` turns this red - the report
-  // from the other build is read and the registry is rewritten.
+  // from the other build is read and the registry is rewritten with its
+  // passing cases. It was run and reverted, and run again with the
+  // exit-status and message assertions taken out, so that the registry
+  // assertion was the one observed failing.
   it("a report run against another build or corpus", () => {
-    const report = writeReport("evaluator.json", { isa_version: manifest.isa_version });
+    const report = writeReport("evaluator.json", {
+      isa_version: manifest.isa_version,
+      results: passes(runsAtCorpusVersion),
+    });
     const other = `sha256:${"0".repeat(64)}`;
     expect(buildHash()).not.toBe(other);
     writeFileSync(
@@ -248,23 +277,45 @@ describe("the ratchet refuses a report nothing ties to the build and corpus on d
 });
 
 describe("the ratchet refuses", () => {
+  // The report carries passes so that a run with the refusal gone writes
+  // entries the fixture registry does not hold. With an empty report the
+  // script has nothing to add and rewrites the fixture with its own bytes, so
+  // the unchanged-registry assertion below passes whether the refusal is there
+  // or not and only the exit status carries the case.
+  //
   // Sabotage: replacing the isa_version guard's condition with `false` turns
-  // this red - the report is read, nothing else refuses it, and the empty
-  // fixture registry is rewritten with exit status 0.
+  // this red - the report is read, nothing else refuses it, and the fixture
+  // registry is rewritten with its passing cases at exit status 0. It was run
+  // and reverted, and run again with the exit-status and message assertions
+  // taken out, so that the registry assertion was the one observed failing.
   it("a report that records no integer instruction-set version", () => {
-    const report = writeReport("evaluator.json", { isa_version: "6" });
+    const report = writeReport("evaluator.json", {
+      isa_version: "6",
+      results: passes(runsAtCorpusVersion),
+    });
     const run = ratchet("--report", report);
     expect(run.status).toBe(1);
     expect(run.stderr).toContain(`ratchet: ${report} records no integer isa_version`);
     expect(registryText()).toBe(emptyRegistry);
   });
 
+  // The reports carry passes for the same reason as the case above.
+  //
   // Sabotage: replacing the disagreement guard's condition with `false` turns
   // this red - the two reports are merged under the first version and the
-  // fixture registry is rewritten with exit status 0.
+  // fixture registry is rewritten with their passing cases at exit status 0.
+  // It was run and reverted, and run again with the exit-status and message
+  // assertions taken out, so that the registry assertion was the one observed
+  // failing.
   it("reports that disagree about the instruction-set version", () => {
-    const first = writeReport("first.json", { isa_version: manifest.isa_version });
-    const second = writeReport("second.json", { isa_version: earlierVersion });
+    const first = writeReport("first.json", {
+      isa_version: manifest.isa_version,
+      results: passes(runsAtCorpusVersion),
+    });
+    const second = writeReport("second.json", {
+      isa_version: earlierVersion,
+      results: passes(runsAtCorpusVersion),
+    });
     const run = ratchet("--report", first, "--report", second);
     expect(run.status).toBe(1);
     expect(run.stderr).toContain(
@@ -327,6 +378,10 @@ describe("the ratchet only grows", () => {
   // the passing one, the registry is rewritten with two entries, and the run
   // exits zero with nothing on stderr. It was run and reverted.
   it("refuses an entry the registry holds that no report observed passing", () => {
+    // The fixtures block asserts this premise where the file asserts its other
+    // corpus premises. The check is repeated here because destructuring an
+    // array gives each name a type that includes undefined, and an assertion
+    // in another block does not narrow it away.
     const [forgotten, passing] = runsAtCorpusVersion;
     if (forgotten === undefined || passing === undefined) {
       throw new Error("tier 1 holds fewer than two cases the corpus's version runs");
@@ -366,6 +421,11 @@ describe("the ratchet refuses a vendored corpus it cannot read", () => {
   // Removing the try in loadCasesOrDie in scripts/ratchet.mjs prints no refusal
   // at all: the loader's error goes uncaught and node prints a stack trace,
   // still exiting 1. Both were run and reverted.
+  //
+  // The unchanged-registry assertion here is a guard, not a discriminator, and
+  // no fixture makes it one: the corpus is read in the script's prologue, so
+  // every way this refusal can be removed still leaves the run with no report
+  // and nothing to write. It stays to say that the refusal writes nothing.
   it("a tier file holding a line that is not JSON", () => {
     // The copied script resolves its own corpus from its own module URL, which
     // is the real path; where a temporary directory is reached through a
