@@ -56,13 +56,17 @@
  * does not say which, and no rule should be inferred from the ones that do.
  * No conformance case serializes a float at all.
  *
- * THE REFERENCE HALF OF THIS CANNOT BE EXECUTED HERE and is recorded rather
- * than tested: everything said about it above is read off renderings taken
- * from the reference at its pinned toolchain. That is also how the earlier
- * boundary claim went wrong, so treat this paragraph as a warning rather than
- * as a table - a reader who needs to know how the reference renders some
- * particular value has to go and render it. This package's half IS asserted by
- * the suite, which is the half a change made in this repository can move.
+ * THE REFERENCE HALF OF THIS IS A TRANSCRIPT, NOT A READING. The reference
+ * cannot run here, so its renderings were taken by running it at the vendored
+ * tag, and they are vendored in `conformance/transcript/` as the rows whose
+ * ids begin `float-json/`. `test/reference-transcript.test.ts` diffs this
+ * package's answer against each of those rows, and declares every row where
+ * the two differ with both answers, so it fails when either side moves. The
+ * thousand and the thousand and one above are the rows `float-json/1000` and
+ * `float-json/1001`. Treat this paragraph as a warning rather than as a table:
+ * how the reference renders a value the transcript does not carry is still
+ * something to go and render, and the transcript's generator is where a row
+ * is added.
  */
 
 import type { HostFunction } from "../evaluator.js";

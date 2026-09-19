@@ -22,6 +22,14 @@ import type { Float } from "./values.js";
  * form, so a number can be integral while its spelling already ends in an
  * exponent, and a point glued onto that would make text no JSON parser reads
  * back.
+ *
+ * THE DIGITS ARE THE HOST'S, AND THE REFERENCE'S DIFFER. Apart from the sign of
+ * negative zero this spelling is the host's own, and the reference writes many
+ * floats otherwise. What the reference writes through the string cast and
+ * through `JSON.stringify` is vendored in `conformance/transcript/`, the rows
+ * whose ids begin `float-cast/` and `float-json/`, and
+ * `test/reference-transcript.test.ts` declares each row where this spelling
+ * differs, with both answers.
  */
 export function floatText(value: Float): string {
   const n = value.valueOf();

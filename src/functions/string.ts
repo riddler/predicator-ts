@@ -11,9 +11,10 @@
  * rules, since locale data is absent or stubbed on the engines it has to run
  * on. The three units agree for every input whose characters are ASCII, which
  * is every input the conformance corpus pins, so nothing here is a conformance
- * failure; a string carrying a combining mark or an astral character is where
- * they part, and no case in a language-neutral corpus pins that today. The
- * question of which unit the language means belongs upstream rather than here.
+ * failure. A code point and a grapheme part at a combining mark, and a code
+ * point and a byte part at any character outside ASCII, and no case in a
+ * language-neutral corpus pins either today. The question of which unit the
+ * language means belongs upstream rather than here.
  *
  * A THIRD AND SMALLER DIVERGENCE sits in the trimming function, which calls
  * the host's own trim, while the reference trims the characters carrying the
@@ -27,14 +28,17 @@
  * side was built against. Every character involved is non-ASCII, so again no
  * case can see any of it.
  *
- * BOTH DECLARATIONS ABOVE ARE PINNED ON THE SIDE THAT CAN BE EXECUTED. The
- * reference cannot run here, so its behaviour stays a recorded observation;
- * what this package answers is asserted by the suite - the unit by a combining
- * mark, an astral character and an index past a two-byte one, and the trimming
- * by one character from each side of the difference. A declared divergence is
- * the only artifact a consumer gets where no conformance case can reach, so
- * the half that can drift under a change made here is the half something
- * executes against.
+ * BOTH DECLARATIONS ABOVE ARE DIFFED AGAINST A TRANSCRIPT OF THE REFERENCE.
+ * The reference cannot run here, so what it answers was taken by running it
+ * at the vendored tag, and is vendored in `conformance/transcript/` as the
+ * rows whose ids begin `string-unit/` and `trim/`.
+ * `test/reference-transcript.test.ts` diffs this package's answer against
+ * each of those rows, and declares every row where the two differ with both
+ * answers, so it fails when either side moves. The grapheme count is the row
+ * `string-unit/len-combining`, the grapheme slice the rows beginning
+ * `string-unit/slice-`, the byte offset the rows beginning
+ * `string-unit/index-after-`, and the two trimming directions the rows
+ * `trim/zero-width-no-break-space` and `trim/next-line`.
  */
 
 import type { HostFunction } from "../evaluator.js";
