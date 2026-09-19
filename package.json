@@ -44,7 +44,7 @@
   "scripts": {
     "gate": "node --version && pnpm run typecheck && pnpm run lint && pnpm run neutrality && vitest run --coverage && pnpm run corpus:check && pnpm run build && pnpm run identity",
     "gate:loop": "pnpm run typecheck && pnpm run lint && pnpm run test",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.src.json && tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test": "vitest run",
