@@ -95,13 +95,13 @@ export function evaluate(
  * keeps the one it already had.
  *
  * Failure is a value here too, with the same exception - a throwing getter or
- * proxy trap on a walked value, or a throwing `now` option, propagates - and
- * the failing arm carries the context as far as the program got: every write
- * completed before the failing statement is handed back rather than dropped.
- * The one failing arm with no context is a context the value boundary
- * refused, which is answered before any program runs. A store that would nest
- * the context past the depth limit fails at its own instruction, so the
- * context handed back is the one before it.
+ * proxy trap on a walked value, or the `now` option when a relative date
+ * reads the clock, propagates - and the failing arm carries the context as
+ * far as the program got: every write completed before the failing statement
+ * is handed back rather than dropped. The one failing arm with no context is
+ * a context the value boundary refused, which is answered before any program
+ * runs. A store that would nest the context past the depth limit fails at its
+ * own instruction, so the context handed back is the one before it.
  */
 export function execute(
   instructions: Program,
