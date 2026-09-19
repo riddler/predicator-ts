@@ -204,3 +204,53 @@ What this does not settle. Whether every engine this package runs on provides
 on such an engine. Admitting a further member means adding it to `lib`, a
 change made on purpose and visible in review, and it carries the same
 question with it.
+
+## Note: what the engine-neutrality stage scans (2026-09-18)
+
+Recorded for pts-3kw. The engine-neutrality stage
+(`scripts/engine-neutrality.mjs`) is the mechanical form of the rule in the
+Decision above. This note records the decisions about which files it reads
+and two patterns that fired on code the rule allows. It changes nothing the
+Decision says. Code is cited as read at `065bbfb`.
+
+**The scanned set comes from the build's entry list.** The stage loads
+`tsup.config.ts` and scans the directory of each entry that config lists
+(`entryRoots`). A new entry in a new directory, or an entry moved to another
+one, is scanned with no edit to the stage. An entry list it cannot turn into
+directories below the config stops the stage rather than being guessed at:
+no entry list, an empty one, an entry that is not a string, a pattern, a
+missing file, or an entry beside or above the config.
+
+**The plain JavaScript extensions are scanned.** The source typecheck does
+not compile them, since `allowJs` is not set, and the bundler bundles such a
+file when an entry imports it, so they are read beside the TypeScript ones
+(`sourceExtensions`).
+
+**The built output is not scanned.** The CommonJS output of the build loads
+its shared chunk with a `require` of a string literal (`dist/index.cjs` and
+`dist/tagged.cjs` built from `065bbfb`), which the CommonJS rule refuses by
+design, so scanning the output would mean exempting the bundler's own lines.
+The ES module output of the same build scanned clean when probed. Beside the
+bundler's own lines, a scan of the output would read two kinds of code the
+scan of the input does not: a module outside the directory of every entry
+that an entry imports, and the code of a package an entry imports, which the
+bundler inlines because this package lists no dependencies (probed with a
+throwaway package). The stage reads neither. The header of the script states
+the first; no rule refuses the import of a package that is not a Node
+builtin.
+
+**A field named for a DOM global no longer fires.** The DOM rule matched the
+name wherever a member access or an index followed it, so a field named for
+a window or a document on an options object, with a member access after it,
+failed the stage. The rule now takes the member lookbehind the Node rule
+already had, and a name reached as a member of `globalThis` still fires
+(`usedAsBareOrGlobalThisMember`).
+
+**A type-only import of a Node builtin still fires, and that is accepted.**
+Such an import is erased by the build and does no harm on a constrained
+engine, but the source typecheck (`tsconfig.src.json`) refuses the same
+import, because that program carries no declarations for Node's modules. A
+probe at `065bbfb` with a type-only import from the prefixed stream module
+failed that typecheck with "Cannot find module". An author who writes one
+meets that failure in the same gate, so letting the type-only form through
+the import rules would change no outcome.
