@@ -1639,14 +1639,18 @@ domain as an integer.
 or anywhere inside the lists and maps of a list or map operand. A check of the
 operand's top alone would not keep the number out, because an opcode can take
 a member out of a list or a map that is already on the stack. The walk is
-`carriesUnsafeInteger` in `src/evaluator.ts`, added with this amendment. It
-counts as a map every object the machine reads as one, which is every object
-that is neither a list nor one of the domain's own value classes, an object of
-a class this package did not define included; that test is `isPlainMap` in
-`src/evaluator.ts`, which the opcodes that read a map use. It checks every own
-property of such an object, not only the enumerable ones, because a member
-access reads any own property. It visits each container once and does not
-recurse, so a cycle or a deep chain cannot exhaust the stack.
+`literalFault` in `src/evaluator.ts`, added with this amendment. It counts as
+a map every object the machine reads as one, which is every object that is
+neither a list nor one of the domain's own value classes, an object of a class
+this package did not define included; that test is `isPlainMap` in
+`src/evaluator.ts`, which the opcodes that read a map use. It follows every
+own string-keyed data property of a list or map, enumerable or not, because a
+member access reads any own string-keyed property. It reads each value from
+the property's descriptor and never calls a getter, so it runs no host code.
+It visits a container once however many paths reach it, and it counts levels
+as the nesting check does: an operand whose properties nest past the depth
+limit is refused with `"depth_limit_exceeded"`. Only non-enumerable
+properties, which the nesting check does not follow, can reach that refusal.
 
 **The nesting check runs first.** The nesting amendment above puts a shape
 check at the same instruction; it still decides only the shape, and it runs
@@ -1664,8 +1668,8 @@ the limit passed the check and raised the engine's stack-overflow error when
 it was compared or handed back. `nestingFault` now takes the caller's map
 test, and every caller of it in `src/evaluator.ts` and `src/index.ts` passes
 `isPlainMap`, so such an object is counted as a map level and refused on its
-shape like any other. What the walk enumerates is unchanged: the enumerable
-members, which are what those walks recurse into.
+shape like any other. What the walk enumerates is unchanged: the own
+enumerable string-keyed members, which are what those walks recurse into.
 
 **Only an integral number is tested.** A raw non-integral or non-finite number
 in a `lit` operand is not a member of the domain either, but it is not an
@@ -1680,8 +1684,14 @@ value read out of the context or out of a value already on the stack, an
 arithmetic result the shared numeric-result helper has tested, a `cast` result
 the cast module has bounded, or a host or builtin function's answer after it
 passed the value boundary. So after this change no integral number outside the
-safe range reaches an opcode. On every integral number the machine can then
-hold, the module-local integer test, `isIntegral` in `src/evaluator.ts` (read
+safe range reaches an opcode, except one that host code supplies while the
+machine reads a hand-built operand. A getter is one: the check above never
+calls it, and it can answer an out-of-range integer when an opcode reads it. A
+proxy trap is the other: it can hide from the check a key that a member access
+still reads. They are the host code the nesting amendment's section on a
+throwing getter or proxy trap names, and this amendment makes no claim about
+a value either supplies. On every other integral number the machine can hold,
+the module-local integer test, `isIntegral` in `src/evaluator.ts` (read
 at `0f753ce`), which tests only that a value is a number, agrees with the
 domain's own predicate, `isInteger` in `src/values.ts` (read at `0f753ce`),
 which also tests the safe range. The sites that classify with the module-local
@@ -1693,8 +1703,10 @@ leaves admitted.
 the boundary's reason, on either side of zero", through the main entry point as
 well as the machine's; "is refused wherever the operand carries it"; "admits an
 integer at the bound, and a float past it"; "is refused inside any object the
-machine reads as a map"; and "admits the bound inside any object the machine
-reads as a map". The nesting walk's map test is pinned in
+machine reads as a map"; "admits the bound inside any object the machine
+reads as a map"; "never calls a getter on the operand"; and "refuses an
+operand whose hidden properties nest past the limit". The nesting walk's map
+test is pinned in
 `test/nesting.test.ts` by "refuses a class-built literal operand past the
 limit, or cyclic".
 
