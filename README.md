@@ -271,7 +271,7 @@ here.
 | datetime | a `PDateTime`, an instant in UTC |
 | duration | a `Duration`, carrying each of its keys and defaulting them to zero |
 | null | `null` |
-| undefined | the exported `Undefined` singleton, an absence rather than a value |
+| undefined | the exported `Undefined` singleton, a first-class value that is an absence: no value was ever supplied |
 
 A host's values are normalized into that domain before a program runs, and a
 result is projected back to plain host values afterwards. Four points about that
@@ -371,8 +371,10 @@ if (!answer.ok || answer.value !== true) {
 
 The builtins are the closed set the reference implementation defines, including
 `len`, `upper`, `lower`, `trim`, `substring`, `concat` and the `Math.`, `Date.`
-and `JSON.` families. `conformance/corpus/tier-5.json` is where they are pinned
-case by case.
+and `JSON.` families. `conformance/corpus/tier-5.json` pins the deterministic
+ones case by case. No case in the corpus calls `Date.now` or `Math.random`,
+whose answers depend on the `now` and `random` options above rather than on
+their arguments.
 
 ## The tagged subpath
 
