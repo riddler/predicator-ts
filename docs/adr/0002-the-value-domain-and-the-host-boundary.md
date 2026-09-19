@@ -1959,3 +1959,68 @@ unprobed number differently from its negation is not caught by it.
 
 The bullet is cited from this note rather than edited, because a change to
 this record adds lines and removes none.
+
+## Amendment: the cast exemption reaches the non-finite bound (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+Recorded for `pts-08d`. This amendment is appended, and removes no line above.
+
+What this amends. The amendment headed "the out-of-range rule's sites, and the
+cast exemption" exempts a `cast` result from the out-of-range integer refusal.
+It rests that exemption on the totality rule it quotes from predicator-ex's
+`docs/isa.md` at tag `v9.4.1`: "`cast` is total over values: a conversion that
+cannot produce a value of the target type pushes `:undefined`, never an error."
+It writes the exemption for the safe-integer bound alone. The domain has a
+second numeric bound: it has no member for a number that is not finite, and
+the value boundary refuses one with the reason `"non_finite_number"`
+(`normalizeNumber` in `src/values.ts`). No sentence above says what a cast
+answers at that bound. This amendment decides it, and extends the exemption to
+it.
+
+**A `::float` cast of a string whose parse is not finite answers undefined,
+not a refusal.** A text the float grammar accepts can name a number past the
+largest finite double, and its parse is then an infinity, from which no float
+of this domain can be built. That is a conversion that cannot produce a value
+of the target type, so under the same totality rule the cast answers undefined.
+The anchor is `toFloat` in `src/cast.ts`, read at `3c76eb8`. The obligation the
+out-of-range amendment states binds a site that admits a number as an integer,
+and this amendment does not widen it: it adds no obligation at the non-finite
+bound, and records what a cast answers there.
+
+**The finiteness test in `toFloat` is load bearing.** The float class refuses a
+non-finite number by throwing, since reaching it with one is a defect in this
+package (`Float` in `src/values.ts`). Without the test, this cast would raise
+that error out of the evaluation, which is the answer the totality rule forbids.
+
+**The string parse is the conversion to a float that this rule reaches, among
+the domain's values.** The normative conversion matrix in `docs/isa.md` at
+`v9.4.1` gives the float target three sources: a float, which is identity and
+hands back a float already built; an integer, which widens, and a domain
+integer lies inside the safe range, so its widening is finite; and a string,
+which parses. Every other source is undefined there. The raw non-finite
+number the `lit` amendment above leaves admitted is not a value of the domain,
+and this amendment decides nothing about a cast of it. Run at `3c76eb8`, a
+`::float` cast of such an operand raises the float class's error out of the
+evaluation.
+
+**This is this package's reading of the totality rule, and the reference does
+not answer the case.** Unlike the safe-integer bound, the reference meets this
+bound too, since its floats are doubles. Run at `v9.4.1` on two texts its float
+grammar accepts, one naming ten to the 309th power and one of four hundred nines
+and a fraction, its `::float` cast raises an argument error out of the evaluation
+rather than answering undefined or an error value; the text naming ten to the
+308th power answers that float. So no reference run confirms the reading, and
+what the reference does there contradicts the totality rule it states. No case
+in the vendored corpus decides it. If the corpus later carries one, the case
+wins over the reading, as the exemption above says of its own.
+
+**It is pinned by a shipped test**: "answers an absence for a float the domain
+has no member for" in `test/cast.test.ts`, which casts a text of four hundred
+nines and a fraction to a float and expects undefined.
+
+Consequences. A host casting such a text gets undefined, which is quiet where
+normalization and an arithmetic result refuse loudly at the same bound; that
+is the asymmetry the exemption above already accepts at the safe-integer
+bound, for the same reason. The conformance run is unchanged. Nothing in this
+amendment adds an opcode, a reason token or a wire-format change.
