@@ -7,7 +7,8 @@
 // build), a report that records no integer instruction-set version, reports
 // that disagree about that version, a claim that is not complete - scoped
 // by the version the reports record, which is the package's, never the
-// vendored corpus's - and a vendored corpus the script cannot read.
+// vendored corpus's - an entry the registry already holds that no report
+// observed passing, and a vendored corpus the script cannot read.
 //
 // Every run below is a real `node scripts/ratchet.mjs` process. Its reports
 // and its registry are fixtures written to a temporary directory and passed by
@@ -311,6 +312,42 @@ describe("the ratchet refuses", () => {
       expect(run.stderr).toContain(`evaluator:1 wants ${item.id}, which has no entry`);
     }
     expect(registryText()).toBe(emptyRegistry);
+  });
+});
+
+describe("the ratchet only grows", () => {
+  // The registry's own rule: an entry it already holds that no report observed
+  // passing is a regression, and the answer is to fix src/, never to drop the
+  // entry. The report here passes a different case, so a run with the refusal
+  // gone has something to write and the fixture registry does not survive it -
+  // which is what makes the unchanged-registry assertion below able to fail.
+  //
+  // Sabotage: replacing the regression guard's condition in scripts/ratchet.mjs
+  // with `false` turns this red - the forgotten entry is merged forward beside
+  // the passing one, the registry is rewritten with two entries, and the run
+  // exits zero with nothing on stderr. It was run and reverted.
+  it("refuses an entry the registry holds that no report observed passing", () => {
+    const [forgotten, passing] = runsAtCorpusVersion;
+    if (forgotten === undefined || passing === undefined) {
+      throw new Error("tier 1 holds fewer than two cases the corpus's version runs");
+    }
+    const held = encodeRegistry({
+      claims: [],
+      corpus_hash: manifest.corpus_hash,
+      entries: [{ case_id: forgotten.id, surface: "evaluator", tier: forgotten.tier }],
+      implementation: "predicator-ts",
+      isa_version: manifest.isa_version,
+    });
+    writeFileSync(registryPath, held);
+    const report = writeReport("evaluator.json", {
+      isa_version: manifest.isa_version,
+      results: passes([passing]),
+    });
+    const run = ratchet("--report", report);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain("ratchet: the registry holds entries no report observed passing");
+    expect(run.stderr).toContain(`${forgotten.id} on the evaluator surface`);
+    expect(registryText()).toBe(held);
   });
 });
 
