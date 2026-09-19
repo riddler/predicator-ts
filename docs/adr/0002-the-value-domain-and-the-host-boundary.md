@@ -1575,17 +1575,17 @@ hands to the projection before projecting it. A host calling `toHost`
 directly on a value it built by hand, outside the domain's tree shape, is
 outside this amendment.
 
-## Note: the JSON parse builtin's fault locator counts against the limit (2026-09-18)
+## Amendment: the JSON parse builtin's fault locator counts against the limit (2026-09-18)
 
 Status: proposed (2026-09-18)
 
-Recorded for `pts-rf2`. It is appended, and removes no line above.
+Recorded for `pts-rf2`. This amendment is appended, and removes no line above.
 
-What this changes. Under "What does not count against it", the nesting
+What this amends. Under "What does not count against it", the nesting
 amendment above says the two JSON builtins in `src/functions/json.ts` walk
 their own argument without the limit. That is no longer true of the parse
 builtin, `JSON.parse`, and still true of the serializer, `JSON.stringify`.
-Read that sentence as scoped by this note.
+Read that sentence as scoped by this amendment.
 
 **The parse builtin's fault locator counts against `DEPTH_LIMIT`.** The
 locator, `jsonFault` in `src/functions/json.ts`, counts the arrays and objects
@@ -1611,4 +1611,4 @@ refuses it first, with the same reason.
 **The serializer is unchanged.** `serialize` in `src/functions/json.ts` walks
 its argument without the limit, and what the amendment above says of a stack
 overflow inside a JSON builtin still holds for it. That is recorded as an open
-issue, `pts-8di`, and is out of scope for this note.
+issue, `pts-8di`, and is out of scope for this amendment.
