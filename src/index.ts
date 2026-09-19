@@ -10,6 +10,7 @@
  */
 
 import { compile } from "./compile.js";
+import type { Ast } from "./decompile.js";
 import type { ParseError } from "./errors.js";
 import {
   type EvaluateOptions,
@@ -25,7 +26,7 @@ import {
 import type { Program } from "./instructions.js";
 import { tokenize } from "./lexer.js";
 import { nestingFault } from "./nesting.js";
-import { type ParseResult, parse as parseTokens } from "./parser.js";
+import { parse as parseTokens } from "./parser.js";
 import { toHost } from "./values.js";
 
 export type {
@@ -53,8 +54,21 @@ export type {
 } from "./evaluator.js";
 export type { Instruction, Program } from "./instructions.js";
 export { isaVersion } from "./instructions.js";
-export type { ParseResult } from "./parser.js";
 export * from "./values.js";
+
+/**
+ * A syntax tree, or the one refusal that stopped it.
+ *
+ * It is declared here rather than beside the grammar because this is the
+ * boundary the tree is sealed at: inside the package the grammar's own node
+ * shapes are ordinary types that the emitter and the tests read, and what
+ * leaves through this entry point is the opaque `Ast` handle instead. The
+ * refusal is the one `compile` answers for the same source, with the same
+ * reason, message, position and span.
+ */
+export type ParseResult =
+  | { readonly ok: true; readonly ast: Ast }
+  | { readonly ok: false; readonly error: ParseError };
 
 /**
  * The program to run, from either accepted first argument.
@@ -259,14 +273,22 @@ export function executeValue(
  * same `span`. There is no second error shape to tell apart, and a caller that
  * already handles a refusal from `compile` handles this one unchanged.
  *
- * What comes back is not a compatibility promise. `Ast` is exported so that
- * this and `decompile` can be typed and composed; the node shapes behind it
- * may change without a major version, and what holds across such a change is
- * that `decompile(parse(source).ast)` keeps answering what the reference
- * answers for that source.
+ * What comes back is not a compatibility promise, and the type says so
+ * rather than a doc comment: `Ast` is opaque, so a caller can neither narrow
+ * on a node kind nor build a tree of its own, and the one thing to do with a
+ * tree is hand it back to `decompile`. The node shapes behind it may change
+ * without a major version, and what holds across such a change is that
+ * `decompile(parse(source).ast)` keeps answering what the reference answers
+ * for that source. A caller that wants to walk the tree cannot, which is the
+ * stated cost of promising nothing about it.
  */
 export function parse(source: string): ParseResult {
   const scanned = tokenize(source);
   if (!scanned.ok) return { ok: false, error: scanned.error };
-  return parseTokens(scanned.tokens);
+  const parsed = parseTokens(scanned.tokens);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  // Sealing the tree into the handle. This is the producing half of the
+  // pair, and `decompile` is the reading half; nowhere else in the package
+  // crosses between the two.
+  return { ok: true, ast: parsed.ast as unknown as Ast };
 }

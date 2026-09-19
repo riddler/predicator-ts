@@ -42,17 +42,37 @@ import type {
 import { formatDate, formatDateTime } from "./iso.js";
 
 /**
- * The syntax tree `decompile` renders and `parse` answers.
+ * The brand that makes the tree handle below its own type and nobody else's.
  *
- * IT IS NOT A COMPATIBILITY PROMISE. The alias is exported so that the two
- * functions can be typed and composed, which is the whole of what ADR-0004
- * decided about it; the node shapes behind it are this package's own and a
- * consumer that switches on them is writing against an internal detail. They
- * may change without a major version, and what is promised across one is that
- * `decompile(parse(source).ast)` keeps answering what the reference answers.
- * A later record that publishes the node shapes decides that separately.
+ * It is a `unique symbol`, so no other declaration anywhere can name the same
+ * member, and its member type is `never`, so no value can satisfy it. The two
+ * together are what make the handle unforgeable: a caller holding the symbol
+ * still has nothing it could store under it.
  */
-export type Ast = Node;
+declare const astBrand: unique symbol;
+
+/**
+ * The syntax tree `decompile` renders and `parse` answers, as an opaque handle.
+ *
+ * IT IS NOT A COMPATIBILITY PROMISE, AND IT IS OPAQUE SO THAT IT CANNOT
+ * QUIETLY BECOME ONE. ADR-0004 decided one opaque type, two functions that
+ * speak it, and no promise about its nodes; a name that resolved to the node
+ * union would have given a consumer full narrowing on a node kind, and a doc
+ * comment is not enforcement. So the handle carries no member a caller can
+ * read and none a caller can write: it cannot be narrowed, and it cannot be
+ * built outside this package. What a caller does with one is hand it back to
+ * `decompile`, and what is promised is that `decompile(parse(source).ast)`
+ * keeps answering what the reference answers.
+ *
+ * The direction is chosen while it is still free. Widening this to the node
+ * shapes later is not a breaking change; narrowing a published node union to
+ * this would be. A later record that publishes the node shapes decides that
+ * separately, and can.
+ *
+ * The cost is stated rather than hidden: a consumer that wants to walk the
+ * tree cannot. That is exactly what the record declines to promise.
+ */
+export type Ast = { readonly [astBrand]: never };
 
 /** How much punctuation and whitespace a rendering carries. */
 export interface DecompileOptions {
@@ -135,7 +155,9 @@ const SPACING_TEXT = {
 export function decompile(ast: Ast, options: DecompileOptions = {}): string {
   const mode: Parentheses = options.parentheses ?? "minimal";
   const spacing = SPACING_TEXT[options.spacing ?? "normal"];
-  return render(ast, mode, spacing);
+  // The handle is the tree, and this is one of the two places the package
+  // reads it back as one. The other is where `parse` seals it.
+  return render(ast as unknown as Node, mode, spacing);
 }
 
 function render(node: Node, mode: Parentheses, spacing: string): string {
@@ -341,10 +363,12 @@ function arithmeticLevel(operator: ArithmeticOperator): number {
  *
  * The sign is handled although a parsed tree never carries one: the grammar
  * reads a leading `-` as a unary operator over a positive literal rather than
- * folding it into the value. A hand-built node can carry a negative value, and
- * the type that admits one is public, so the rendering answers for it rather
- * than treating it as impossible. It renders as the reference renders it,
- * which parses back as that unary operator over the magnitude.
+ * folding it into the value. The node type admits a negative value and this
+ * package's own construction sites can build one, so the rendering answers
+ * for it rather than treating it as impossible; the tests beside this module
+ * build such a node and pin each answer against a run at the vendored tag. It
+ * renders as the reference renders it, which parses back as that unary
+ * operator over the magnitude.
  */
 function floatSource(value: number): string {
   const shortest = Object.is(value, -0) ? "-0" : String(value);

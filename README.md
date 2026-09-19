@@ -313,10 +313,15 @@ depends on the expression, so neither of them is the one to watch. Both
 are what the reference does and this matches it.
 
 The tree `parse` answers and `decompile` takes is exported as `Ast`, and it is
-not a compatibility promise. The alias is there so the two functions can be
-typed and composed; the node shapes behind it are internal and may change
-without a major version. What holds across such a change is that
+opaque rather than a promise. It carries no member a caller can read and none
+a caller can write, so there is nothing on it to switch on and no way to build
+one: hand it back to `decompile` and that is all it is for. The node shapes
+behind it are internal and may change without a major version, and what holds
+across such a change is that
 `decompile(parse(source).ast)` keeps answering what the reference answers.
+Not being able to walk the tree is the cost of promising nothing about it, and
+the direction is the reversible one: publishing the shapes later would break
+nobody, while taking them back once they were public would.
 `docs/adr/0004-the-compiler-surface.md` is the record, and it says why the
 renderer takes the tree rather than a compiled program.
 
