@@ -12,6 +12,7 @@ import {
   executeValue,
   float,
   isaVersion,
+  PDateTime,
 } from "../src/index.js";
 
 describe("isaVersion", () => {
@@ -268,5 +269,108 @@ describe("executeValue", () => {
   it("carries the projection's documented loss across the returned context", () => {
     const outcome = executeValue([["load", "rate"], ["pop"]], { rate: float(2) });
     expect(outcome).toEqual({ ok: true, value: 2, context: { rate: 2 } });
+  });
+});
+
+// The source-string form of the same three entry points.
+//
+// The message an assignment is refused with is the reference implementation's,
+// quoted here verbatim. It was taken from a run of Predicator.compile/1 and
+// Predicator.evaluate/2 on "x = 1" at tag v9.4.1 (mix.exs @version "9.4.1"),
+// which answered this text with position {1, 3} and span {{1, 3}, {1, 4}}.
+const ASSIGNMENT_REFUSAL =
+  "'=' is not an equality operator - use '==' for equality. " +
+  "Assignment is only valid at the start of a statement.";
+
+describe("a source string in place of a program", () => {
+  // Sabotage: compiling the string but discarding the caller's context - passing
+  // undefined to the evaluator instead of the context - turns the payments
+  // assertion red with an unbound variable. It was run and reverted.
+  it("compiles the source as an expression and runs it under the same context", () => {
+    expect(evaluate("amount > 500 AND issuer == 'visa'", { amount: 750, issuer: "visa" })).toEqual({
+      ok: true,
+      value: true,
+    });
+    expect(evaluate("amount > 500", { amount: 20 })).toEqual({ ok: true, value: false });
+  });
+
+  // Sabotage: running the compiled string with the options argument dropped
+  // makes the relative date read the real clock instead of the one the caller
+  // handed in, and this goes red. It was run and reverted.
+  it("passes the caller's options through to the run", () => {
+    const pinned: EvaluateOptions = {
+      now: () => new PDateTime(Math.floor(Date.parse("2026-01-01T00:00:00Z") / 1000), 0),
+    };
+    expect(evaluate("1d ago", {}, pinned)).toEqual({
+      ok: true,
+      value: new PDateTime(Math.floor(Date.parse("2025-12-31T00:00:00Z") / 1000), 0),
+    });
+  });
+
+  // Sabotage: rewrapping the compiler's refusal in an EvaluationError, instead
+  // of handing it out unchanged, turns the type, the reason and the message
+  // assertions red together. It was run and reverted.
+  it("answers the compiler's own refusal on the failing arm, at all three", () => {
+    for (const outcome of [evaluate("x = 1"), execute("x = 1"), executeValue("x = 1")]) {
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.type).toBe("ParseError");
+      if (outcome.error.type !== "ParseError") continue;
+      expect(outcome.error.reason).toBe("assignment_in_expression");
+      expect(outcome.error.message).toBe(ASSIGNMENT_REFUSAL);
+      expect(outcome.error.position).toEqual({ line: 1, column: 3 });
+      expect(outcome.error.span).toEqual({
+        start: { line: 1, column: 3 },
+        end: { line: 1, column: 4 },
+      });
+    }
+  });
+
+  // Sabotage: throwing the refusal rather than returning it turns every
+  // assertion in this block red at once, which is the point of asserting it
+  // separately from the shape above. It was run and reverted.
+  it("never throws on a source the grammar refuses", () => {
+    expect(() => evaluate("variant == ")).not.toThrow();
+    expect(() => execute("(")).not.toThrow();
+    expect(() => executeValue("1 +")).not.toThrow();
+  });
+
+  // Sabotage: handing back an empty context on the refused arm, rather than no
+  // context member at all, turns this red. A source that did not compile never
+  // ran and so bound nothing. It was run and reverted.
+  it("carries no context where the source did not compile", () => {
+    const refused = execute("x = 1", { visitor: { bucket: 12 } });
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect("context" in refused).toBe(false);
+  });
+
+  // Sabotage: retaining a value for the compiled expression - returning the
+  // stack top instead of the last expression statement's value - turns this
+  // red. The expression grammar emits no statement boundary, so there is no
+  // value to retain. It was run and reverted.
+  it("answers the absence at executeValue, whatever the expression evaluates to", () => {
+    expect(executeValue("score > 1", { score: 5 })).toEqual({
+      ok: true,
+      value: undefined,
+      context: { score: 5 },
+    });
+  });
+
+  // Sabotage: compiling the instruction-list form as if it were source - calling
+  // the compiler on anything that is not a string - turns this red with a type
+  // error at run time. It was run and reverted.
+  it("still takes an instruction list, unchanged", () => {
+    expect(evaluate([["lit", 1]])).toEqual({ ok: true, value: 1 });
+    expect(
+      execute([
+        ["lit", "variant"],
+        ["lit", "b"],
+        ["store", 1],
+      ]),
+    ).toEqual({
+      ok: true,
+      context: { variant: "b" },
+    });
   });
 });

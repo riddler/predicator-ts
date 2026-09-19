@@ -26,7 +26,7 @@
  */
 
 import { EvaluationError } from "./errors.js";
-import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
+import { type EvaluateOptions, evaluateToValue, type ProjectedEvaluation } from "./evaluator.js";
 import { floatText } from "./floats.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
@@ -648,6 +648,12 @@ export interface TaggedEvaluateOptions extends EvaluateOptions {
  * subpath is the encoding it speaks, and a host that imports both entry points
  * into one module needs two names rather than an alias at every call site.
  *
+ * It takes a compiled instruction list and nothing else. The main entry
+ * point's three take an expression's source text as well; this one does not,
+ * so it answers no parse failure and its failing arm stays the evaluation
+ * errors alone. A host wanting both compiles the source itself and passes the
+ * list.
+ *
  * Under the default the result is the plain projection, exactly as the main
  * entry point answers it. Requested with the encoding, the result is the text
  * of that encoding - so an absence comes back as its tag rather than as the
@@ -660,7 +666,7 @@ export function evaluateTagged(
   instructions: Program,
   context?: unknown,
   options?: TaggedEvaluateOptions,
-): EvaluateResult {
+): ProjectedEvaluation {
   const outcome = evaluateToValue(instructions, context, options);
   if (!outcome.ok) return outcome;
   if (options?.tagged !== true) return { ok: true, value: toHost(outcome.value) };

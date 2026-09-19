@@ -58,6 +58,7 @@ import {
 } from "./context.js";
 import {
   EvaluationError,
+  type ParseError,
   type PredicatorError,
   TypeMismatchError,
   UndefinedVariableError,
@@ -196,10 +197,32 @@ export type EvaluationOutcome =
   | { readonly ok: true; readonly value: Value }
   | { readonly ok: false; readonly error: PredicatorError };
 
-/** What one evaluation produced, projected back to plain host values. */
-export type EvaluateResult =
+/**
+ * What one evaluation produced, projected back to plain host values, where
+ * nothing was compiled in front of it.
+ *
+ * It is the shape an entry point taking only a program answers, and it is
+ * separate from `EvaluateResult` below for exactly that reason: an entry point
+ * that cannot be handed source text cannot answer a `ParseError`, and saying
+ * so in its return type is what keeps a caller of that entry point from having
+ * to narrow away a member it can never meet.
+ */
+export type ProjectedEvaluation =
   | { readonly ok: true; readonly value: HostValue }
   | { readonly ok: false; readonly error: PredicatorError };
+
+/**
+ * What `evaluate` answers.
+ *
+ * Its failing arm admits a `ParseError` beside the evaluation errors because
+ * that entry point also accepts source text, and a source that does not
+ * compile fails on this same arm rather than on one of its own. A caller that
+ * only ever passes a program never meets that member and narrows it away on
+ * `error.type`.
+ */
+export type EvaluateResult =
+  | ProjectedEvaluation
+  | { readonly ok: false; readonly error: ParseError };
 
 /**
  * What one statement run produced, in the value domain.
@@ -238,21 +261,33 @@ export type StatementOutcome =
  */
 type HostContext = { readonly [key: string]: HostValue };
 
-/** What `execute` answers: the context at halt, projected. */
+/**
+ * What `execute` answers: the context at halt, projected.
+ *
+ * Its failing arm admits a `ParseError` for the same reason `EvaluateResult`'s
+ * does, and that arm carries no context: a source that does not compile never
+ * runs, so there is nothing it bound.
+ */
 export type ExecuteResult =
   | { readonly ok: true; readonly context: HostContext }
   | {
       readonly ok: false;
-      readonly error: PredicatorError;
+      readonly error: PredicatorError | ParseError;
       readonly context?: HostContext;
     };
 
-/** What `executeValue` answers: the last expression statement's value, and the context. */
+/**
+ * What `executeValue` answers: the last expression statement's value, and the
+ * context.
+ *
+ * Its failing arm admits a `ParseError` on the same terms `ExecuteResult`'s
+ * does, with neither a value nor a context.
+ */
 export type ExecuteValueResult =
   | { readonly ok: true; readonly value: HostValue; readonly context: HostContext }
   | {
       readonly ok: false;
-      readonly error: PredicatorError;
+      readonly error: PredicatorError | ParseError;
       readonly context?: HostContext;
     };
 
