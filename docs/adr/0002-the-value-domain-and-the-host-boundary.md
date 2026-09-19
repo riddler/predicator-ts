@@ -2147,3 +2147,68 @@ that tag (Elixir 1.18.3, OTP 27):
   answered that value itself.
 
 So neither reason is one the reference has.
+
+## Note: where the compiler refuses `tagged`, and what the not-bound list's closing sentence carries (2026-09-19)
+
+Recorded for `pts-3iv` and `pts-o7n`, which each found a sentence of accepted
+text that says more, or less, than is so. This note is appended, and removes no
+line above. It records what those sentences are about and changes nothing this
+record decides, so it carries no Status line.
+
+### Where the compiler refuses `tagged` at the main entry point
+
+The options-split amendment's paragraph opening "The split is a type-level
+boundary and adds no runtime check" continues with a sentence opening
+"Requesting `tagged` at the main entry point is refused by the compiler", which
+says the refusal holds wherever the options object is written as a literal.
+That qualifier holds in neither direction. Run under TypeScript 5.9.3 with this
+repository's `tsconfig.json` at `7821532`, against `evaluate`:
+
+- `{ tagged: true }` written inline at the call was refused, reported as TS2353.
+- `{ tagged: true }` declared apart from the call was refused, reported as
+  TS2559.
+- `{ tagged: true, loopBudget: 5 }` declared apart from the call was accepted,
+  and so was `{ tagged: true, onUnbound: "error" as const }`. Written without
+  `as const`, that `onUnbound` value widens to `string` and the object is
+  refused, reported as TS2345.
+- `{ tagged: true } as EvaluateOptions` written inline at the call was accepted.
+
+That sentence is superseded by this one: **requesting `tagged` at the main
+entry point as `{ tagged: true }` written inline at the call is refused by the
+compiler, and that is the refusal the promised negative test pins.** The test is
+"does not accept the request for the corpus encoding" in `test/index.test.ts`,
+read at `7821532`: its `@ts-expect-error` directive is the assertion, and the
+`typecheck` script in `package.json` checks `test/` through `tsconfig.json`.
+This record states no other spelling of the request as refused
+or accepted. The paragraph's bold sentence, that the split is a type-level
+boundary and adds no runtime check, stands, and so does its closing sentence.
+
+This also settles the amendment's own contradiction. Its Consequences paragraph
+closes with the sentence opening "Which requests typecheck and which do not",
+which declines to state the boundary, while the superseded qualifier stated
+one. With the qualifier gone the record states only the pinned refusal. That
+closing sentence places the test "where the types are first defined";
+`EvaluateOptions` is declared in `src/evaluator.ts` and `TaggedEvaluateOptions`
+in `src/tagged.ts`, and the test is in neither. The directive in the test named
+above is the only `@ts-expect-error` under `src/` or `test/` at `7821532`, and
+it is the type-level test that sentence refers to.
+
+### What the not-bound list's closing sentence carries
+
+The amendment headed "the out-of-range rule's sites, and the cast exemption"
+lists the sites its rule does not bind, and introduces them as listed "each with
+what it answers instead or with why it needs no test". The list does both. The
+bullets on `isInteger` and `typeName`, on the `duration` opcode's magnitude
+guard, and on the operand-shape tests each name the verdict the site answers in
+place of the refusal. The bullets on the plain projection and on `unary_minus`
+name no such verdict, and give instead the reason the rule does not bind the
+site.
+
+The sentence closing the list, opening "An author adding a site of one of those
+kinds", covers only the first of those: the verdict it says such an author
+carries has nothing to refer to for the two bullets that give a reason. It is
+superseded by this one: **an author adding a site of one of those kinds carries
+what that kind's bullet gives in place of this refusal - the verdict that kind
+answers, or the reason that kind is not bound - and not this refusal.** No other
+sentence of that amendment is read differently here, and the list's membership
+is unchanged.
