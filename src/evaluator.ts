@@ -267,7 +267,16 @@ function isNumeric(value: Value): value is number | Float {
   return typeof value === "number" || value instanceof Float;
 }
 
-function isPlainMap(value: Value): value is { [key: string]: Value } {
+/**
+ * Whether the machine reads a value as a map.
+ *
+ * Any object that is not a list and not one of the domain's own value classes
+ * is read as a map - including an object of a class this package did not
+ * define, which only a hand-built instruction list can carry. The literal's
+ * checks and the nesting walks count as a map exactly what this answers true
+ * for, so they reach every map an opcode can read.
+ */
+export function isPlainMap(value: unknown): value is { [key: string]: Value } {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   if (value instanceof Float || value instanceof PDate) return false;
   if (value instanceof PDateTime || value instanceof Duration) return false;
@@ -533,18 +542,31 @@ function isIntegral(value: Value): value is number {
  * standing alone or anywhere inside its lists and maps.
  *
  * Only an integral number is tested: a number the domain would hold as an
- * integer if it were in range. The walk descends the domain's two containers
- * and treats every other member as a leaf. It is called only on an operand
- * whose shape has already passed the nesting check, so it meets no cycle and
- * goes no deeper than the depth limit.
+ * integer if it were in range. The walk descends every list and every object
+ * `isPlainMap` reads as a map, and treats every other member as a leaf. It
+ * visits each of a container's own properties rather than only its enumerable
+ * ones, because a member access reads any own property. It keeps its own list
+ * of what is left to visit instead of recursing, and visits each container
+ * once, so neither a cycle nor a deep chain of properties the nesting check
+ * does not follow can exhaust the stack or loop.
  */
-function carriesUnsafeInteger(value: Value): boolean {
-  if (typeof value === "number") return Number.isInteger(value) && !Number.isSafeInteger(value);
-  if (Array.isArray(value)) return value.some(carriesUnsafeInteger);
-  if (value === null || typeof value !== "object") return false;
-  const proto = Object.getPrototypeOf(value) as unknown;
-  if (proto !== null && proto !== Object.prototype) return false;
-  return Object.values(value as { [key: string]: Value }).some(carriesUnsafeInteger);
+function carriesUnsafeInteger(operand: Value): boolean {
+  const pending: unknown[] = [operand];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === "number") {
+      if (Number.isInteger(value) && !Number.isSafeInteger(value)) return true;
+      continue;
+    }
+    if (value === null || typeof value !== "object") continue;
+    if (!Array.isArray(value) && !isPlainMap(value)) continue;
+    if (visited.has(value)) continue;
+    visited.add(value);
+    const members = value as { [key: string]: unknown };
+    for (const name of Object.getOwnPropertyNames(value)) pending.push(members[name]);
+  }
+  return false;
 }
 
 /** Whether either operand is a float, which is what makes a result one. */
@@ -1191,12 +1213,12 @@ class Machine {
    * A literal also admits numbers into the domain as integers, so an integer
    * outside the safe range is refused here too, wherever the operand carries
    * it, rather than rounded - the rule the value boundary applies to a host's
-   * context. The shape is checked first, which is what bounds the walk that
-   * looks for such an integer. Nothing else about the operand is checked
+   * context. The shape is checked first, so an operand that fails both
+   * answers the shape's reason. Nothing else about the operand is checked
    * here.
    */
   private lit(operand: Value, at: number): Step {
-    const fault = nestingFault(operand);
+    const fault = nestingFault(operand, isPlainMap);
     if (fault !== undefined) return { ok: false, error: nestingError(fault, "the literal", at) };
     if (carriesUnsafeInteger(operand)) {
       return {
@@ -1236,7 +1258,7 @@ class Machine {
    * is walked as before.
    */
   private refuseNested(left: Value, right: Value, at: number): Step | undefined {
-    const fault = nestingFault(left) ?? nestingFault(right);
+    const fault = nestingFault(left, isPlainMap) ?? nestingFault(right, isPlainMap);
     if (fault === undefined) return undefined;
     return { ok: false, error: nestingError(fault, "an operand", at) };
   }
@@ -1544,7 +1566,9 @@ class Machine {
     // write walks the path, so the context a run hands back is never deeper
     // than one a host may hand in. Every other branch is as deep as it was.
     const fault =
-      path.length > DEPTH_LIMIT ? "depth_limit_exceeded" : nestingFault(value, path.length + 1);
+      path.length > DEPTH_LIMIT
+        ? "depth_limit_exceeded"
+        : nestingFault(value, isPlainMap, path.length + 1);
     if (fault !== undefined) return { ok: false, error: nestingError(fault, "the write", at) };
     const written = writePath(this.context, path, value);
     if (!written.ok) {
@@ -1894,7 +1918,7 @@ export function evaluateToValue(
   }
   const outcome = evaluateProgram(program, bound, resolveOptions(options));
   if (!outcome.ok) return outcome;
-  const fault = nestingFault(outcome.value);
+  const fault = nestingFault(outcome.value, isPlainMap);
   return fault === undefined ? outcome : { ok: false, error: nestingError(fault, "the result") };
 }
 

@@ -1631,20 +1631,41 @@ own instruction, with the reason `"integer_out_of_range"`.** The refusal is an
 `EvaluationError` at the instruction's position, answered on the failing arm
 and never pushed. The check is in the machine's `lit` method in
 `src/evaluator.ts`, added with this amendment. It is the rule the value
-boundary already applies to a host's context, applied at the other place a
-number is admitted into the domain as an integer.
+boundary already applies to a host's context, applied at the `lit` operand,
+one of the places the Decision names where a number is admitted into the
+domain as an integer.
 
 **The operand is checked wherever it carries such an integer**: standing alone,
 or anywhere inside the lists and maps of a list or map operand. A check of the
 operand's top alone would not keep the number out, because an opcode can take
 a member out of a list or a map that is already on the stack. The walk is
-`carriesUnsafeInteger` in `src/evaluator.ts`, added with this amendment.
+`carriesUnsafeInteger` in `src/evaluator.ts`, added with this amendment. It
+counts as a map every object the machine reads as one, which is every object
+that is neither a list nor one of the domain's own value classes, an object of
+a class this package did not define included; that test is `isPlainMap` in
+`src/evaluator.ts`, which the opcodes that read a map use. It checks every own
+property of such an object, not only the enumerable ones, because a member
+access reads any own property. It visits each container once and does not
+recurse, so a cycle or a deep chain cannot exhaust the stack.
 
 **The nesting check runs first.** The nesting amendment above puts a shape
 check at the same instruction; it still decides only the shape, and it runs
 before this one. An operand that both nests past the depth limit or contains
-itself and carries an out-of-range integer answers the nesting reason, and the
-walk for an out-of-range integer never meets a cycle or goes past the limit.
+itself and carries an out-of-range integer answers the nesting reason.
+
+**The nesting walk counts as a map what the machine reads as one.** The nesting
+amendment above says the outermost list or map is level one and any other
+member is a leaf. Before this amendment its walk, `nestingFault` in
+`src/nesting.ts`, took only a plain object as a map and passed over an object
+of a class this package did not define as a leaf, while the equality walks
+and the projection read such an object as a map and recurse into it. So a
+`lit` operand built from such objects that contained itself or nested past
+the limit passed the check and raised the engine's stack-overflow error when
+it was compared or handed back. `nestingFault` now takes the caller's map
+test, and every caller of it in `src/evaluator.ts` and `src/index.ts` passes
+`isPlainMap`, so such an object is counted as a map level and refused on its
+shape like any other. What the walk enumerates is unchanged: the enumerable
+members, which are what those walks recurse into.
 
 **Only an integral number is tested.** A raw non-integral or non-finite number
 in a `lit` operand is not a member of the domain either, but it is not an
@@ -1670,8 +1691,12 @@ leaves admitted.
 
 **It is pinned by shipped tests** in `test/evaluator.test.ts`: "is refused with
 the boundary's reason, on either side of zero", through the main entry point as
-well as the machine's; "is refused wherever the operand carries it"; and
-"admits an integer at the bound, and a float past it".
+well as the machine's; "is refused wherever the operand carries it"; "admits an
+integer at the bound, and a float past it"; "is refused inside any object the
+machine reads as a map"; and "admits the bound inside any object the machine
+reads as a map". The nesting walk's map test is pinned in
+`test/nesting.test.ts` by "refuses a class-built literal operand past the
+limit, or cyclic".
 
 Consequences. An instruction list that a host builds by hand and that carries
 an integer past the safe range now answers the failing arm where it answered a

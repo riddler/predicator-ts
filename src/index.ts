@@ -15,6 +15,7 @@ import {
   type ExecuteValueResult,
   evaluateToValue,
   executeToContext,
+  isPlainMap,
   nestingError,
   projectContext,
 } from "./evaluator.js";
@@ -141,7 +142,7 @@ export function executeValue(
 ): ExecuteValueResult {
   const outcome = executeToContext(instructions, context, options);
   if (outcome.ok) {
-    const fault = nestingFault(outcome.value);
+    const fault = nestingFault(outcome.value, isPlainMap);
     if (fault !== undefined) {
       return {
         ok: false,

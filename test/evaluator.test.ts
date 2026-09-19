@@ -278,6 +278,69 @@ describe("a literal integer outside the safe range", () => {
     if (!outcome.ok) return;
     expect(outcome.value).toBeInstanceOf(Float);
   });
+
+  // The machine reads any object that is not a list and not one of the
+  // domain's own classes as a map, so a member access answers an own property
+  // of an object built from a class, or from another prototype, just as it
+  // answers one of a plain object. The literal's check has to count those as
+  // maps too, or the number reaches the opcode anyway. A property that is not
+  // enumerable is read by a member access as well, so it is checked too.
+  //
+  // Sabotage: making the literal's walk descend only an object whose prototype
+  // is the plain one falsifies the rule that the literal is checked through
+  // every object the machine reads as a map, and turns this test red; making
+  // it read only enumerable properties falsifies the rule that every property
+  // a member access can read is checked, and turns it red too. Both were run
+  // and reverted.
+  it("is refused inside any object the machine reads as a map", () => {
+    const beyond = Number.MAX_SAFE_INTEGER + 1;
+    class CreditLine {
+      readonly limit: number;
+      constructor(limit: number) {
+        this.limit = limit;
+      }
+    }
+    const derived = Object.create({ issuer: "visa" }) as { limit: number };
+    derived.limit = beyond;
+    const hidden = {};
+    Object.defineProperty(hidden, "limit", { value: beyond, enumerable: false });
+    for (const operand of [new CreditLine(beyond), derived, hidden]) {
+      const outcome = evaluateToValue([
+        ["lit", operand as unknown as Value],
+        ["access", "limit"],
+      ]);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.reason).toBe("integer_out_of_range");
+      expect(outcome.error.position).toBe(0);
+    }
+  });
+
+  // The same objects holding the largest safe integer are admitted, and the
+  // member access answers it: the bound is closed for them as for a plain map.
+  //
+  // Sabotage: tightening the check so that it refuses a magnitude AT the bound
+  // falsifies the rule that the bound itself is admitted, and turns this test
+  // red. It was run and reverted.
+  it("admits the bound inside any object the machine reads as a map", () => {
+    const biggest = Number.MAX_SAFE_INTEGER;
+    class CreditLine {
+      readonly limit: number;
+      constructor(limit: number) {
+        this.limit = limit;
+      }
+    }
+    const derived = Object.create({ issuer: "visa" }) as { limit: number };
+    derived.limit = biggest;
+    for (const operand of [new CreditLine(biggest), derived]) {
+      expect(
+        evaluateToValue([
+          ["lit", operand as unknown as Value],
+          ["access", "limit"],
+        ]),
+      ).toEqual({ ok: true, value: biggest });
+    }
+  });
 });
 
 describe("the errors that belong to the machine rather than to an opcode", () => {
