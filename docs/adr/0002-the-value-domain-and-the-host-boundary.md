@@ -2213,57 +2213,67 @@ answers, or the reason that kind is not bound - and not this refusal.** No other
 sentence of that amendment is read differently here, and the list's membership
 is unchanged.
 
-## Note: what a store does at the path's root (2026-09-19)
+## Amendment: what a store writes at the path's root (2026-09-19)
 
-Recorded for `pts-23y`. This note is appended, and removes no line above. It
-records what rules this record already states imply for the root level of a
-store path, and changes nothing this record decides, so it carries no Status
-line.
+Status: proposed (2026-09-19)
 
-The store section governs an interior segment and the leaf, and says nothing
-of its own about the root - the context's top level, where a store writes a
-name rather than descending into a container. The two behaviours below
-follow from landed rules rather than from a choice, and this note states them
-with what they follow from.
+Recorded for `pts-23y`. This amendment is appended, and removes no line above.
 
-**An integer root segment is written under its decimal spelling.** Landed rules
-fix it:
+What this amends. The store section in the statement-mode note, and the
+amendment headed "the three questions the statement-mode note holds", govern a
+store path segment by its position: the leaf, or an interior segment. Neither
+says under what key an integer segment at the ROOT - the context's own top
+level - is written, or under what spelling the protected-root policy compares
+such a segment. This amendment decides both. The implementation already does
+what it decides, so it obliges no change to code.
 
-- The store section's obligation "**A write must be visible to a later load in
-  the same run.**" A load names a root by a string: the load operand's shape is
-  `"string"` in the instruction registry in `src/instructions.ts`, read at
-  `04d1bfc`, and in a run at that commit `["load", 0]` answered
-  `unknown_instruction`. So a write at an integer root is visible only if it is
-  made under some string.
-- The amendment headed "an integer bracket key reads its string spelling",
-  whose rule is "**The spelling is the decimal one, and it is unambiguous for
-  every integer this domain admits.**" It fixes the one string an integer key
-  names in a map, and the amendment headed "cycles, nesting, and the one depth
-  limit" places the context's roots in one: "A context counts as the outermost
-  map".
-
-Together they leave the decimal spelling and nothing else: under any other
-string, a later load of the root the integer names would not see the write.
-Refusing the write is not open either. Where the root segment ends its path it
-is the leaf, which the store section's rule opening "The leaf must always be
-overwritten" governs; above the leaf, that section's rules for an interior
-segment govern it exactly as they govern one inside any other map.
-`mapKey` in `src/context.ts`, read at `04d1bfc`, spells every integer segment
-this way, the root's included.
+**An integer root segment is written under its decimal spelling.** A later
+load of that spelling reads the write back.
 
 **The protected-root policy compares an integer root segment under the same
-decimal spelling.** The rule opening "`protectedRoots` names context roots a
-store may not write" protects a root, and the root an integer segment names is
-the one keyed by its decimal spelling, by the paragraph above. So protecting
-that spelling refuses a store at that integer root, and a spelling that is not
-the decimal one - `"00"` for the integer `0` - names another root and does not.
-`store` on the machine in `src/evaluator.ts`, read at `04d1bfc`, makes the
-comparison that way.
+decimal spelling.** Protecting that spelling refuses a store at that integer
+root. Any other spelling of the same number - `"00"` for the integer `0` -
+names another root, and protecting it does not refuse that store.
 
-**Both are pinned by unit tests in `test/evaluator.test.ts`**, added beside
-this note: "writes an integer root under its decimal spelling" and "compares an
-integer root with the protected roots under its decimal spelling". Each carries
-a sabotage note, and each mutation it names was run and turned its test red.
+**Otherwise a root segment is governed by its position, like any other
+segment.** Where it ends its path it is the leaf, and the amendment headed "the
+three questions the statement-mode note holds" rules that there "the
+always-overwrite rule governs". Above the leaf, the store section's rules for
+an interior segment govern it.
 
-This note supersedes no sentence of this record, and it makes no claim about
-what the reference does at the root.
+The reasons for choosing the decimal spelling, which are reasons for a choice
+and not a derivation that fixes it:
+
+- **Visibility.** The store section obliges that "**A write must be visible to
+  a later load in the same run.**" A load names a root by a string: the load
+  operand's shape is `"string"` in the instruction registry in
+  `src/instructions.ts`, read at `04d1bfc`, and in a run at that commit
+  `["load", 0]` answered `unknown_instruction`. So the write has to be made
+  under some string. That obligation does not pick which one.
+- **One spelling for an integer key.** The amendment headed "an integer bracket
+  key reads its string spelling" rules, for a bracket access on a map, that
+  "**The spelling is the decimal one, and it is unambiguous for every integer
+  this domain admits.**" No bracket access reaches a root, so that rule does
+  not govern the root. Choosing the same spelling there means an integer
+  segment names one key at every level of a store path, and `mapKey` in
+  `src/context.ts`, read at `04d1bfc`, already spells every integer segment
+  that way, the root's included.
+- **One root, one name.** `protectedRoots` is a list of strings, and the rule
+  opening "`protectedRoots` names context roots a store may not write" protects
+  a root. Comparing an integer root segment under the spelling it is written
+  under makes the root the policy refuses the same root the store would write.
+  `store` on the machine in `src/evaluator.ts`, read at `04d1bfc`, makes the
+  comparison that way.
+
+**Refusing a store at an integer root was not chosen.** The table of six
+failures has no row for it, and the leaf rule above writes rather than
+refusing.
+
+**Both decisions are pinned by unit tests in `test/evaluator.test.ts`**, added
+beside this amendment: "writes an integer root under its decimal spelling" and
+"compares an integer root with the protected roots under its decimal spelling".
+Each carries a sabotage note, and each mutation it names was run and turned its
+test red.
+
+This amendment supersedes no sentence of this record, and it makes no claim
+about what the reference does at the root.
