@@ -46,10 +46,13 @@ export type DecodeReason =
 /**
  * Why a value could not be encoded. `"cyclic_value"` is a value that contains
  * itself, and `"depth_limit_exceeded"` one whose text would nest past the
- * depth limit this package declares.
+ * depth limit this package declares. `"invalid_tagged_value"` is a date or a
+ * datetime whose tag would not read back as the same value; it is also the
+ * reason the decoder gives a tag it cannot read.
  */
 export type EncodeReason =
   | "reserved_map_key"
+  | "invalid_tagged_value"
   | "integer_out_of_range"
   | "non_finite_number"
   | "unsupported_host_value"
@@ -159,6 +162,40 @@ function isDurationKey(key: string): key is DurationKey {
  */
 function isWireDate(year: number, month: number, day: number): boolean {
   return year >= 100 && isCivilDate(year, month, day);
+}
+
+/** Reads the text inside a date tag, or answers nothing when it is not one. */
+function readWireDate(text: string): PDate | undefined {
+  const match = DATE_PATTERN.exec(text);
+  if (match === null) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (!isWireDate(year, month, day)) return undefined;
+  return new PDate(year, month, day);
+}
+
+/**
+ * Reads the text inside a datetime tag, or answers nothing when it is not one.
+ * The encoder writes the fraction in exactly two shapes - absent, or six
+ * digits - but a hand-authored case may carry any ISO-8601 fraction and the
+ * instant it names is unambiguous, so any digit count is accepted here and
+ * read to microsecond precision.
+ */
+function readWireDateTime(text: string): PDateTime | undefined {
+  const match = DATETIME_PATTERN.exec(text);
+  if (match === null) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (!isWireDate(year, month, day)) return undefined;
+  if (hour > 23 || minute > 59 || second > 59) return undefined;
+  const microsecond = Number(`${match[7] ?? ""}000000`.slice(0, 6));
+  const epochSeconds = Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
+  return new PDateTime(epochSeconds, microsecond);
 }
 
 /**
@@ -381,36 +418,12 @@ class Scanner {
 
   private readTaggedDate(body: Value | undefined, start: number): PDate {
     if (typeof body !== "string") return this.taggedFail(start);
-    const match = DATE_PATTERN.exec(body);
-    if (match === null) return this.taggedFail(start);
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    if (!isWireDate(year, month, day)) return this.taggedFail(start);
-    return new PDate(year, month, day);
+    return readWireDate(body) ?? this.taggedFail(start);
   }
 
-  /**
-   * Reads a tagged datetime. The encoder writes the fraction in exactly two
-   * shapes - absent, or six digits - but a hand-authored case may carry any
-   * ISO-8601 fraction and the instant it names is unambiguous, so any digit
-   * count is accepted here and read to microsecond precision.
-   */
   private readTaggedDateTime(body: Value | undefined, start: number): PDateTime {
     if (typeof body !== "string") return this.taggedFail(start);
-    const match = DATETIME_PATTERN.exec(body);
-    if (match === null) return this.taggedFail(start);
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const hour = Number(match[4]);
-    const minute = Number(match[5]);
-    const second = Number(match[6]);
-    if (!isWireDate(year, month, day)) return this.taggedFail(start);
-    if (hour > 23 || minute > 59 || second > 59) return this.taggedFail(start);
-    const microsecond = Number(`${match[7] ?? ""}000000`.slice(0, 6));
-    const epochSeconds = Date.UTC(year, month - 1, day, hour, minute, second) / 1000;
-    return new PDateTime(epochSeconds, microsecond);
+    return readWireDateTime(body) ?? this.taggedFail(start);
   }
 
   /**
@@ -464,6 +477,12 @@ export function decodeTagged(text: string): DecodeResult {
  * this writes is text the decoder reads back. A value reached twice by two
  * different paths is not a cycle and is written at each place it appears.
  *
+ * A date or a datetime whose tag would not read back as the same value is
+ * refused as `"invalid_tagged_value"`: the domain holds dates in years this
+ * encoding does not carry, and a date or an instant a host built by hand can
+ * hold parts no calendar or clock has. Negative zero is written with its sign,
+ * as an integer and as a float, and reads back as negative zero.
+ *
  * A getter or a proxy trap on the value that throws propagates its own error
  * unchanged: that is the host's code failing, not an outcome of the value.
  */
@@ -501,10 +520,10 @@ function encodeValue(value: Value | undefined, depth: number, ancestors: Set<obj
   if (value === null) return "null";
   if (value instanceof Float) return encodeFloat(value);
   if (value instanceof PDate) {
-    return tagAt(depth, 0, `{"$type":"date","value":"${formatDate(value)}"}`);
+    return tagAt(depth, 0, `{"$type":"date","value":"${encodeDate(value)}"}`);
   }
   if (value instanceof PDateTime) {
-    return tagAt(depth, 0, `{"$type":"datetime","value":"${formatDateTime(value)}"}`);
+    return tagAt(depth, 0, `{"$type":"datetime","value":"${encodeDateTime(value)}"}`);
   }
   // A duration's tag carries its value as a map of its own, one level deeper.
   if (value instanceof Duration) return tagAt(depth, 1, encodeDuration(value));
@@ -552,10 +571,19 @@ function tagAt(depth: number, inner: number, text: string): string {
   return text;
 }
 
+/**
+ * Writes a number's digits with its sign. The language's own spelling of
+ * negative zero drops the sign, and the decoder reads `-0` back as negative
+ * zero, so the sign is written here rather than lost in the text.
+ */
+function spell(value: number): string {
+  return Object.is(value, -0) ? "-0" : String(value);
+}
+
 function encodeInteger(value: number): string {
   if (!Number.isFinite(value)) throw new EncodeSignal("non_finite_number");
   if (!Number.isSafeInteger(value)) throw new EncodeSignal("integer_out_of_range");
-  return String(value);
+  return spell(value);
 }
 
 /**
@@ -565,8 +593,47 @@ function encodeInteger(value: number): string {
  */
 function encodeFloat(value: Float): string {
   // No finiteness check: a Float wraps a finite number by construction.
-  const spelling = String(value.valueOf());
+  const spelling = spell(value.valueOf());
   return EXPONENT_OR_POINT.test(spelling) ? spelling : `${spelling}.0`;
+}
+
+/**
+ * Writes the text inside a date tag, refusing a date whose text the decoder
+ * would not read back as the same date: a year outside 100 to 9999, parts that
+ * name no calendar date, or a part that is not a whole number.
+ */
+function encodeDate(value: PDate): string {
+  const text = formatDate(value);
+  const back = readWireDate(text);
+  if (
+    back === undefined ||
+    back.year !== value.year ||
+    back.month !== value.month ||
+    back.day !== value.day
+  ) {
+    throw new EncodeSignal("invalid_tagged_value");
+  }
+  return text;
+}
+
+/**
+ * Writes the text inside a datetime tag, refusing an instant whose text the
+ * decoder would not read back as the same instant: one outside the years a
+ * date tag carries, an epoch second that is not a whole number, or a
+ * microsecond that is not a whole number from 0 to 999999. So every fraction
+ * this writes is exactly six digits or none.
+ */
+function encodeDateTime(value: PDateTime): string {
+  const text = formatDateTime(value);
+  const back = readWireDateTime(text);
+  if (
+    back === undefined ||
+    back.epochSeconds !== value.epochSeconds ||
+    back.microsecond !== value.microsecond
+  ) {
+    throw new EncodeSignal("invalid_tagged_value");
+  }
+  return text;
 }
 
 function encodeMap(value: object, depth: number, ancestors: Set<object>): string {

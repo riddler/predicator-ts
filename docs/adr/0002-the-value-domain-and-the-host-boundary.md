@@ -1792,3 +1792,130 @@ codec, calling `evaluateTagged` there rather than `evaluate` at the main
 entry point. The options-split amendment's consequences say the same of the
 import; this states it as the cost of the decision the note on `tagged`
 records.
+
+## Amendment: the value classes across copies, and what the codec writes (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+Recorded for `pts-f9x`, which collected the value-domain items left after the
+first review of this record's implementation. This amendment is appended, and
+removes no line above.
+
+What this amends. The Decision says that `Undefined` is a singleton this
+package exports, compared by `===`, and that a float, a date, a datetime and a
+duration are instances of `Float`, `PDate`, `PDateTime` and `Duration`. It
+does not say what happens when a host loads two copies of this package, and
+the package ships two: its module build and its CommonJS build are separate
+module graphs, each with its own classes and, before this amendment, its own
+absence. Nor does it say what the tagged encoder does with a date or an
+instant whose text it cannot read back, or with negative zero. This amendment
+adds rules for each and removes none.
+
+### One absence, and classes that recognize each other's instances
+
+**`Undefined` is `Symbol.for("predicator.undefined")`, a symbol from the
+language's global symbol registry.** Every copy of this package loaded on one
+thread holds that same symbol, so the absence one copy produces is `===` to
+the absence another copy exports. Its declared type is unchanged, a
+`unique symbol`. The anchor is `Undefined` in `src/values.ts`.
+
+**`instanceof` on `Float`, `PDate`, `PDateTime` or `Duration` answers true for
+an instance that another copy of the class built.** Each class carries a key
+from the global symbol registry on its prototype, and its `instanceof` test
+asks for that key, inherited rather than own; `shareAcrossCopies` in
+`src/values.ts` sets both. The rule that a float and an integer are told apart
+by `instanceof Float` and by nothing else is unchanged: what changes is which
+objects that test admits. An object carrying the key as an own property is not
+an instance, so a plain map cannot claim to be one by holding it. A key names
+one class's representation, and a change to what a class holds takes a new
+key.
+
+**Why.** Before this amendment a value from another copy reached this one as a
+class it did not define, or as a symbol that was not its absence. Measured on
+2026-09-19 against two copies of `src/values.ts` as it stood before this
+change: normalization refused a float and an absence from the other copy as
+`"unsupported_host_value"`, `typeName` named both a map, and the projection
+answered the float as an object holding its field and the absence as the
+other copy's symbol.
+
+**It is pinned by shipped tests** in `test/values.test.ts`, which load a
+second copy of the source modules: "share one absence", "recognize each
+other's floats, dates, datetimes and durations", and "do not take a plain
+object carrying the key for a member". Over the built package it is pinned by
+the identity stage of the full gate, `scripts/cross-entry-identity.mjs`,
+which loads the module build and the CommonJS build together and checks each
+format's values against the other's classes.
+
+**`Float`'s field stays private to the typechecker alone.** A field private at
+run time would not change what happens when copies meet: `valueOf` reads the
+instance it is called on, and a float from another copy carries that copy's
+`valueOf`, which is how it answers its number here.
+
+**The build still keeps one copy of the value module per format.** The
+splitting setting in `tsup.config.ts` emits the value module as one chunk that
+both entry points import. Values no longer depend on it; what it keeps is one
+copy of the code in each format. The identity stage checks it by prototype
+rather than by `instanceof`: within each format, a value the `./tagged` entry
+decodes has the prototype of the class the main entry exports, which a second,
+inlined copy would not give it.
+
+### What the tagged encoder writes
+
+**The tagged encoder refuses a date or a datetime whose tag would not read
+back as the same value, with the reason `"invalid_tagged_value"`.** It writes
+the text inside the tag, reads that text back with the decoder's own reading,
+and refuses when the reading fails or answers a different value;
+`encodeDate` and `encodeDateTime` in `src/tagged.ts` make the check. A year
+outside 100 to 9999 is such a value, and so is a date or an instant a host
+built by hand with parts no calendar or clock has. So the fraction of a second
+this encoder writes is exactly six digits or none, which is the rule
+predicator-ex's `conformance/README.md` states for the wire form at `v9.4.1`.
+
+**`"invalid_tagged_value"` joins the encode direction's reasons.** It was
+already the decoder's reason for a tag it cannot read. It adds no opcode and
+no wire-format change.
+
+**`PDate` and `PDateTime` do not validate their parts.** The domain holds
+dates this encoding cannot carry, and this package's own date arithmetic
+builds dates and instants outside the years 100 to 9999; moving an instant by
+a duration a host built with a fractional part can also leave a microsecond
+that is not a whole number. A constructor that refused such parts would turn
+an evaluation reaching one into a throw rather than an answer, so the check
+sits where the value would leave as text.
+
+**Negative zero keeps its sign through the codec.** The encoder writes it as
+`-0`, and as `-0.0` when it is a float, and the decoder reads each back as
+negative zero; `spell` in `src/tagged.ts` writes the sign. Before this
+amendment the encoder wrote `0` and `0.0`. Normalization and the projection
+already kept the sign.
+
+### Two exports and two rows
+
+**`zeroDuration()` is removed.** No row of this record named it and no module
+of the package called it; `new Duration()` carries the same eight zero keys.
+
+**The row that normalization neither adds nor rejects a `$type` key is pinned**
+by "neither adds nor rejects a type-tag key" in `test/values.test.ts`.
+
+**A list built with a host's own array class normalizes to a plain array**, as
+the Decision's row on lists requires. Normalization builds each list with
+`Array.from` in `normalize` in `src/values.ts`, which answers a plain array
+whatever class the host's list was built with. It is pinned by "answers a
+plain array for an array of a host's own class" in `test/values.test.ts`.
+
+### What this does not decide
+
+**The casts to string are not changed.** The `::string` cast writes a date
+and a datetime with the same formatting the encoder uses, and it does not
+read its text back, so a date or an instant the encoder refuses is written by
+the cast as that formatting spells it.
+
+Consequences. A host that loads both builds of this package can pass values
+between them. A registered key is readable by any code on the thread, so code
+that deliberately builds an object whose prototype carries one of these keys
+is taken for a member; that is host code impersonating a class of this
+package's, and outside what this record promises.
+An evaluation through the `./tagged` subpath whose result is a date or an
+instant this encoding cannot carry now answers the failing arm with
+`"invalid_tagged_value"` where it answered text that did not read back. The
+conformance run is unchanged.
