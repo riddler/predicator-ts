@@ -269,3 +269,51 @@ Status line and does not advance this record's status. A later change that
 reads the version by a direct import is not ruled out by any constraint of the
 toolchain; it would be a change to the design this note records, made for its
 own reasons.
+
+## Note: a report is read only when a stamp ties it to what is on disk (2026-09-18)
+
+Recorded for `pts-acc`. The decision above says no check trusts a report it did
+not just produce. The ratchet script did not hold to that: it reads reports an
+earlier run wrote under the ignored `reports/` directory, so it read whatever
+run last wrote there. Two checks made for other purposes bounded that. The
+script compares each report's `corpus_hash` with the vendored manifest's, and
+the test `claims the version the corpus was generated at` in
+`test/instructions.test.ts` fails the gate when `isaVersion()` and the
+vendored manifest's `isa_version` differ. Neither ties a report to the build
+that produced it. A report left by a run of an earlier commit, or by a run made
+while a sabotage mutation was in place, carries the same corpus hash and the
+same version as a fresh one.
+
+What changes, as of commit `7000c76`. The runner writes a stamp beside each
+report (`writeReport` in `test/conformance/runner.ts`). The stamp holds two
+digests: one of every file under `src/`, the vendored manifest and every file
+under `conformance/corpus/` (`buildHash` in `scripts/lib/build-stamp.mjs`), and
+one of the report file's own bytes (`writeStamp` in the same module). The
+ratchet script refuses a report in three cases: it has no stamp, its stamp was
+written for other bytes, or its stamp's build digest is not the digest of those
+files when the script runs (`stampProblem` in the same module). The script
+checks the stamp before it reads any field of the report (`readReport` in
+`scripts/ratchet.mjs`).
+
+What does not change. A report's shape is still predicator-ex's
+`conformance/schema/report.json`. The stamp is a separate file because that
+schema admits no property it does not name. A report is still the only input
+that can add an entry: the stamp decides whether a report is read at all and
+adds nothing to the registry. The stamp guards against a stale report, not a
+forged one, since anything that can write a report can write its stamp. The
+runner itself and `scripts/lib/corpus.mjs` are not in the digest, so a change
+to how a case is judged does not invalidate a report. An entry such a report
+adds is still re-run by the registry check's currency part in the next gate,
+with the runner as it is then, and an entry that run does not pass turns the
+gate red.
+
+Why the ratchet refuses rather than this record arguing that the two checks
+suffice. The two checks compare numbers that a stale report still carries
+correctly, so they bound a stale report only when its version differs from the
+build's. They say nothing about a stale report at the same version whose
+results the current build no longer produces. A digest of the inputs catches
+that case, and it catches it when the ratchet runs rather than at the next
+gate.
+
+This note enforces a sentence of the decision above and changes no rule there,
+so it carries no Status line and does not advance this record's status.
