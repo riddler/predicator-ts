@@ -94,26 +94,34 @@
 // anything arriving from a caller is invisible to it. A `require` or an
 // import whose specifier is not a literal is invisible for the same reason,
 // and so is source text turned into a URL at run time rather than written
-// out as a data URL. The written aliases below - assigning `eval` or
-// `Function` to a name, the `(0, eval)` indirect call, reaching either
-// through `globalThis`, and calling `.constructor()` - ARE caught, and so are
-// a script data URL written as a string and the module-resolution accessor
-// written as a member chain, because those are the shapes a developer
-// actually writes. The rest is what code review and the ISA contract are for,
-// and no sentence here or in CLAUDE.md may claim otherwise.
+// out as a data URL. A module outside the directory of every build entry is
+// not scanned even when an entry imports it, because the scanned set is those
+// directories and this stage follows no import. The written aliases below -
+// assigning `eval` or `Function` to a name, the `(0, eval)` indirect call,
+// reaching either through `globalThis`, and calling `.constructor()` - ARE
+// caught, and so are a script data URL written as a string and the
+// module-resolution accessor written as a member chain, because those are the
+// shapes a developer actually writes. The rest is what code review and the ISA
+// contract are for, and no sentence here or in CLAUDE.md may claim otherwise.
 // ---------------------------------------------------------------------------
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { builtinModules } from "node:module";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const sourceExtensions = [".ts", ".tsx", ".mts", ".cts"];
+
+// The plain JavaScript extensions are scanned beside the TypeScript ones. The
+// source typecheck does not compile them, because `allowJs` is not set, but
+// the bundler bundles such a file when an entry imports it, so leaving them
+// to that setting would leave them unchecked.
+const sourceExtensions = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
 // Node built-ins are importable as `node:fs` and as a bare `fs`. The bare
 // forms have to be listed, because a bare specifier is otherwise just a
 // package name.
-const bareNodeBuiltins = [
+const listedNodeBuiltins = [
   "assert",
   "async_hooks",
   "buffer",
@@ -156,6 +164,19 @@ const bareNodeBuiltins = [
   "wasi",
   "worker_threads",
   "zlib",
+];
+
+// The list above is written down, so it does not move when Node adds a
+// module. The running Node's own list is folded in beside it, cut to the
+// module name before any subpath, so a builtin the running Node has and the
+// written list lacks is refused as well. The names Node lists only with the
+// `node:` prefix are left out: without the prefix each is an ordinary package
+// name, and the prefixed rule already refuses them with it.
+const bareNodeBuiltins = [
+  ...new Set([
+    ...listedNodeBuiltins,
+    ...builtinModules.filter((name) => !name.startsWith("node:")).map((name) => name.split("/")[0]),
+  ]),
 ];
 
 // A specifier reaches source in four shapes, not three. The fourth - a
@@ -208,19 +229,21 @@ const nodeCalledGlobals = ["setImmediate", "clearImmediate"];
 // reverted - it made the English sentence "a sliding window. Documentation of
 // ..." match, which is the same prose-fires-the-check defect this stage exists
 // to retire.
-const usedAsGlobal = (alternation) => String.raw`\b(?:${alternation})(?:\.\w|\[)`;
-
-// The same thing, but refusing a MEMBER of that name. `process` and `global`
-// are ordinary words an evaluator uses: a scope object carries a global frame,
-// an environment record carries a process field. The lookbehind is what tells
+//
+// And a global is not a MEMBER of that name. `process` and `global` are
+// ordinary words an evaluator uses: a scope object carries a global frame, an
+// environment record carries a process field. The lookbehind is what tells
 // `process.env` (a global) from `env.process.id` (a member), and it applies
 // the principle already stated above for `location`, `Node` and `Element` -
 // leave out what is plausible in a compiler - to the names added later.
-//
-// The DOM arm above deliberately keeps the older shape. The same lookbehind is
-// the fix for its member-name false positives, and that is tracked separately
-// rather than folded in here.
 const usedAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})(?:\.\w|\[)`;
+
+// The DOM rule takes the same lookbehind, so an options object with a field
+// named for a window or a document stays quiet, plus one alternative the Node
+// rule does not have: a name reached as a member of `globalThis` still fires,
+// because that member is the browser global itself.
+const usedAsBareOrGlobalThisMember = (alternation) =>
+  String.raw`(?:(?<![.\w$])|(?<=\bglobalThis\.))(?:${alternation})(?:\.\w|\[)`;
 
 // A called global: the opening parenthesis with no space before it, which is
 // what the formatter writes and what prose rarely does, behind the same
@@ -230,7 +253,7 @@ const calledAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternati
 const rules = [
   {
     id: "dom-global",
-    pattern: new RegExp(usedAsGlobal(domAlternation), "g"),
+    pattern: new RegExp(usedAsBareOrGlobalThisMember(domAlternation), "g"),
     why: "shipped source may not touch a DOM global; it has to run where there is no DOM",
     documentedBy:
       "This module touches no browser global: no window object, no document object, and nothing else the DOM defines.",
@@ -391,10 +414,80 @@ if (args.includes("--rules")) {
   process.exit(0);
 }
 
-// The root is an argument so the suite can point the real check at a fixture
-// directory, absolute or relative. With no argument it is `src/`, which is
-// what the gate runs.
-const sourceRoot = args[0] ? resolve(repoRoot, args[0]) : join(repoRoot, "src");
+function fail(message) {
+  console.error(`engine-neutrality: ${message}`);
+  process.exit(1);
+}
+
+// The scanned set is the directory of every entry the build lists, so a new
+// entry in a new directory, or an entry moved to another one, is scanned with
+// no edit here. The build's config is loaded rather than read as text, so the
+// entry list is the value the config exports, however it is written. Where
+// that list cannot be turned into directories below the config, the stage
+// stops rather than guessing.
+async function entryRoots(configPath) {
+  const base = dirname(configPath);
+  const { tsImport } = await import("tsx/esm/api");
+  const loaded = await tsImport(pathToFileURL(configPath).href, import.meta.url);
+  const config = loaded.default;
+  const configs = Array.isArray(config) ? config : [config];
+  const entries = [];
+  for (const one of configs) {
+    const entry = one?.entry;
+    const listed = Array.isArray(entry)
+      ? entry
+      : entry !== null && typeof entry === "object"
+        ? Object.values(entry)
+        : undefined;
+    if (listed === undefined || listed.length === 0 || listed.some((e) => typeof e !== "string")) {
+      fail(`cannot read an entry list from ${relative(base, configPath)}`);
+    }
+    entries.push(...listed);
+  }
+  const roots = new Set();
+  for (const entry of entries) {
+    if (/[*?[\]{}!]/.test(entry)) {
+      fail(`the entry ${entry} is a pattern, and this stage derives its roots from file paths`);
+    }
+    const file = resolve(base, entry);
+    if (!existsSync(file)) fail(`the entry ${entry} does not exist`);
+    const root = dirname(file);
+    if (root === base || relative(base, root).startsWith("..")) {
+      fail(`the entry ${entry} is not inside a directory below the config`);
+    }
+    roots.add(root);
+  }
+  // A root inside another root is already scanned through it.
+  const sorted = [...roots].sort();
+  return {
+    base,
+    roots: sorted.filter(
+      (root) => !sorted.some((other) => other !== root && !relative(other, root).startsWith("..")),
+    ),
+  };
+}
+
+// With a directory argument the stage scans that directory, which is how the
+// suite points the real check at a fixture. With `--config` it derives its
+// roots from that build config, and with neither from the repository's own
+// `tsup.config.ts`, which is what the gate runs.
+const configFlag = args.indexOf("--config");
+let base;
+let sourceRoots;
+if (configFlag !== -1 || args.length === 0) {
+  const configArg = configFlag === -1 ? "tsup.config.ts" : args[configFlag + 1];
+  if (configArg === undefined) fail("--config needs a path");
+  const configPath = isAbsolute(configArg) ? configArg : resolve(repoRoot, configArg);
+  if (!existsSync(configPath)) fail(`cannot read the build config ${configArg}`);
+  ({ base, roots: sourceRoots } = await entryRoots(configPath));
+} else {
+  sourceRoots = [resolve(repoRoot, args[0])];
+  base = sourceRoots[0];
+}
+
+// A path as the output shows it: relative to the config's directory, or to
+// the directory given, which then shows as itself.
+const shown = (dir) => `${relative(base, dir).split(sep).join("/") || dir}/`;
 
 function sourceFiles(dir) {
   const found = [];
@@ -417,7 +510,7 @@ function findingsIn(file) {
     for (const rule of rules) {
       for (const match of line.matchAll(rule.pattern)) {
         found.push({
-          file: relative(repoRoot, file).split(sep).join("/"),
+          file: relative(base, file).split(sep).join("/"),
           line: index + 1,
           column: (match.index ?? 0) + 1,
           rule,
@@ -429,21 +522,18 @@ function findingsIn(file) {
   return found;
 }
 
-let files;
-try {
-  files = sourceFiles(sourceRoot);
-} catch {
-  console.error(`engine-neutrality: cannot read ${relative(repoRoot, sourceRoot)}/`);
-  process.exit(1);
-}
-
-// A check that silently scanned nothing would report the same success as a
-// clean tree. It is not allowed to.
-if (files.length === 0) {
-  console.error(
-    `engine-neutrality: no source files found under ${relative(repoRoot, sourceRoot)}/`,
-  );
-  process.exit(1);
+const files = [];
+for (const root of sourceRoots) {
+  let found;
+  try {
+    found = sourceFiles(root);
+  } catch {
+    fail(`cannot read ${shown(root)}`);
+  }
+  // A check that silently scanned nothing would report the same success as a
+  // clean tree. It is not allowed to, for any one root.
+  if (found.length === 0) fail(`no source files found under ${shown(root)}`);
+  files.push(...found);
 }
 
 const findings = files.flatMap(findingsIn);
@@ -460,4 +550,6 @@ if (findings.length > 0) {
   process.exit(1);
 }
 
-console.log(`engine-neutrality: ${files.length} files clean, ${rules.length} rules`);
+console.log(
+  `engine-neutrality: ${files.length} files clean under ${sourceRoots.map(shown).join(", ")}, ${rules.length} rules`,
+);

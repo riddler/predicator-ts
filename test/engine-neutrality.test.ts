@@ -15,9 +15,10 @@
 // the sentence that states the property is the fixture that proves it.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { builtinModules } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -37,10 +38,41 @@ function runChecker(args: readonly string[]): { status: number; output: string }
   };
 }
 
-/** Scan one line of source as the only file in a throwaway directory. */
-function scanLine(root: string, line: string): { status: number; output: string } {
-  writeFileSync(join(root, "fixture.ts"), `${line}\n`, "utf8");
+/**
+ * Scan source text as the only file in a throwaway directory, emptied first,
+ * named `fixture` with the given extension.
+ */
+function scanLine(
+  root: string,
+  line: string,
+  extension = ".ts",
+): { status: number; output: string } {
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, `fixture${extension}`), `${line}\n`, "utf8");
   return runChecker([root]);
+}
+
+/**
+ * Write a throwaway project: each path relative to its root, with its text.
+ * It is an ES module package, as this repository is, so its build config
+ * loads the way this repository's does.
+ */
+function project(files: Readonly<Record<string, string>>): string {
+  const dir = mkdtempSync(join(tmpdir(), "engine-neutrality-project-"));
+  const withPackage = { "package.json": '{ "type": "module" }\n', ...files };
+  for (const [path, text] of Object.entries(withPackage)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text, "utf8");
+  }
+  return dir;
+}
+
+/** The findings a run reported, as `file:line: rule`. */
+function findings(output: string): string[] {
+  return [...output.matchAll(/^(\S+):(\d+):\d+: ([\w-]+)$/gm)].map(
+    (match) => `${match[1]}:${match[2]}: ${match[3]}`,
+  );
 }
 
 /**
@@ -97,8 +129,7 @@ describe("a doc comment may state the rules without tripping them", () => {
   // only collided with each other.
   it("every documenting sentence together, as one comment block, is clean", () => {
     const block = rules.map((rule) => `// ${rule.documentedBy}`).join("\n");
-    writeFileSync(join(root, "fixture.ts"), `${block}\n`, "utf8");
-    const { status, output } = runChecker([root]);
+    const { status, output } = scanLine(root, block);
     expect(output).toContain("clean");
     expect(status).toBe(0);
   });
@@ -135,10 +166,11 @@ const prosePreviouslyTripping: readonly string[] = [
 // Forbidden names as the last word of a sentence. A full stop with no word
 // character after it is not a member access, so none of these fires,
 // whichever name ends the sentence. The list is every name in the script's
-// DOM global, Node global and bare builtin specifier lists, the members of
-// the toLocale family, and each other forbidden name the rules spell out,
-// the two URL schemes included. The module-path globals are absent because
-// they have no anchor and fire on every mention.
+// DOM global and Node global lists and in its written bare builtin specifier
+// list, the members of the toLocale family, and each other forbidden name the
+// rules spell out, the two URL schemes included. The names the script folds
+// in from the running Node's builtin list are not in it. The module-path
+// globals are absent because they have no anchor and fire on every mention.
 const namesEndingASentence: readonly string[] = [
   // The DOM global list.
   "window",
@@ -165,7 +197,7 @@ const namesEndingASentence: readonly string[] = [
   "data",
   "meta",
   "resolve",
-  // The bare builtin specifier list.
+  // The written bare builtin specifier list.
   "assert",
   "async_hooks",
   "buffer",
@@ -266,6 +298,9 @@ const proseCarryingAnAnchor: readonly (readonly [string, string])[] = [
   // accessor reached by the member chain that spells it.
   ["dynamic-code-data-url", '// Loading "data:text/javascript,..." is refused.'],
   ["module-resolve", "// Asking import.meta.resolve for a path is refused."],
+  // A DOM global reached as a member of the global object is the global
+  // itself, so the member lookbehind does not quiet it.
+  ["dom-global", "// Reading globalThis.document.cookie here is refused."],
   // One line tripping two rules, listed once for each. Killing either arm
   // leaves the line firing the other, so only the per-rule assertion notices.
   ["locale-sensitive", "// Neither Intl.Collator nor process.env is read here."],
@@ -297,6 +332,10 @@ const plausibleEvaluatorCode: readonly string[] = [
   "const c = token.location.offset;",
   "const d = ast.Node.kind;",
   "const e = form.Element.name;",
+  // A field named for a DOM global on an options object.
+  "const f = velocity.window.minutes;",
+  "const g = wizard.document.title;",
+  "const h = step.navigator[0];",
 ];
 
 describe("prose and plausible identifiers do not fire the check", () => {
@@ -313,7 +352,8 @@ describe("prose and plausible identifiers do not fire the check", () => {
   );
 
   // Sabotage: dropping the `(?<![.\w$])` lookbehind from the builtin-global
-  // rule in scripts/engine-neutrality.mjs turns the first two lines red.
+  // rule in scripts/engine-neutrality.mjs turns the first two lines red, and
+  // dropping it from the DOM rule turns the three options-object lines red.
   it.each(plausibleEvaluatorCode.map((line, i) => [i, line] as const))(
     "evaluator identifier %i stays clean",
     (_i, line) => {
@@ -378,7 +418,189 @@ describe("every rule catches what it documents", () => {
   );
 });
 
+describe("the bare builtin list", () => {
+  // Sabotage: dropping the running Node's list from `bareNodeBuiltins` in
+  // scripts/engine-neutrality.mjs, leaving the written list alone, turns this
+  // red on the builtins the written list lacks.
+  it("refuses every builtin the running Node lists, bare and by subpath", () => {
+    const bare = builtinModules.filter((name) => !name.startsWith("node:"));
+    expect(bare.length).toBeGreaterThan(0);
+    const { status, output } = scanLine(root, bare.map((name) => `import "${name}";`).join("\n"));
+    expect(status).toBe(1);
+    expect(findings(output)).toEqual(
+      bare.map((_name, i) => `fixture.ts:${i + 1}: node-builtin-import-bare`),
+    );
+  });
+
+  // Sabotage: letting the names Node lists only with the prefix into
+  // `bareNodeBuiltins` with the prefix stripped, in
+  // scripts/engine-neutrality.mjs, turns the quiet half red.
+  it("refuses a prefix-only builtin with its prefix and leaves the bare name alone", () => {
+    const prefixOnly = builtinModules.filter((name) => name.startsWith("node:"));
+    for (const name of prefixOnly) {
+      const prefixed = scanLine(root, `import "${name}";`);
+      expect(firedRules(prefixed.output), name).toEqual(["node-builtin-import"]);
+      const bareName = name.slice("node:".length);
+      const quiet = scanLine(root, `import "${bareName}";`);
+      expect(quiet.output, bareName).toContain("clean");
+      expect(quiet.status, bareName).toBe(0);
+    }
+  });
+});
+
+describe("the plain JavaScript extensions are scanned", () => {
+  // Sabotage: removing an extension from `sourceExtensions` in
+  // scripts/engine-neutrality.mjs turns its case red.
+  it.each([".js", ".jsx", ".mjs", ".cjs"].map((extension) => [extension] as const))(
+    "a violation in a %s file fires",
+    (extension) => {
+      const { status, output } = scanLine(root, "const a = process.env.HOME;", extension);
+      expect(status).toBe(1);
+      expect(findings(output)).toEqual([`fixture${extension}:1: node-global`]);
+    },
+  );
+});
+
+describe("the scanned roots come from the build's entry list", () => {
+  const violation = "export const home = process.env.HOME;\n";
+  const clean = "export const answer = 1;\n";
+
+  // Sabotage: replacing the derived roots in scripts/engine-neutrality.mjs
+  // with the `src` directory alone turns this red.
+  it("scans a new entry in a new directory", () => {
+    const dir = project({
+      "tsup.config.ts": 'export default { entry: ["src/index.ts", "extra/entry.ts"] };\n',
+      "src/index.ts": clean,
+      "extra/entry.ts": violation,
+    });
+    const { status, output } = runChecker(["--config", join(dir, "tsup.config.ts")]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(status).toBe(1);
+    expect(findings(output)).toEqual(["extra/entry.ts:1: node-global"]);
+  });
+
+  // Sabotage: the same replacement turns this red too, and reading only the
+  // array form of `entry` turns it red on the named form.
+  it("follows an entry moved to another directory, in the named form", () => {
+    const dir = project({
+      "tsup.config.ts": 'export default { entry: { index: "lib/index.ts" } };\n',
+      "lib/index.ts": clean,
+      "lib/nested/helper.ts": violation,
+    });
+    const { status, output } = runChecker(["--config", join(dir, "tsup.config.ts")]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(status).toBe(1);
+    expect(findings(output)).toEqual(["lib/nested/helper.ts:1: node-global"]);
+  });
+
+  // Sabotage: pointing the default run at a build config that does not exist
+  // in scripts/engine-neutrality.mjs turns this red.
+  it("derives the gate's roots from the repository's own build config", () => {
+    const { status, output } = runChecker([]);
+    expect(output).toMatch(/files clean under src\/, /);
+    expect(status).toBe(0);
+  });
+
+  // Sabotage: dropping the filter that keeps a root inside another root out
+  // of the scanned set in scripts/engine-neutrality.mjs reports the nested
+  // file once per root, and turns this red.
+  it("scans a file under two entry directories once", () => {
+    const dir = project({
+      "tsup.config.ts": 'export default { entry: ["src/index.ts", "src/nested/entry.ts"] };\n',
+      "src/index.ts": clean,
+      "src/nested/entry.ts": violation,
+    });
+    const { status, output } = runChecker(["--config", join(dir, "tsup.config.ts")]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(status).toBe(1);
+    expect(findings(output)).toEqual(["src/nested/entry.ts:1: node-global"]);
+  });
+
+  // Sabotage: deleting any one refusal in `entryRoots` in
+  // scripts/engine-neutrality.mjs turns its case red. Each case asserts its
+  // own refusal's message, because without the refusal the stage either
+  // passes or fails on something else. The pattern case names a file that
+  // exists under the pattern's own spelling, so only the pattern refusal can
+  // stop it; the case above the config nests the config one level down, so
+  // the entry above it exists.
+  it.each([
+    [
+      "no entry list",
+      "tsup.config.ts",
+      "export default { format: ['esm'] };\n",
+      {},
+      "cannot read an entry list",
+    ],
+    [
+      "an empty entry list",
+      "tsup.config.ts",
+      "export default { entry: [] };\n",
+      {},
+      "cannot read an entry list",
+    ],
+    [
+      "a non-string entry",
+      "tsup.config.ts",
+      "export default { entry: [1] };\n",
+      {},
+      "cannot read an entry list",
+    ],
+    [
+      "an entry directory holding no source file",
+      "tsup.config.ts",
+      'export default { entry: ["src/index.ts", "assets/signup.json"] };\n',
+      { "src/index.ts": clean, "assets/signup.json": "{}\n" },
+      "no source files found under assets/",
+    ],
+    [
+      "a pattern entry",
+      "tsup.config.ts",
+      'export default { entry: ["src/[a].ts"] };\n',
+      { "src/[a].ts": clean },
+      "is a pattern",
+    ],
+    [
+      "a missing entry",
+      "tsup.config.ts",
+      'export default { entry: ["src/gone.ts"] };\n',
+      { "src/a.ts": clean },
+      "does not exist",
+    ],
+    [
+      "an entry beside the config",
+      "tsup.config.ts",
+      'export default { entry: ["index.ts"] };\n',
+      { "index.ts": clean },
+      "not inside a directory below",
+    ],
+    [
+      "an entry above the config",
+      "pkg/tsup.config.ts",
+      'export default { entry: ["../index.ts"] };\n',
+      { "index.ts": clean, "pkg/package.json": '{ "type": "module" }\n' },
+      "not inside a directory below",
+    ],
+  ] as const)("refuses %s", (_name, configPath, config, files, message) => {
+    const dir = project({ [configPath]: config, ...files });
+    const { status, output } = runChecker(["--config", join(dir, configPath)]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(output).toContain(message);
+    expect(status).toBe(1);
+  });
+});
+
 describe("the checker refuses to pass on nothing", () => {
+  // Sabotage: deleting either refusal of the build config in
+  // scripts/engine-neutrality.mjs turns its half red.
+  it("fails on a build config flag with no path, and on a config that is not there", () => {
+    const noPath = runChecker(["--config"]);
+    expect(noPath.output).toContain("--config needs a path");
+    expect(noPath.status).toBe(1);
+    const missing = runChecker(["--config", join(root, "definitely-not-here.ts")]);
+    expect(missing.output).toContain("cannot read the build config");
+    expect(missing.status).toBe(1);
+  });
+
   // Sabotage: deleting the empty-file-set guard in
   // scripts/engine-neutrality.mjs turns this red, and a check that reports
   // success on a directory it could not read is worse than no check.
