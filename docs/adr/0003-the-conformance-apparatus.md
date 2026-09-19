@@ -672,3 +672,51 @@ that a corpus refresh obliges a regeneration of, and a second generation path
 to keep reading the same export. The report constructor costs the evaluator
 surface nothing today and is what makes the compiler surface's report carry the
 version without a second author remembering to write it.
+
+## Note: what the second transcript's generator calls (2026-09-19)
+
+Recorded for `pts-cpod`. This note supersedes a sentence of the amendment
+above and decides nothing, so it carries no Status line and does not advance
+this record's status. It removes no line. A file it does not touch is cited
+as read at commit `8c789c7`; the reference is cited as read and run at its
+tag `v9.4.1`.
+
+**The clause "and that is the whole of what it calls." no longer holds, and
+this note supersedes it.** It closes the sentence carrying "written by a
+script of its own", in the amendment's paragraph that begins "The generator
+that writes the first transcript cannot write this one". The rest of that
+sentence stands as written: the script does call `Predicator.compile/1` and
+`Predicator.decompile/2`, at the tag, over its authored list, in an export of
+the tag.
+
+**The script calls seven functions of the reference**, all in
+`scripts/lib/reference-compile.exs`: `Predicator.compile/1`, under both
+`compile_rows` and `refusal_rows`; `Predicator.parse/2` and
+`Predicator.decompile/2`, under `decompile_rows`;
+`Predicator.Conformance.Values.to_json/1`, under `encode_instructions`;
+`Predicator.Conformance.JSON.encode_lines/1`, which writes `compile.json`; and
+`Predicator.Conformance.JSON.encode_canonical/1`, which writes the
+`toolchain.json` the run leaves beside it. `Predicator.isa_version/0` is the
+seventh, read into that file's `isa_version` field.
+
+**`Predicator.parse/2` is required and not incidental.** At the tag
+`decompile` takes a syntax tree and not a source: the reference's
+`Predicator.decompile/2`, in its `lib/predicator.ex`, is specified over
+`Parser.visitable()`. So a decompile row cannot be produced by `compile` and
+`decompile` alone, and the superseded clause described a call set the
+reference's own surface does not permit. What was observed, on 2026-09-19, by
+running it at the tag in an export whose `mix.exs` declares version `9.4.1`,
+under Elixir 1.18.3 and OTP 27: `Predicator.decompile/2` given the source
+`amount > 500` raised `FunctionClauseError`, and raised it again when given
+that source's instruction list from `Predicator.compile/1`; given
+`Predicator.parse/2`'s answer for the same source it rendered
+`(amount  >  500)` under `parentheses: :explicit` and `spacing: :verbose`.
+
+**The script's own header already names five of those seven.** Its paragraph
+headed "WHAT THIS DOES" names `Predicator.compile/1`, `Predicator.parse/2`,
+`Predicator.decompile/2`, `Predicator.Conformance.JSON.encode_lines/1` and
+`Predicator.Conformance.Values.to_json/1`. The other two,
+`Predicator.Conformance.JSON.encode_canonical/1` and
+`Predicator.isa_version/0`, are named nowhere in that header. Nothing under
+`scripts/` changes here: what is corrected is this record's own text, which
+claimed less of the script than the script claims of itself.
