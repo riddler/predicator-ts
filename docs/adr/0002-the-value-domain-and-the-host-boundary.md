@@ -1928,3 +1928,34 @@ An evaluation through the `./tagged` subpath whose result is a date or an
 instant this encoding cannot carry now answers the failing arm with
 `"invalid_tagged_value"` where it answered text that did not read back. The
 conformance run is unchanged.
+
+## Note: what the `unary_minus` exemption rests on, and what pins it (2026-09-19)
+
+Recorded for `pts-f35`. This note is appended, and removes no line above. It
+records what holds up a premise of accepted text and changes nothing this
+record decides, so it carries no Status line.
+
+The amendment headed "the out-of-range rule's sites, and the cast exemption"
+lists the sites its rule does not bind, and its bullet on `unary_minus`
+exempts that opcode from the safe-range test on the ground that the admitted
+range is symmetric: `MIN_SAFE_INTEGER` is exactly the negation of
+`MAX_SAFE_INTEGER`, so negating an admitted integer cannot carry it out of the
+range. This package states the range only through the host's safe-integer
+predicate. Before this note, no test asserted, across the sites that admit an
+integer and the domain's predicate together, that each answers a number and
+its negation alike.
+
+**The premise is pinned** by "admits an integer exactly when it admits its
+negation" in `test/evaluator.test.ts`. It asks the domain's predicate,
+`isInteger` in `src/values.ts`, and four sites that admit an integer -
+`fromHost` in `src/values.ts`, a `lit` operand, an `add` result, and
+`decodeTagged` in `src/tagged.ts` (each read at `fe4447b`) - whether each takes
+a number, for the numbers at and next to each power of two up to just past the
+bound, and it fails when any of them answers differently for a number and for
+its negation. It also negates each end of the range and expects the other end.
+So it fails when either end of the range moves, in or out, at any of those
+sites. It probes those numbers and no others: a site that answers one
+unprobed number differently from its negation is not caught by it.
+
+The bullet is cited from this note rather than edited, because a change to
+this record adds lines and removes none.
