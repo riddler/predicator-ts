@@ -101,6 +101,27 @@ function membershipProblems(subject: Registry, corpus: readonly CaseMetadata[]):
   return problems;
 }
 
+/**
+ * The claim shape: at most one claim per surface.
+ *
+ * The rule the corpus's registry schema states of the shape, and the one the
+ * ratchet keeps by keying its claims on the surface. It is a function, like
+ * the checks, so that the constructed half below exercises the rule the
+ * shipped registry is held to rather than a second copy of it.
+ */
+function claimShapeProblems(subject: Registry): string[] {
+  const seen = new Set<string>();
+  const problems: string[] = [];
+  for (const claim of subject.claims) {
+    if (seen.has(claim.surface)) {
+      problems.push(`the ${claim.surface} surface is claimed more than once`);
+      continue;
+    }
+    seen.add(claim.surface);
+  }
+  return problems;
+}
+
 /** The encoding: re-encode what was parsed, and compare bytes with the file. */
 function encodingProblems(subject: Registry, bytes: string): string[] {
   return encodeRegistry(subject) === bytes
@@ -211,8 +232,7 @@ describe("the registry this package ships", () => {
     // name is the property the test below states. A second claim for a surface
     // already claimed is the hand edit every other check here admits:
     // re-encoding reproduces it, and completeness reads each of the two in turn.
-    const surfaces = new Set(registry.claims.map((claim) => claim.surface));
-    expect(surfaces.size).toBe(registry.claims.length);
+    expect(claimShapeProblems(registry)).toEqual([]);
   });
 
   // A claim is completeness rather than ambition, so the surfaces a claim
@@ -305,6 +325,34 @@ describe("the encoding", () => {
   });
 });
 
+describe("the claim shape", () => {
+  // Sabotage: making claimShapeProblems answer [] for every registry - the
+  // rule dropped - turns this case red and leaves the shipped half green,
+  // which is the asymmetry the constructed half exists for. It was run and
+  // reverted.
+  it("fails a registry claiming one surface twice", () => {
+    const claimed = withEntries(
+      [],
+      [
+        { surface: "evaluator", tier: 1 },
+        { surface: "evaluator", tier: 2 },
+      ],
+    );
+    expect(claimShapeProblems(claimed)).not.toEqual([]);
+  });
+
+  it("admits a claim on each of two surfaces", () => {
+    const claimed = withEntries(
+      [],
+      [
+        { surface: "evaluator", tier: 1 },
+        { surface: "compiler", tier: 1 },
+      ],
+    );
+    expect(claimShapeProblems(claimed)).toEqual([]);
+  });
+});
+
 describe("currency", () => {
   const entry = {
     case_id: sourceBearingCase.id,
@@ -333,6 +381,20 @@ describe("currency", () => {
 
   it("fails an entry on a surface nothing ran", () => {
     expect(currencyProblems(withEntries([entry]), [])).not.toEqual([]);
+  });
+
+  // The pair, not the id. The entry is on the compiler surface, a compiler run
+  // failed that case, and an evaluator run passed a case of the same id. Keyed
+  // on the pair, the compiler run is what answers the entry and the entry is a
+  // problem; keyed on the id alone the evaluator's pass answers for it, and a
+  // registry keeps an entry no compiler run ever passed.
+  //
+  // Sabotage: reducing key() to the case id alone turns this case red and
+  // leaves the rest of the file green. It was run and reverted.
+  it("does not let an evaluator pass answer for a compiler entry", () => {
+    const compilerEntry = { ...entry, surface: "compiler" };
+    const observed: Report[] = [{ ...report("fail"), surface: "compiler" }, report("pass")];
+    expect(currencyProblems(withEntries([compilerEntry]), observed)).not.toEqual([]);
   });
 });
 
