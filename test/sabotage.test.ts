@@ -10,17 +10,26 @@
 // signup-step test beside it. Its `node_modules` is a link to this package's,
 // so the runner it starts is the one this repository pins.
 
-import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Classification, Report, Run } from "../scripts/lib/sabotage.mjs";
 import { classifyRun, INVALID, runSuite, withMutation } from "../scripts/lib/sabotage.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const harness = fileURLToPath(new URL("../scripts/sabotage.mjs", import.meta.url));
+const mechanics = fileURLToPath(new URL("../scripts/lib/sabotage.mjs", import.meta.url));
 
 const CARD_SOURCE = "export function approve(amount, limit) {\n  return amount <= limit;\n}\n";
 
@@ -266,6 +275,138 @@ describe("withMutation", () => {
     ).toThrow("the run blew up");
     expect(readFileSync(card, "utf8")).toBe(CARD_SOURCE);
   });
+});
+
+describe("the printed way back", () => {
+  // The copy on disk is only useful if the command printed beside it runs, so
+  // that command is exercised rather than compared as a string. A path with a
+  // space in it is ordinary on a developer's machine and is the case that
+  // separates a command that works from one that only looks right.
+  // Sabotage: dropping the quotes around the operands turns this red - the
+  // shell reads the two paths as four arguments and the copy refuses.
+  it("prints a restore command a shell can run for a path with a space in it", () => {
+    const spaced = join(project, "a card.mjs");
+    writeFileSync(spaced, CARD_SOURCE);
+    const said: string[] = [];
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+      said.push(String(chunk));
+      return true;
+    });
+    try {
+      withMutation({ file: spaced, ...CAUGHT }, () => {
+        expect(readFileSync(spaced, "utf8")).toContain(CAUGHT.replace);
+        const printed = /restore it with: (.+)/.exec(said.join(""))?.[1] as string;
+        const restore = spawnSync("sh", ["-c", printed]);
+        expect(restore.status).toBe(0);
+        expect(readFileSync(spaced, "utf8")).toBe(CARD_SOURCE);
+        return null;
+      });
+    } finally {
+      stderr.mockRestore();
+    }
+    expect(readFileSync(spaced, "utf8")).toBe(CARD_SOURCE);
+  });
+});
+
+// A run that is interrupted, or that ends without returning, used to leave the
+// source broken in the working tree with nothing said about it. These tests
+// send a real signal to a real run rather than describing one, because the
+// whole question is what happens outside the normal path.
+describe("a run that does not return normally", () => {
+  let target: string;
+  let ready: string;
+  let driver: string;
+
+  function waitFor(predicate: () => boolean, limitMs: number): Promise<void> {
+    const started = Date.now();
+    return new Promise((resolve, reject) => {
+      const poll = () => {
+        if (predicate()) return resolve();
+        if (Date.now() - started > limitMs) return reject(new Error("the run never got going"));
+        setTimeout(poll, 50);
+      };
+      poll();
+    });
+  }
+
+  beforeAll(() => {
+    target = join(project, "interrupt-card.mjs");
+    ready = join(project, "interrupt-ready");
+    driver = join(project, "interrupt-driver.mjs");
+    // The driver blocks in a child process exactly as a real run blocks in the
+    // runner, so the signal arrives at the same point a keyboard interrupt does.
+    writeFileSync(
+      driver,
+      [
+        'import { writeFileSync } from "node:fs";',
+        'import { spawnSync } from "node:child_process";',
+        `import { withMutation } from ${JSON.stringify(mechanics)};`,
+        `const mutation = { file: ${JSON.stringify(target)}, find: ${JSON.stringify(CAUGHT.find)}, replace: ${JSON.stringify(CAUGHT.replace)} };`,
+        "const how = process.argv[2];",
+        "withMutation(mutation, () => {",
+        `  writeFileSync(${JSON.stringify(ready)}, "ready");`,
+        '  if (how === "exit") process.exit(3);',
+        '  return spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);',
+        "});",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  function start(how: string) {
+    rmSync(ready, { force: true });
+    writeFileSync(target, CARD_SOURCE);
+    // Its own process group, so one signal reaches the blocking child too -
+    // which is what a keyboard interrupt in a terminal does.
+    const child = spawn(process.execPath, [driver, how], { detached: true, stdio: "pipe" });
+    let printed = "";
+    child.stdout.on("data", (chunk) => {
+      printed += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      printed += String(chunk);
+    });
+    const ended = new Promise<void>((resolve) => child.on("exit", () => resolve()));
+    return { child, ended, printed: () => printed };
+  }
+
+  // Sabotage: removing the handler install from withMutation turns this red.
+  it("puts the file back when the run is interrupted", async () => {
+    const run = start("interrupt");
+    await waitFor(() => existsSync(ready), 30_000);
+    expect(readFileSync(target, "utf8")).toContain(CAUGHT.replace);
+    process.kill(-(run.child.pid as number), "SIGINT");
+    await run.ended;
+    expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
+  }, 60_000);
+
+  // The exit handler is the half of the install that covers a run ending
+  // without returning, so this test and the one above fail together.
+  // Sabotage: removing the handler install from withMutation turns this red.
+  it("puts the file back when the run ends without returning", async () => {
+    const run = start("exit");
+    await run.ended;
+    expect(run.child.exitCode).toBe(3);
+    expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
+  }, 60_000);
+
+  // No handler runs on a kill that cannot be caught, so the copy on disk and
+  // the printed way back are what is left. Both are asserted against the real
+  // bytes rather than against the message alone.
+  // Sabotage: dropping the write of the copy turns this red - nothing is there.
+  it("leaves a copy of the original and says how to put it back", async () => {
+    const run = start("interrupt");
+    await waitFor(() => existsSync(ready), 30_000);
+    await waitFor(() => run.printed().includes("the original is kept at"), 10_000);
+    const kept = /the original is kept at (\S+)/.exec(run.printed())?.[1] as string;
+    expect(readFileSync(kept, "utf8")).toBe(CARD_SOURCE);
+    expect(run.printed()).toContain(`cp -f '${kept}' '${target}'`);
+    process.kill(-(run.child.pid as number), "SIGKILL");
+    await run.ended;
+    expect(readFileSync(target, "utf8")).toContain(CAUGHT.replace);
+    writeFileSync(target, readFileSync(kept));
+    expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
+  }, 60_000);
 });
 
 describe("the command's exit status separates did-not-run from ran-and-passed", () => {

@@ -38,7 +38,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 /** Reason tokens for an invalid run. Each names the evidence that was missing. */
 export const INVALID = Object.freeze({
@@ -226,9 +226,89 @@ export function runSuite({ root, tests = [], extraArgs = [], env = process.env }
   }
 }
 
+// A mutation is live only between the write that applies it and the write that
+// puts the original back. If the process goes away in between - an interrupt at
+// the keyboard, a terminal that closed, a cancelled build - nothing on the
+// normal path runs, and the developer is left with broken source in the working
+// tree and nothing said about it. That is the same defaulting-without-evidence
+// shape as the faults above, pointed at the tree instead of at the verdict.
+//
+// Two mechanisms close that window, and they close different halves of it:
+//
+//   - handlers on the interrupt signals and on process exit. Between them,
+//     every death the process can observe - an interrupt, a termination
+//     request, a hangup, a call to exit, an error nothing caught - ends with
+//     the live mutations put back rather than left on disk.
+//   - a copy of the original bytes on disk, and the command that puts it back,
+//     printed when the mutation is applied. A handler cannot run on a kill that
+//     cannot be caught, or on a crash of the runtime itself, so the copy is the
+//     floor beneath the handler: whatever ended the process, the original bytes
+//     are still on disk and the way back is already in the terminal.
+//
+// What the handlers promise is the restore, not the manner of the exit. Where
+// a signal handler runs, it restores and then re-raises the signal with its
+// default behaviour back in place, so the caller sees the process die of what
+// it sent. It does not run on every interrupt: a run here wraps the mutation
+// around a blocking child process, and registering the handler is already
+// enough to keep the interrupt from killing this process, so the blocking
+// call returns once its own child is gone and the restore happens on the
+// normal path - this process then exits normally, reporting no signal.
+
+const RESTORE_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+
+/** The mutations applied and not yet put back, oldest first. */
+const live = new Map();
+let liveCount = 0;
+let handlersInstalled = false;
+
+// A path with a space in it has to yield a command that works when it is
+// pasted back into a shell, so both operands are quoted, and a quote inside a
+// path is written the way a shell reads it.
+function shellQuoted(path) {
+  return `'${path.split("'").join(`'"'"'`)}'`;
+}
+
+function howToRestore(file, backup) {
+  return `  restore it with: cp -f ${shellQuoted(backup)} ${shellQuoted(file)}`;
+}
+
+/**
+ * Put every live mutation back, innermost first, and say so on stderr when one
+ * cannot be put back - a restore that failed silently is exactly the state this
+ * whole mechanism exists to prevent.
+ */
+function restoreLive() {
+  for (const token of [...live.keys()].reverse()) {
+    const { file, original, backup, backupDir } = live.get(token);
+    live.delete(token);
+    try {
+      writeFileSync(file, original);
+      rmSync(backupDir, { recursive: true, force: true });
+    } catch (error) {
+      process.stderr.write(
+        `sabotage: could not restore ${file}: ${error.message}\n${howToRestore(file, backup)}\n`,
+      );
+    }
+  }
+}
+
+function installRestoreHandlers() {
+  if (handlersInstalled) return;
+  handlersInstalled = true;
+  process.on("exit", restoreLive);
+  for (const signal of RESTORE_SIGNALS) {
+    process.on(signal, function onSignal() {
+      restoreLive();
+      process.off(signal, onSignal);
+      process.kill(process.pid, signal);
+    });
+  }
+}
+
 /**
  * Apply one mutation to `file`, call `fn`, and restore the file from a copy
- * taken first - whatever `fn` does, including throwing.
+ * taken first - whatever `fn` does, including throwing, and including being
+ * interrupted, which the handlers above cover.
  *
  * A mutation whose `find` text is absent, or present more than once, is
  * refused before anything is written: a mutation that did not apply is a run
@@ -249,6 +329,18 @@ export function withMutation({ file, find, replace }, fn) {
     throw new Error(`mutation not applied: the replacement is identical in ${file}`);
   }
   const mutated = text.slice(0, first) + replace + text.slice(first + find.length);
+
+  const backupDir = mkdtempSync(join(tmpdir(), "sabotage-restore-"));
+  const backup = join(backupDir, basename(file));
+  writeFileSync(backup, original);
+  installRestoreHandlers();
+  liveCount += 1;
+  const token = liveCount;
+  live.set(token, { file, original, backup, backupDir });
+  process.stderr.write(
+    `sabotage: ${file} is mutated for this run\n  the original is kept at ${backup}\n${howToRestore(file, backup)}\n`,
+  );
+
   writeFileSync(file, mutated);
   let result;
   let failure = null;
@@ -258,9 +350,12 @@ export function withMutation({ file, find, replace }, fn) {
     failure = { error };
   }
   writeFileSync(file, original);
+  live.delete(token);
   if (!readFileSync(file).equals(original)) {
+    process.stderr.write(`${howToRestore(file, backup)}\n`);
     throw new Error(`restore failed: ${file} does not match the copy taken before mutating`);
   }
+  rmSync(backupDir, { recursive: true, force: true });
   if (failure !== null) throw failure.error;
   return result;
 }
