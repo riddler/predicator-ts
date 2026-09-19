@@ -5,9 +5,9 @@
 // The refusals checked here: a report nothing ties to the build and corpus on
 // disk (no stamp, a stamp written for other bytes, or a stamp from another
 // build), a report that records no integer instruction-set version, reports
-// that disagree about that version, and a claim that is not complete - scoped
+// that disagree about that version, a claim that is not complete - scoped
 // by the version the reports record, which is the package's, never the
-// vendored corpus's.
+// vendored corpus's - and a vendored corpus the script cannot read.
 //
 // Every run below is a real `node scripts/ratchet.mjs` process. Its reports
 // and its registry are fixtures written to a temporary directory and passed by
@@ -19,7 +19,15 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execPath } from "node:process";
@@ -30,6 +38,7 @@ import { loadCases, loadManifest, runsAtVersion } from "../../scripts/lib/corpus
 import { encodeRegistry } from "../../scripts/lib/registry-encoding.mjs";
 
 const script = fileURLToPath(new URL("../../scripts/ratchet.mjs", import.meta.url));
+const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const manifest = loadManifest();
 const tierOne = loadCases(1, manifest);
 
@@ -301,6 +310,58 @@ describe("the ratchet refuses", () => {
     for (const item of retiredAtCorpusVersion) {
       expect(run.stderr).toContain(`evaluator:1 wants ${item.id}, which has no entry`);
     }
+    expect(registryText()).toBe(emptyRegistry);
+  });
+});
+
+describe("the ratchet refuses a vendored corpus it cannot read", () => {
+  // The corpus is read in the script's prologue, before a report is, so this
+  // refusal cannot be reached by any fixture the cases above write: it needs a
+  // corpus of its own. So the case copies the scripts into a temporary
+  // directory beside a two-line tier file whose second line is not JSON, and
+  // runs that copy. Nothing here reads or writes the vendored corpus.
+  //
+  // Two mutations were run against this case, and each turns it red on stderr
+  // rather than on the exit status - which is what says the assertions to keep
+  // are the ones about the message. Removing the try around JSON.parse in
+  // scripts/lib/corpus.mjs leaves the refusal printing, but with the parser's
+  // bare message where the tier file's path and the line number belong.
+  // Removing the try in loadCasesOrDie in scripts/ratchet.mjs prints no refusal
+  // at all: the loader's error goes uncaught and node prints a stack trace,
+  // still exiting 1. Both were run and reverted.
+  it("a tier file holding a line that is not JSON", () => {
+    // The copied script resolves its own corpus from its own module URL, which
+    // is the real path; where a temporary directory is reached through a
+    // symlink the two spellings differ, and the refusal names the one the
+    // script resolved.
+    mkdirSync(join(dir, "unreadable-corpus"), { recursive: true });
+    const root = realpathSync(join(dir, "unreadable-corpus"));
+    cpSync(join(repoRoot, "scripts"), join(root, "scripts"), { recursive: true });
+    mkdirSync(join(root, "conformance", "corpus"), { recursive: true });
+    writeFileSync(
+      join(root, "conformance", "manifest.json"),
+      JSON.stringify({
+        corpus_hash: manifest.corpus_hash,
+        isa_version: manifest.isa_version,
+        tiers: [{ case_count: 2, file: "corpus/tier-1.json", name: "core", opcodes: [], tier: 1 }],
+      }),
+    );
+    const tierFile = join(root, "conformance", "corpus", "tier-1.json");
+    writeFileSync(
+      tierFile,
+      `${JSON.stringify({ id: "reads", tier: 1, source: "true", features: [] })}\n{ this line is not JSON\n`,
+    );
+
+    const run = spawnSync(
+      execPath,
+      [join(root, "scripts", "ratchet.mjs"), "--registry", registryPath],
+      { encoding: "utf8" },
+    );
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain(
+      `ratchet: the vendored corpus does not read: ${tierFile} line 2 is not JSON:`,
+    );
+    expect(run.stderr).toContain("A tier file the manifest lists holds a line that is not JSON.");
     expect(registryText()).toBe(emptyRegistry);
   });
 });
