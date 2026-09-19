@@ -548,3 +548,18 @@ answer, and a change here that moves this package's, each fail the row that
 shows it. A declaration no row covers is still a reading, and covering it is a
 row added to the value set in `scripts/lib/reference-transcript.exs` and a
 regeneration, not a sentence rewritten.
+
+## Note: which declarations cite the transcript (2026-09-19)
+
+Recorded for `pts-v7y`. This note states what is now true of the amendment
+above and decides nothing, so it carries no Status line. Code is cited as this
+change leaves it.
+
+**The sentence "No other declaration cites the transcript." no longer holds,
+and this note supersedes it.** It closes the amendment's paragraph that begins
+"The code and test comments that declare the divergences the transcript covers
+cite its rows". One further comment now cites the transcript's rows: the
+comment on `DATETIME_TEXT` in `src/iso.ts`, which cites the rows whose ids
+begin `datetime-offset/`, for the UTC offset spellings the datetime cast
+reads, as agreeing with the reference except where it declares a difference.
+The rest of that paragraph stands.
