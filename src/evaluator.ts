@@ -283,12 +283,23 @@ export function isPlainMap(value: unknown): value is { [key: string]: Value } {
   return true;
 }
 
-/** A date as the instant it names at midnight UTC, so a mixed pair compares. */
+/**
+ * A date as the instant it names at midnight UTC, so a mixed pair compares.
+ *
+ * The day number comes from the same civil arithmetic the date opcodes use,
+ * not from the host's UTC constructor, which reads a year from zero to
+ * ninety-nine as that year plus 1900: a comparison or a subtraction would then
+ * place such a date nineteen centuries away from where adding a duration to it
+ * does.
+ */
 function instantOf(value: PDate | PDateTime): { seconds: number; micros: number } {
   if (value instanceof PDateTime) {
     return { seconds: value.epochSeconds, micros: value.microsecond };
   }
-  return { seconds: Date.UTC(value.year, value.month - 1, value.day) / 1000, micros: 0 };
+  return {
+    seconds: daysFromCivil(value.year, value.month, value.day) * SECONDS_PER_DAY,
+    micros: 0,
+  };
 }
 
 function isChronological(value: Value): value is PDate | PDateTime {
