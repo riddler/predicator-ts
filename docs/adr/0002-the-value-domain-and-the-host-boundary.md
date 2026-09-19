@@ -1631,47 +1631,50 @@ own instruction, with the reason `"integer_out_of_range"`.** The refusal is an
 `EvaluationError` at the instruction's position, answered on the failing arm
 and never pushed. The check is in the machine's `lit` method in
 `src/evaluator.ts`, added with this amendment. It is the rule the value
-boundary already applies to a host's context, applied at the `lit` operand,
-one of the places the Decision names where a number is admitted into the
-domain as an integer.
+boundary already applies to a host's context, applied at the `lit` operand, one
+of the places the Decision names where a number is admitted into the domain as
+an integer.
 
 **The operand is checked wherever it carries such an integer**: standing alone,
-or anywhere inside the lists and maps of a list or map operand. A check of the
-operand's top alone would not keep the number out, because an opcode can take
-a member out of a list or a map that is already on the stack. The walk is
-`literalFault` in `src/evaluator.ts`, added with this amendment. It counts as
-a map every object the machine reads as one, which is every object that is
-neither a list nor one of the domain's own value classes, an object of a class
-this package did not define included; that test is `isPlainMap` in
-`src/evaluator.ts`, which the opcodes that read a map use. It follows every
-own string-keyed data property of a list or map, enumerable or not, because a
-member access reads any own string-keyed property. It reads each value from
-the property's descriptor and never calls a getter; the only host code it can
-run is a proxy's traps, which the map test and the property reads invoke on a
-proxy operand.
+or held in a data property anywhere inside the lists and maps of a list or map
+operand; a value a getter or a proxy trap supplies is the exception stated
+below. A check of the operand's top alone would not keep the number out,
+because an opcode can take a member out of a list or a map that is already on
+the stack. The walk is `literalFault` in `src/evaluator.ts`, added with this
+amendment. It counts as a map every object the machine reads as one, which is
+every object that is neither a list nor one of the domain's own value classes,
+an object of a class this package did not define included; that test is
+`isPlainMap` in `src/evaluator.ts`, which the opcodes that read a map use. It
+follows every own string-keyed data property of a list or map, enumerable or
+not, because a member access reads any own string-keyed property of a map; on a
+list that includes the properties that are not elements, which no opcode reads.
+It reads each value from the property's descriptor and never calls a getter;
+the only host code it can run is a proxy's traps, which the map test and the
+property reads invoke on a proxy operand. It answers the first fault it meets.
 
-**The walk visits a container once, at the level of the first path that
-reaches it**, the outermost container being level one. A container it first
-reaches past the depth limit refuses the operand with
-`"depth_limit_exceeded"`. This is not the nesting check's rule, which measures
-every path: a deeper path to a container the walk has already visited is not
-measured, so for a container shared between a shallow and a deep path the
-order of the properties decides whether the deep path is seen. The walk takes
-this rule because it keeps a shared container's cost to one visit; measuring
-every path would walk a shared container once per path again. Every path
-through enumerable members has already passed the nesting check, so only a
-non-enumerable property, which that check does not follow, or a proxy's trap
-can lead the walk past the limit.
+**The walk visits a container once, at the level of the first path that reaches
+it**, the outermost container being level one. A container it first reaches
+past the depth limit refuses the operand with `"depth_limit_exceeded"`. This is
+not the nesting check's rule, which measures every path: a deeper path to a
+container the walk has already visited is not measured, so for a container
+shared between a shallow and a deep path the order of the properties decides
+whether the deep path is seen. The walk takes this rule because it keeps a
+shared container's cost to one visit; measuring every path would walk a shared
+container once per path again. Every path the nesting check follows - through a
+map's own enumerable string-keyed members and a list's elements - has already
+passed that check, so only a property it does not follow, which is a
+non-enumerable property or a list's property that is not an element, or a
+proxy's trap can lead the walk past the limit.
 
 **The walk visits at most 65536 distinct containers**, the constant
-`LITERAL_CONTAINER_LIMIT` in `src/evaluator.ts`, added with this amendment,
-and refuses an operand holding more with `"depth_limit_exceeded"`. A proxy's
-trap can answer a new container every time it is asked, so without a count a
-hand-built operand could keep the walk going without end while never nesting
-past the depth limit. The number is this package's own and far above what a
-compiled instruction list carries. The reason is the depth limit's because
-both bound how much of a value the machine will walk; no reason token is
-added.
+`LITERAL_CONTAINER_LIMIT` in `src/evaluator.ts`, added with this amendment, and
+refuses with `"depth_limit_exceeded"` an operand in which it would visit more,
+unless it meets another fault first. A proxy's trap can answer a new container
+every time it is asked, so without a count a hand-built operand could keep the
+walk going without end while never nesting past the depth limit. The number is
+this package's own and far above what a compiled instruction list carries. The
+reason is the depth limit's because both bound how much of a value the machine
+will walk; no reason token is added.
 
 **The nesting check runs first.** The nesting amendment above puts a shape
 check at the same instruction; it still decides only the shape, and it runs
@@ -1682,16 +1685,16 @@ itself and carries an out-of-range integer answers the nesting reason.
 amendment above says the outermost list or map is level one and any other
 member is a leaf. Before this amendment its walk, `nestingFault` in
 `src/nesting.ts`, took only a plain object as a map and passed over an object
-of a class this package did not define as a leaf, while the equality walks
-and the projection read such an object as a map and recurse into it. So a
-`lit` operand built from such objects that contained itself or nested past
-the limit passed the check and raised the engine's stack-overflow error when
-it was compared or handed back. `nestingFault` now takes the caller's map
-test, and every caller of it in `src/evaluator.ts` and `src/index.ts` passes
-`isPlainMap`, so such an object is counted as a map level and refused on its
-shape like any other. What the walk enumerates is unchanged: a map's own
-enumerable string-keyed members and a list's elements, which are what those
-walks recurse into.
+of a class this package did not define as a leaf, while the equality walks and
+the projection read such an object as a map and recurse into it. So a `lit`
+operand built from such objects that contained itself or nested past the limit
+passed the check, and one that contained itself or nested deep enough raised
+the engine's stack-overflow error when it was compared or handed back.
+`nestingFault` now takes the caller's map test, and every caller of it in
+`src/evaluator.ts` and `src/index.ts` passes `isPlainMap`, so such an object is
+counted as a map level and refused on its shape like any other. What the walk
+enumerates is unchanged: a map's own enumerable string-keyed members and a
+list's elements, which are what those walks recurse into.
 
 **Only an integral number is tested.** A raw non-integral or non-finite number
 in a `lit` operand is not a member of the domain either, but it is not an
@@ -1707,19 +1710,19 @@ arithmetic result the shared numeric-result helper has tested, a `cast` result
 the cast module has bounded, or a host or builtin function's answer after it
 passed the value boundary. So after this change no integral number outside the
 safe range reaches an opcode, except one that host code supplies while the
-machine reads a hand-built operand. A getter is one: the check above never
-calls it, and it can answer an out-of-range integer when an opcode reads it. A
-proxy trap is the other: it can hide from the check a key that a member access
-still reads. They are the host code the nesting amendment's section on a
-throwing getter or proxy trap names, and this amendment makes no claim about
-a value either supplies. On every other integral number the machine can hold,
-the module-local integer test, `isIntegral` in `src/evaluator.ts` (read
-at `0f753ce`), which tests only that a value is a number, agrees with the
-domain's own predicate, `isInteger` in `src/values.ts` (read at `0f753ce`),
-which also tests the safe range. The sites that classify with the module-local
-test are not changed by this amendment. They still disagree with the domain's
-predicate on the raw non-integral or non-finite number the paragraph above
-leaves admitted.
+machine reads a hand-built operand. A getter is one: the range walk never calls
+it, and whatever it answered when the nesting check read it, it can answer an
+out-of-range integer when an opcode reads it. A proxy trap is the other: it can
+hide from the range walk a key that a member access still reads. They are the
+host code the nesting amendment's section on a throwing getter or proxy trap
+names, and this amendment makes no claim about a value either supplies. On
+every other integral number the machine can hold, the module-local integer
+test, `isIntegral` in `src/evaluator.ts` (read at `0f753ce`), which tests only
+that a value is a number, agrees with the domain's own predicate, `isInteger`
+in `src/values.ts` (read at `0f753ce`), which also tests the safe range. The
+sites that classify with the module-local test are not changed by this
+amendment. They still disagree with the domain's predicate on the raw
+non-integral or non-finite number the paragraph above leaves admitted.
 
 **It is pinned by shipped tests** in `test/evaluator.test.ts`: "is refused with
 the boundary's reason, on either side of zero", through the main entry point as
@@ -1733,11 +1736,11 @@ and "admits an operand whose hidden property refers back to it". The nesting
 walk's map test is pinned in `test/nesting.test.ts` by "refuses a class-built
 literal operand past the limit, or cyclic".
 
-Consequences. An instruction list that a host builds by hand and that carries
-an integer past the safe range now answers the failing arm where it answered a
-success. No vendored corpus case carries such a literal, since a case is read
-through the tagged decoder, which already refuses the number; the conformance
-run is unchanged. This remains a divergence from the reference, whose integers
-are arbitrary precision, and the bound is this package's own, as the
-reason-token paragraph above already says. Nothing in this amendment adds an
-opcode, a reason token or a wire-format change.
+Consequences. An instruction list that a host builds by hand and whose `lit`
+operand holds an integer past the safe range as data now answers the failing
+arm where it answered a success. No vendored corpus case carries such a
+literal, since a case is read through the tagged decoder, which already refuses
+the number; the conformance run is unchanged. This remains a divergence from
+the reference, whose integers are arbitrary precision, and the bound is this
+package's own, as the reason-token paragraph above already says. Nothing in
+this amendment adds an opcode, a reason token or a wire-format change.

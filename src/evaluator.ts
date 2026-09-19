@@ -273,8 +273,8 @@ function isNumeric(value: Value): value is number | Float {
  * Any object that is not a list and not one of the domain's own value classes
  * is read as a map - including an object of a class this package did not
  * define, which only a hand-built instruction list can carry. The literal's
- * checks and the nesting walks count as a map exactly what this answers true
- * for, so they reach every map an opcode can read.
+ * range walk and the nesting walk both use this test, so neither passes over
+ * as a leaf an object an opcode reads as a map.
  */
 export function isPlainMap(value: unknown): value is { [key: string]: Value } {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -547,7 +547,8 @@ function isIntegral(value: Value): value is number {
  * number is this package's own and far above what an instruction list a
  * compiler writes carries; an operand past it is refused with the reason the
  * depth limit uses, since both bound how much of a value the machine will
- * walk. A container reached by more than one path counts once.
+ * walk, unless the walk meets another fault first. A container reached by
+ * more than one path counts once.
  */
 const LITERAL_CONTAINER_LIMIT = 65536;
 
@@ -561,16 +562,18 @@ const LITERAL_CONTAINER_LIMIT = 65536;
  * integer if it were in range. The walk descends every list and every object
  * `isPlainMap` reads as a map, and treats every other member as a leaf. It
  * follows each own string-keyed DATA property of a container, enumerable or
- * not, because a member access reads any own string-keyed property. It reads
- * a property's value from its descriptor and never calls a getter; the only
- * host code it can run is a proxy's traps. It visits a container once, at the
+ * not, because a member access reads any own string-keyed property of a map;
+ * on a list that includes the properties that are not elements, which no
+ * opcode reads. It reads a property's value from its descriptor and never
+ * calls a getter; the only host code it can run is a proxy's traps. It
+ * answers the first fault it meets. It visits a container once, at the
  * level of the first path that reaches it, so a cycle ends the path it closes
  * and shared containers cost nothing extra. The outermost container is level
  * one, and a container first reached past `DEPTH_LIMIT` refuses the operand.
  * Because a container is visited once, a deeper path to one already visited
  * is not measured: which path reaches a shared container first follows the
  * order of the properties. The recursion is never deeper than one level past
- * the limit, and the count bounds the whole walk.
+ * the limit, and the count bounds how many containers the walk visits.
  */
 function literalFault(
   value: unknown,
@@ -1239,15 +1242,16 @@ class Machine {
    * on the way back to the host.
    *
    * A literal also admits numbers into the domain as integers, so an integer
-   * outside the safe range is refused here too, wherever the operand carries
-   * it, rather than rounded - the rule the value boundary applies to a host's
-   * context. The shape is checked first, so an operand that fails both
-   * answers the shape's reason. The walk that looks for such an integer also
-   * follows the non-enumerable data properties the shape check passes over.
-   * It refuses, with the depth limit's reason, an operand in which it first
-   * reaches a container past the depth limit, or in which it finds more
-   * containers than it will visit. Nothing else about the operand is checked
-   * here.
+   * outside the safe range is refused here too, wherever the operand holds it
+   * in a data property, rather than rounded - the rule the value boundary
+   * applies to a host's context. The shape is checked first, so an operand
+   * that fails both answers the shape's reason. The walk that looks for such
+   * an integer also follows the data properties the shape check passes over:
+   * the non-enumerable ones, and a list's properties that are not elements.
+   * It answers the first fault it meets, and it refuses, with the depth
+   * limit's reason, an operand in which it first reaches a container past the
+   * depth limit, or in which it finds more containers than it will visit.
+   * Nothing else about the operand is checked here.
    */
   private lit(operand: Value, at: number): Step {
     const fault = nestingFault(operand, isPlainMap);
