@@ -467,6 +467,35 @@ describe("the round trip", () => {
     expect({ ...(back.authorizedAt as PDateTime) }).toEqual({ ...authorizedAt });
     expect(encoded(back)).toBe(text);
   });
+
+  // Sabotage: letting the wire date test take a year below one hundred
+  // (year >= 0) turns this red, and so does refusing year one hundred
+  // (year > 100).
+  it("agrees in both directions at the lowest year a date tag carries", () => {
+    const openedOn = new PDate(100, 1, 1);
+    const openedAt = new PDateTime(Date.UTC(100, 0, 1) / 1000, 0);
+    for (const value of [openedOn, openedAt]) {
+      expect({ ...(decoded(encoded(value)) as object) }).toEqual({ ...value });
+    }
+    for (const text of [
+      '{"$type":"date","value":"0100-01-01"}',
+      '{"$type":"datetime","value":"0100-01-01T00:00:00Z"}',
+    ]) {
+      expect(encoded(decoded(text))).toBe(text);
+    }
+
+    const lastYear99 = new Date(0);
+    lastYear99.setUTCFullYear(99, 11, 31);
+    lastYear99.setUTCHours(23, 59, 59, 0);
+    expect(encodeRefusal(new PDate(99, 12, 31))).toBe("invalid_tagged_value");
+    expect(encodeRefusal(new PDateTime(lastYear99.getTime() / 1000, 0))).toBe(
+      "invalid_tagged_value",
+    );
+    expect(decodeRefusal('{"$type":"date","value":"0099-12-31"}')).toBe("invalid_tagged_value");
+    expect(decodeRefusal('{"$type":"datetime","value":"0099-12-31T23:59:59Z"}')).toBe(
+      "invalid_tagged_value",
+    );
+  });
 });
 
 describe("every entrance enforces the domain, and every exit emits only the domain", () => {
