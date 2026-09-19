@@ -16,6 +16,7 @@
  * rules the write follows are `docs/adr/0002`'s store obligations.
  */
 
+import { isPlainMap, setKey } from "./maps.js";
 import { fromHost, type Refusal, Undefined, type Value } from "./values.js";
 
 /** What a load of an absent root does. */
@@ -81,21 +82,10 @@ export function normalizeContext(host: unknown): ContextNormalization {
   const normalized = fromHost(host);
   if (!normalized.ok) return normalized;
   const map = normalized.value;
-  if (!isMap(map)) {
+  if (!isPlainMap(map)) {
     return { ok: false, errorType: "EvaluationError", reason: "unsupported_host_value" };
   }
   return { ok: true, context: new Context(new Map(Object.entries(map))) };
-}
-
-/**
- * Whether a normalized value is a map rather than some other member of the
- * domain. Normalization has already refused anything that is not a member, so
- * the two prototypes the value boundary admits are the two admitted here.
- */
-function isMap(candidate: Value): candidate is { [key: string]: Value } {
-  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return false;
-  const proto = Object.getPrototypeOf(candidate) as unknown;
-  return proto === null || proto === Object.prototype;
 }
 
 /** What a load of one root produced. */
@@ -155,23 +145,6 @@ type SlotOutcome =
   | { readonly ok: false; readonly reason: WriteRefusal };
 
 /**
- * Writes one key of a map being built.
- *
- * It goes through `defineProperty` because the key is whatever a path segment
- * said, and a plain assignment of the key `__proto__` would set the object's
- * prototype instead of adding a member - a map read back as something other
- * than what was written.
- */
-function setKey(target: MapValue, key: string, value: Value): void {
-  Object.defineProperty(target, key, {
-    value,
-    writable: true,
-    enumerable: true,
-    configurable: true,
-  });
-}
-
-/**
  * The key a segment names in a map.
  *
  * An integer segment names its decimal spelling, which is the amendment to
@@ -208,7 +181,7 @@ function padded(list: readonly Value[], index: number): Value[] {
  */
 function descend(occupant: Value, rest: readonly PathSegment[], value: Value): SlotOutcome {
   if (rest.length === 0) return { ok: true, value };
-  if (Array.isArray(occupant) || isMap(occupant)) return putIn(occupant, rest, value);
+  if (Array.isArray(occupant) || isPlainMap(occupant)) return putIn(occupant, rest, value);
   if (occupant === null || occupant === Undefined) {
     const vivified: Container = typeof rest[0] === "string" ? {} : [];
     return putIn(vivified, rest, value);

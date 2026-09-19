@@ -72,6 +72,7 @@ import {
   opcodeRow,
   type Program,
 } from "./instructions.js";
+import { setKey } from "./maps.js";
 import { DEPTH_LIMIT, type NestingReason, nestingFault } from "./nesting.js";
 import {
   Duration,
@@ -1907,16 +1908,11 @@ class Machine {
       };
     }
     const updated: { [name: string]: Value } = { ...target };
-    // defineProperty rather than an assignment, for the same reason the value
-    // boundary uses it: a key spelled as the prototype accessor would set the
-    // object's prototype instead of adding a member, and the map would read
-    // back as something other than what was written.
-    Object.defineProperty(updated, key, {
-      value,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
+    // Written through the shared key writer rather than an assignment, for the
+    // same reason the value boundary uses it: a key spelled as the prototype
+    // accessor would set the object's prototype instead of adding a member, and
+    // the map would read back as something other than what was written.
+    setKey(updated, key, value);
     this.stack.push(updated);
     return { ok: true, next: at + 1 };
   }

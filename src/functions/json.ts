@@ -66,6 +66,7 @@
  */
 
 import type { HostFunction } from "../evaluator.js";
+import { isPlainMap } from "../maps.js";
 import { DEPTH_LIMIT } from "../nesting.js";
 import { Float, typeName, Undefined, type Value } from "../values.js";
 import { builtin, isString, refuse } from "./support.js";
@@ -73,15 +74,6 @@ import { builtin, isString, refuse } from "./support.js";
 // ---------------------------------------------------------------------------
 // Serializing
 // ---------------------------------------------------------------------------
-
-function isPlainMap(value: Value): value is { readonly [key: string]: Value } {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  // The prototype is the whole test, and it is what excludes the domain members
-  // this package models as classes: each carries its own prototype, so none of
-  // them needs a clause of its own here.
-  const proto = Object.getPrototypeOf(value) as unknown;
-  return proto === null || proto === Object.prototype;
-}
 
 /**
  * A float's text, which keeps the decimal point an integral float has.

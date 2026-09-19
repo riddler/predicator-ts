@@ -29,6 +29,7 @@ import { EvaluationError } from "./errors.js";
 import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
+import { isPlainMap, setKey } from "./maps.js";
 import { DEPTH_LIMIT, enterContainer } from "./nesting.js";
 import { Duration, Float, PDate, PDateTime, toHost, Undefined, type Value } from "./values.js";
 
@@ -109,38 +110,6 @@ class EncodeSignal extends Error {
     super(reason);
     this.reason = reason;
   }
-}
-
-/**
- * Writes one key of a map being built.
- *
- * It goes through `defineProperty` because a decoded key is whatever the text
- * said, and a plain assignment of the key `__proto__` would set the object's
- * prototype instead of adding a member - a map read back as something other
- * than what was written, which is the whole class of bug this codec exists to
- * close.
- */
-function setKey<T>(target: { [key: string]: T }, key: string, value: T): void {
-  Object.defineProperty(target, key, {
-    value,
-    writable: true,
-    enumerable: true,
-    configurable: true,
-  });
-}
-
-/**
- * Answers whether a value is a plain map rather than a value class, a host
- * type or a class instance this package did not define.
- *
- * A map this package built carries `Object.prototype`, and a host may hand
- * over one built with no prototype at all; the normalizer's object arm admits
- * exactly those two and refuses everything else, and so does this.
- */
-function isPlainMap(value: unknown): value is { [key: string]: Value } {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value) as unknown;
-  return proto === null || proto === Object.prototype;
 }
 
 function isDurationKey(key: string): key is DurationKey {
