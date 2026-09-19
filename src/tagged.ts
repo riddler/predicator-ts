@@ -27,6 +27,7 @@
 
 import { EvaluationError } from "./errors.js";
 import { type EvaluateOptions, type EvaluateResult, evaluateToValue } from "./evaluator.js";
+import { floatText } from "./floats.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
 import { isPlainMap, setKey } from "./maps.js";
@@ -90,7 +91,6 @@ const NUMBER_PATTERN = /-?(?:0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/y;
 const HEX4_PATTERN = /^[0-9a-fA-F]{4}$/;
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATETIME_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z$/;
-const EXPONENT_OR_POINT = /[.eE]/;
 
 class DecodeSignal extends Error {
   readonly reason: DecodeReason;
@@ -488,7 +488,9 @@ export function encodeTagged(value: Value): EncodeResult {
 function encodeValue(value: Value | undefined, depth: number, ancestors: Set<object>): string {
   if (value === Undefined) return tagAt(depth, 0, '{"$type":"undefined"}');
   if (value === null) return "null";
-  if (value instanceof Float) return encodeFloat(value);
+  // No finiteness check: a Float wraps a finite number by construction, and
+  // `floatText` writes it so that it decodes as a float, sign included.
+  if (value instanceof Float) return floatText(value);
   if (value instanceof PDate) {
     return tagAt(depth, 0, `{"$type":"date","value":"${encodeDate(value)}"}`);
   }
@@ -554,17 +556,6 @@ function encodeInteger(value: number): string {
   if (!Number.isFinite(value)) throw new EncodeSignal("non_finite_number");
   if (!Number.isSafeInteger(value)) throw new EncodeSignal("integer_out_of_range");
   return spell(value);
-}
-
-/**
- * Writes a float so that it reads back as one. An integral float's default
- * spelling is bare digits, which would decode as an integer, so a `.0` is
- * appended when the spelling carries neither a point nor an exponent.
- */
-function encodeFloat(value: Float): string {
-  // No finiteness check: a Float wraps a finite number by construction.
-  const spelling = spell(value.valueOf());
-  return EXPONENT_OR_POINT.test(spelling) ? spelling : `${spelling}.0`;
 }
 
 /**

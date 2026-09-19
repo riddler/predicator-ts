@@ -28,6 +28,7 @@
  */
 
 import { civilOf, daysFromCivil } from "./civil.js";
+import { floatText } from "./floats.js";
 import type { CastType } from "./instructions.js";
 import { formatDate, formatDateTime, readDate, readDateTime } from "./iso.js";
 import {
@@ -56,20 +57,15 @@ const FLOAT_TEXT = /^-?[0-9]+(?:\.[0-9]+)?$/;
  * Writes a number as text.
  *
  * An integer is its digits. A float keeps its point, so that the text still
- * says which member of the domain the number was: a trailing `.0` is appended
- * when the spelling carries neither a point nor an exponent, which is the same
- * rule the corpus encoding writes a float by. `add`'s concatenation splices in
- * the same spelling, and it does so by calling this: one rule for how a number
- * is written, in one place, rather than a cast and a concatenation that agree
- * until one of them is edited.
+ * says which member of the domain the number was: it is written by
+ * `floatText` in `./floats.ts`, which the tagged encoder and the JSON
+ * serializer call too. `add`'s concatenation splices in the same spelling,
+ * and it does so by calling this.
  */
 export function numberText(value: number | Float): string {
   if (!(value instanceof Float)) return String(value);
-  const spelling = String(value.valueOf());
-  return POINT_OR_EXPONENT.test(spelling) ? spelling : `${spelling}.0`;
+  return floatText(value);
 }
-
-const POINT_OR_EXPONENT = /[.eE]/;
 
 /**
  * Converts a value to the named type, answering an absence when it cannot.
