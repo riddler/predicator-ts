@@ -223,8 +223,8 @@ describe("the three faults, constructed against the real runner", () => {
   // the suite ran. A parse failure prints a summary - one failed file, no
   // failed test - so that guard passes it. This run is that output, and the
   // harness still calls it invalid.
-  // Sabotage: replacing the failed-suite and baseline checks with a search of
-  // the output for a missing summary line turns this red.
+  // Sabotage: deleting the failed-suite check from classifyRun turns this red,
+  // and so does deleting it together with the baseline check.
   it("fault three - a parse failure that prints a summary - is invalid", () => {
     const r = withMutation({ file: card, ...CONTROL_BYTE }, () => runSuite({ root: project }));
     // The runner colours its output when the environment asks for it (CI
@@ -233,7 +233,10 @@ describe("the three faults, constructed against the real runner", () => {
     expect(printed).toMatch(/Test Files\s+1 failed \| 1 passed/);
     expect(printed).toMatch(/Tests\s+1 passed/);
     expect(r.report).toMatchObject({ numFailedTests: 0 });
-    expect(classifyRun(r, baseline).verdict).toBe("invalid");
+    expect(classifyRun(r, baseline)).toMatchObject({
+      verdict: "invalid",
+      reason: INVALID.FAILED_SUITE,
+    });
   }, 60_000);
 });
 
