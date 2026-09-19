@@ -230,3 +230,42 @@ file on disk; a fresh run of each surface present, over the cases the claimed
 ISA version runs, in which every entry must pass; and, for each claim, that
 tiers 1 through N on that surface are entered completely. Ratcheting a case in runs the runner first and adds the entry
 second, and adds nothing the run did not observe passing.
+
+## Note: why a claim's version is read from the reports (2026-09-18)
+
+Recorded for `pts-mg1`. The ratchet script, `scripts/ratchet.mjs`, scopes a
+claim by the instruction-set version each report records, not by calling
+`isaVersion()` itself. That design was chosen while a premise stood that a
+plain script in this repository cannot import the TypeScript module the
+version comes from. No shipped text states that premise, and it is not true
+at the pinned toolchain. This note records that the report-derived scope is
+preferred for its own reasons rather than by necessity, so that a later reader
+does not inherit the premise as a constraint and rule out a direct import
+without checking.
+
+What was observed, on 2026-09-18 at commit `7b1857e`, by running it. A plain
+`.mjs` script run under the pinned node, `v24.21.0` through `mise exec`,
+imported `src/instructions.ts` directly, with no build step and no loader, and
+its `isaVersion()` returned 6. The same script's import of `src/index.ts`
+failed with `ERR_MODULE_NOT_FOUND`: that module names its sibling modules with
+`.js` specifiers, which the runtime's type stripping does not map to a `.ts`
+file. A direct import is therefore available, but only of a module whose own
+imports resolve without a build step. `src/instructions.ts` qualifies at that
+commit because its import of `./values.js` is type-only and is erased, and
+nothing requires it to stay that way.
+
+Why the reports are preferred anyway. The version an evaluator report carries
+is the one `runEvaluator` in `test/conformance/runner.ts` claimed in the run
+that produced the report's results, so the scope of a claim comes from the same
+artefact as the evidence it scopes. A version read from the source when the
+ratchet runs describes the tree at that moment, which need not be the tree
+whose run the report records. Because each report carries its own version, the
+ratchet can refuse reports that disagree about it, which `scripts/ratchet.mjs`
+does before it writes. And taking the version from a report keeps to the
+decision above that the script's only input is a report.
+
+This note decides nothing new and changes no rule above, so it carries no
+Status line and does not advance this record's status. A later change that
+reads the version by a direct import is not ruled out by any constraint of the
+toolchain; it would be a change to the design this note records, made for its
+own reasons.
