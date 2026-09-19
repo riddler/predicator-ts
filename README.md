@@ -153,17 +153,36 @@ arm carries an error type the corpus's cases match on - `EvaluationError`,
 `TypeMismatchError` or `UndefinedVariableError` - with a `reason` token those
 cases match on too and a `message` they do not.
 
-The shape of the context object is the exception, and it is the host's own
-graph rather than anything in the expression. `evaluate` normalizes the whole
-context before it runs a program, walking it recursively with no cycle guard
-and no depth guard, so a context carrying a cycle anywhere in it - any object
-graph with a back-reference - raises `RangeError` out of `evaluate` instead of
-answering a result, whether or not the program loads the root it sits under. A
-context nested deeply enough to exhaust the call stack raises the same way. The
-cycle is deterministic; the depth is not, because how deep is deep enough
-varies with the host's stack and with what is already on it - the same input
-can be normalized in one program and exhaust the stack in another. A host that
-builds a context out of objects it did not shape itself should wrap the call.
+The shape of the context is covered too. `evaluate` normalizes the whole
+context before it runs a program, so a context that contains itself anywhere -
+any object graph with a back-reference - is refused with the reason
+`cyclic_value`, whether or not the program loads the root it sits under. A
+context whose lists and maps nest past the depth limit is refused with
+`depth_limit_exceeded`. The limit is 256 levels, the context itself counting as
+the first, and it is a constant this package declares rather than whatever the
+host's stack happens to allow, so the same context answers the same way on
+every engine. A result nested past the same limit is refused on its way back
+rather than handed over. A value reached by two paths without a cycle - one
+card object under two keys, say - is not refused.
+
+```ts
+import { evaluate } from "@riddler/predicator";
+
+const cardholder: Record<string, unknown> = { name: "Ada" };
+cardholder.card = { brand: "visa", cardholder };
+
+const refused = evaluate([["lit", true]], { cardholder });
+
+if (refused.ok || refused.error.reason !== "cyclic_value") {
+  throw new Error("a context that contains itself is refused rather than raised");
+}
+```
+
+One thing is outside the promise: the host's own code. A getter or a proxy
+trap on the context runs while the context is read, and if it throws, its
+error propagates out of `evaluate` unchanged, because that is the host failing
+rather than an outcome of the evaluation. A host whose context carries code
+like that, and that wants a result rather than a throw, wraps the call.
 
 ```ts
 import { evaluate } from "@riddler/predicator";
@@ -371,17 +390,15 @@ if (!signedUpAt.ok || signedUpAt.value !== '{"$type":"datetime","value":"2026-03
 `decodeTagged` and `encodeTagged` are the codec itself, for a host that
 persists a value rather than evaluating one. Every failure the codec names a
 reason for is answered as the failing arm of a result rather than thrown, and a
-decode's failing arm also carries the offset in the text it went wrong at. What
-falls outside that is the shape of the input rather than its content: both
-directions recurse over the structure with no cycle guard and no depth guard,
-so a cyclic host value handed to `encodeTagged`, a text nested deeply enough to
-exhaust the call stack handed to `decodeTagged`, and a value nested that deeply
-handed to `encodeTagged`, all raise `RangeError` instead of answering a result. The cycle is deterministic; the depth is not -
-the same text can decode in one program and exhaust the stack in another. On
-the toolchain pinned here it took a few thousand levels of nesting, which is an
-observation and not a limit to design against. A host reading text back out of
-storage is reading input it did not write, and should wrap the call rather than
-rest on `ok` alone.
+decode's failing arm also carries the offset in the text it went wrong at. The
+shape of the input is among those failures: a value that contains itself is
+refused by `encodeTagged` with `cyclic_value`, and both directions refuse
+nesting past the same declared limit of 256 levels with
+`depth_limit_exceeded` - a decode at the offset of the first bracket or brace
+past it. In the text every bracket and brace counts, a tag's own included, so
+whatever `encodeTagged` writes, `decodeTagged` reads back. A getter or a proxy
+trap on a value handed to `encodeTagged` is the host's own code, and an error
+it throws propagates unchanged, as it does at `evaluate`.
 
 The encoding is the corpus's apparatus rather than a published serialization
 format: predicator-ex's `conformance/README.md` specifies it, it is revised by

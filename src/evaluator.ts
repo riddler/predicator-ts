@@ -72,6 +72,7 @@ import {
   opcodeRow,
   type Program,
 } from "./instructions.js";
+import { DEPTH_LIMIT, type NestingReason, nestingFault } from "./nesting.js";
 import {
   Duration,
   Float,
@@ -1160,7 +1161,18 @@ class Machine {
     }
   }
 
+  /**
+   * Pushes a literal operand.
+   *
+   * An operand is the host's value as much as a context is, so one that
+   * contains itself or nests past the depth limit is refused here, before any
+   * opcode walks it, rather than left to exhaust the stack in a comparison or
+   * on the way back to the host. Nothing else about the operand is checked
+   * here.
+   */
   private lit(operand: Value, at: number): Step {
+    const fault = nestingFault(operand);
+    if (fault !== undefined) return { ok: false, error: nestingError(fault, "the literal", at) };
     this.stack.push(operand);
     return { ok: true, next: at + 1 };
   }
@@ -1477,6 +1489,13 @@ class Machine {
         error: new EvaluationError(written.reason, writeMessage(written.reason), at),
       };
     }
+    // The context is the outermost level and each segment one more, so the
+    // written value sits at one past the path's length. A write that would nest
+    // the context past the depth limit is refused here, at its own instruction,
+    // so the context a run hands back is never deeper than one a host may hand
+    // in. Every other branch of the context is as deep as it was.
+    const fault = nestingFault(value, path.length + 1);
+    if (fault !== undefined) return { ok: false, error: nestingError(fault, "the write", at) };
     this.context = written.context;
     return { ok: true, next: at + 1 };
   }
@@ -1775,11 +1794,30 @@ export function evaluateProgram(
 }
 
 /**
+ * The failure answered for a value that cannot cross the boundary on its
+ * shape: it contains itself, or it nests past the depth limit. `subject` names
+ * what was refused, for the message; the reason token is the contract.
+ */
+export function nestingError(
+  reason: NestingReason,
+  subject: string,
+  position?: number,
+): EvaluationError {
+  const message =
+    reason === "cyclic_value"
+      ? `${subject} contains itself`
+      : `${subject} nests past the depth limit of ${DEPTH_LIMIT}`;
+  return new EvaluationError(reason, message, position);
+}
+
+/**
  * Normalizes a host's context, applies the option defaults, and runs.
  *
  * A context the value boundary refuses is an evaluation error carrying the
  * boundary's own reason, rather than a throw: a host that passed a value the
- * domain has no member for gets told which rule it broke.
+ * domain has no member for gets told which rule it broke. A result that nests
+ * past the depth limit is refused the same way on its way back, so that no
+ * value handed to a host is deeper than a value a host may hand in.
  */
 export function evaluateToValue(
   program: Program,
@@ -1797,7 +1835,10 @@ export function evaluateToValue(
     }
     bound = normalized.context;
   }
-  return evaluateProgram(program, bound, resolveOptions(options));
+  const outcome = evaluateProgram(program, bound, resolveOptions(options));
+  if (!outcome.ok) return outcome;
+  const fault = nestingFault(outcome.value);
+  return fault === undefined ? outcome : { ok: false, error: nestingError(fault, "the result") };
 }
 
 /**

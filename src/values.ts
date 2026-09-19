@@ -14,6 +14,8 @@
  * every rule this module implements.
  */
 
+import { enterContainer, type NestingReason } from "./nesting.js";
+
 /**
  * A predicator float: a JavaScript `number` carrying a brand that survives
  * normalization, so that an integral float stays distinguishable from the
@@ -245,9 +247,16 @@ export function typeName(value: Value): TypeName {
  *
  * `"integer_out_of_range"` is this package's own reason token, at its own
  * boundary: it is not an ISA reason and it adds no opcode and no wire-format
- * change.
+ * change. So are `"cyclic_value"`, for a value that contains itself, and
+ * `"depth_limit_exceeded"`, for one nested past the depth limit this package
+ * declares.
  */
-export type RefusalReason = "integer_out_of_range" | "non_finite_number" | "unsupported_host_value";
+export type RefusalReason =
+  | "integer_out_of_range"
+  | "non_finite_number"
+  | "unsupported_host_value"
+  | "cyclic_value"
+  | "depth_limit_exceeded";
 
 /**
  * A refused normalization. The error category is the corpus's
@@ -289,7 +298,17 @@ class RefusalSignal extends Error {
   }
 }
 
-function normalize(value: unknown): Value {
+/**
+ * Enters one list or map, refusing it when it closes a cycle or nests past the
+ * depth limit. `depth` is the level the container itself sits at, the
+ * outermost value being level one.
+ */
+function enter(container: object, depth: number, ancestors: Set<object>): void {
+  const fault: NestingReason | undefined = enterContainer(container, depth, ancestors);
+  if (fault !== undefined) throw new RefusalSignal(fault);
+}
+
+function normalize(value: unknown, depth: number, ancestors: Set<object>): Value {
   if (value === undefined) return Undefined;
   if (value === Undefined) return Undefined;
 
@@ -303,15 +322,18 @@ function normalize(value: unknown): Value {
     return dateTimeFromEpochMillis(millis);
   }
   if (Array.isArray(value)) {
+    enter(value, depth, ancestors);
     // Array.from rather than map: map skips a hole, leaving the hole in the
     // normalized list, and a hole is not a member of the domain. Array.from
     // visits it as the language's absence, which normalizes to this
     // domain's absence like any other.
-    return Array.from(value, normalize);
+    const out = Array.from(value, (member: unknown) => normalize(member, depth + 1, ancestors));
+    ancestors.delete(value);
+    return out;
   }
   if (typeof value === "object") {
     if (value === null) return null;
-    return normalizeObject(value);
+    return normalizeObject(value, depth, ancestors);
   }
 
   switch (typeof value) {
@@ -333,15 +355,17 @@ function normalizeNumber(value: number): Value {
   return value;
 }
 
-function normalizeObject(value: object): Value {
+function normalizeObject(value: object, depth: number, ancestors: Set<object>): Value {
   const proto = Object.getPrototypeOf(value) as unknown;
   if (proto !== null && proto !== Object.prototype) {
     throw new RefusalSignal("unsupported_host_value");
   }
+  enter(value, depth, ancestors);
   const out: { [key: string]: Value } = {};
   for (const [key, member] of Object.entries(value)) {
-    setKey(out, key, normalize(member));
+    setKey(out, key, normalize(member, depth + 1, ancestors));
   }
+  ancestors.delete(value);
   return out;
 }
 
@@ -366,10 +390,22 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  * with no row at all - a function, a symbol other than the absence singleton,
  * a `Map`, a `Set`, a class instance this package did not define - is refused
  * too.
+ *
+ * The shape of the structure is refused the same way. A value that contains
+ * itself is refused as `"cyclic_value"`, and one whose lists and maps nest
+ * past the depth limit this package declares is refused as
+ * `"depth_limit_exceeded"`, so neither exhausts the call stack. A value
+ * reached twice by two different paths is not a cycle and is normalized at
+ * each place it appears.
+ *
+ * What the walk cannot turn into a refusal is the host's own code running
+ * inside it: a getter or a proxy trap that throws propagates its own error out
+ * of this function unchanged, because the error is the host's rather than an
+ * outcome of the value.
  */
 export function fromHost(value: unknown): Normalization {
   try {
-    return { ok: true, value: normalize(value) };
+    return { ok: true, value: normalize(value, 1, new Set()) };
   } catch (error) {
     if (error instanceof RefusalSignal) {
       return { ok: false, errorType: "EvaluationError", reason: error.reason };
