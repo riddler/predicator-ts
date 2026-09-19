@@ -54,13 +54,14 @@ for those constructs rather than leaving the rule to review.
 ## The entry points
 
 ```ts
-import { evaluate, execute, executeValue, float, isaVersion } from "@riddler/predicator";
+import { compile, evaluate, execute, executeValue, float, isaVersion } from "@riddler/predicator";
 import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/tagged";
 ```
 
 - **`@riddler/predicator`** is the main entry point: the value domain, the host
-  boundary, the evaluation of a compiled instruction list, and the version of
-  the instruction set this build implements.
+  boundary, the compilation of an expression's source text into an instruction
+  list, the evaluation of such a list, and the version of the instruction set
+  this build implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
   conformance corpus's tagged encoding, and the one evaluation that speaks it.
   That encoding carries the members a plain JSON round trip loses - a date, a
@@ -70,9 +71,12 @@ import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/
 `package.json` declares those two under `exports`, each shipped as ESM and
 CommonJS with type declarations.
 
-**Compiling an expression from its source text is not implemented here yet.** An
-instruction list reaches this package already compiled - from the reference
-implementation, or hand-built, as the examples below are.
+**Compiling an expression from its source text is `compile`**, and the
+statement grammar is not compiled here: assignment, the statement separator and
+the control-flow keywords are refused by the expression grammar with their own
+reasons and arrive in a later release. An instruction list may also reach this
+package already compiled - from the reference implementation, or hand-built, as
+several of the examples below are.
 
 The TypeScript examples in this file are executed by this repository's test
 suite, which also asserts that every name they import is bound, and the ones
@@ -108,6 +112,70 @@ and the one place `isaVersion()` is read inside `src/` runs the other
 direction - it refuses an opcode that this version of the set has retired,
 with `retired_opcode`. The number here is re-derived from the reference
 implementation's ISA document, not chosen independently.
+
+## Compiling a rule
+
+`compile` takes the source text of an expression and answers the instruction
+list `evaluate` runs. The operands are this package's own domain values rather
+than the corpus's encoding of them, so what comes back is passed straight to
+`evaluate` and stored as the plain list it is.
+
+```ts
+import { compile, compileWithSpans, evaluate } from "@riddler/predicator";
+
+// A reviewer authors this rule in a payments console.
+const rule = "amount > 500 AND issuer == 'visa'";
+
+const compiled = compile(rule);
+
+if (!compiled.ok) {
+  throw new Error("a well-formed rule compiles");
+}
+
+const held = evaluate(compiled.instructions, { amount: 750, issuer: "visa" });
+
+if (!held.ok || held.value !== true) {
+  throw new Error("a large charge on a visa card matches the rule");
+}
+
+// A signup wizard's editor hands over a rule the author is still typing, so
+// the failing arm is routine rather than exceptional. It is a value: the
+// reason names the family, the message is the one the reference gives, and the
+// span is what an editor underlines.
+const draft = "variant == 'B' and steps_completed >= ";
+
+const refused = compile(draft);
+
+if (refused.ok) {
+  throw new Error("a rule that stops mid-comparison does not compile");
+}
+
+if (refused.error.reason !== "expected_primary") {
+  throw new Error("the refusal names the grammar family it belongs to");
+}
+
+if (refused.error.position.column !== 39) {
+  throw new Error("the refusal points at the place the source ran out");
+}
+
+// `compileWithSpans` adds the extent of the node each instruction came from,
+// keyed by the instruction's own index; `compileWithPositions` adds a point
+// instead. Either way the instruction list is the one `compile` answers.
+const underlined = compileWithSpans("score > 85");
+
+if (!underlined.ok || underlined.spans.get(2)?.end.column !== 11) {
+  throw new Error("the comparison's span covers the whole expression");
+}
+```
+
+Every refusal the scanner, the grammar or the emitter produces comes back on
+the failing arm rather than as a throw, carrying the refusing stage's own
+`reason`, `message`, `position` and `span`. The `reason` is a member of a closed
+union, which is what a caller switches on; the `message` is text for a human -
+for most members the reference implementation's for that site, reproduced
+verbatim - and is not something to match on.
+`docs/adr/0004-the-compiler-surface.md` is the record, and it enumerates the
+union.
 
 ## Evaluating a rule
 
@@ -449,7 +517,10 @@ those tiers has an entry - the ratchet refuses to write it otherwise. A case
 the claimed version retired is filtered out of the run rather than reported,
 and a case result is `pass` or `fail` with no third value, so nothing is
 skipped into looking finished. The corpus's other surface, the compiler, has no
-entry here, because compiling from source is not implemented yet.
+entry here: the runner runs one surface and only the evaluator's run is wired
+to it, so no compiler case has been watched pass and there is nothing observed
+for the ratchet to record. A claim there arrives in a later release, from a run
+like every other entry in the file.
 
 Running it:
 
@@ -471,7 +542,7 @@ The language reference - the grammar, the operators, the function set, the
 value space and the refusals - lives with the reference implementation for now
 and is mirrored here in a later release. The records under `docs/adr/` are what
 this package decided for itself: what kind of thing it is, the value domain and
-the host boundary, and the conformance apparatus.
+the host boundary, the conformance apparatus, and the compiler surface.
 
 ## Development
 
