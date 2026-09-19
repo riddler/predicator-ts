@@ -66,6 +66,7 @@
  */
 
 import type { HostFunction } from "../evaluator.js";
+import { floatText } from "../floats.js";
 import { isPlainMap } from "../maps.js";
 import { DEPTH_LIMIT } from "../nesting.js";
 import { Float, typeName, Undefined, type Value } from "../values.js";
@@ -74,27 +75,6 @@ import { builtin, isString, refuse } from "./support.js";
 // ---------------------------------------------------------------------------
 // Serializing
 // ---------------------------------------------------------------------------
-
-/**
- * A float's text, which keeps the decimal point an integral float has.
- *
- * Writing an integral float as though it were an integer would lose the one
- * distinction the domain has and JSON does not, and the reference's own
- * serializer keeps it.
- *
- * THE TEST IS ON THE RENDERING AND NOT ON THE NUMBER, which is the whole of
- * the care needed here. Past a large enough magnitude the host renders an
- * integral float in exponential notation, so a number can be integral while
- * its text already ends in an exponent - and a decimal point glued onto that
- * produces something no JSON parser will read back, which poisons the whole
- * document it sits in rather than just that one member. A rendering that
- * already carries a point or an exponent is unmistakably a float already, so
- * the suffix goes on only when it carries neither.
- */
-function floatText(value: Float): string {
-  const text = `${value.valueOf()}`;
-  return /[.e]/.test(text) ? text : `${text}.0`;
-}
 
 /**
  * Serializes a value.
@@ -111,6 +91,9 @@ function floatText(value: Float): string {
 function serialize(value: Value): string {
   if (value === null) return "null";
   if (value === Undefined) refuse("JSON.stringify has no JSON form for an absence");
+  // An integral float keeps its point, as the reference's serializer keeps it:
+  // written as an integer, it would lose the one distinction the domain has
+  // and JSON does not.
   if (value instanceof Float) return floatText(value);
   if (typeof value === "number" || typeof value === "boolean") return `${value}`;
   if (typeof value === "string") return JSON.stringify(value);
