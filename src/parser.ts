@@ -8,7 +8,8 @@
  * reference's own, byte for byte, and the `reason` beside it is this package's
  * stable token for the family the message belongs to - which is what a caller
  * switches on, so that a message reworded upstream is a message and not a
- * contract.
+ * contract. One refusal is not the reference's: the depth bound below, which
+ * the reference has no counterpart for, so its message is authored here.
  *
  * The grammar is the expression production alone. The statement production -
  * assignment, the separator, the two control-flow keywords - is not written
@@ -23,6 +24,11 @@
  * node or a refusal, the refusal carries a reason from the closed union in
  * `./errors.js`, and a token stream this package's scanner cannot even produce
  * still answers one of the two. There is no input class reserved for a raise.
+ * That holds at any nesting, because the descent counts its open productions
+ * against `SOURCE_DEPTH_LIMIT` and refuses rather than descending past it: a
+ * source nested deeper than the grammar will follow is a refusal with a
+ * position like any other, not a stack the host runs out of. What the limit
+ * is and why it is declared rather than measured is on the constant.
  *
  * The second is that end of input is a token and not an absence. The scanner
  * appends an end-of-input token, so every site that could run out of tokens
@@ -57,6 +63,7 @@ import { floatSpelling } from "./floats.js";
 import { CAST_TYPE_NAMES, type CastType } from "./instructions.js";
 import { formatDate, formatDateTime } from "./iso.js";
 import type { FractionalNumber, Token, TokenType } from "./lexer.js";
+import { SOURCE_DEPTH_LIMIT } from "./nesting.js";
 import type { PDate, PDateTime } from "./values.js";
 
 /** A syntax tree, or the one refusal that stopped it. */
@@ -108,6 +115,8 @@ export function parse(tokens: readonly Token[]): ParseResult {
 class Parser {
   private readonly tokens: readonly Token[];
   private index = 0;
+  /** How many productions are open above the one now reading. */
+  private depth = 0;
 
   constructor(tokens: readonly Token[]) {
     this.tokens = tokens;
@@ -126,8 +135,54 @@ class Parser {
     this.index += 1;
   }
 
-  // logical_or -> logical_and ( ("OR" | "||") logical_and )*
+  /**
+   * Reads one production one level deeper, or refuses because the source is
+   * already at the limit.
+   *
+   * The count comes back down whatever the production answered, so a refusal
+   * deep inside one branch leaves nothing behind for the sibling branch a
+   * caller reads next. It is a count of OPEN productions and not of tokens
+   * read, which is what makes it a measure of how deeply the source nests.
+   */
+  private descend<T>(produce: () => Parsed<T>): Parsed<T> {
+    if (this.depth >= SOURCE_DEPTH_LIMIT) return { ok: false, error: this.tooDeep() };
+    this.depth += 1;
+    try {
+      return produce();
+    } finally {
+      this.depth -= 1;
+    }
+  }
+
+  /**
+   * The refusal a source nesting past the limit answers, pointing at the
+   * token the descent stopped on - the innermost opener the source got to,
+   * which is the first place a reader can cut the nesting back.
+   */
+  private tooDeep(): ParseError {
+    return refuse(
+      "nesting_depth_exceeded",
+      `Expression nests past the depth limit of ${SOURCE_DEPTH_LIMIT} levels, the whole expression counting as the first`,
+      this.peek(),
+    );
+  }
+
+  /**
+   * The whole expression production, one level deeper than its caller.
+   *
+   * The counter is taken here rather than on every production, because every
+   * construct that nests another expression - a parenthesis, a bracket, a
+   * brace, an index, a call's argument - re-enters the grammar through this
+   * one method. The two productions that recurse into themselves without
+   * coming back through it count their own levels the same way, and so does
+   * the relative-date operand.
+   */
   expression(): Parsed<Node> {
+    return this.descend(() => this.logicalOr());
+  }
+
+  // logical_or -> logical_and ( ("OR" | "||") logical_and )*
+  private logicalOr(): Parsed<Node> {
     let left = this.logicalAnd();
     if (!left.ok) return left;
 
@@ -184,7 +239,7 @@ class Parser {
     if (token.type !== "not_op" && token.type !== "bang") return this.comparison();
 
     this.advance();
-    const operand = this.logicalNot();
+    const operand = this.descend(() => this.logicalNot());
     if (!operand.ok) return operand;
     return {
       ok: true,
@@ -304,7 +359,7 @@ class Parser {
     if (operator === undefined) return this.postfix();
 
     this.advance();
-    const operand = this.unary();
+    const operand = this.descend(() => this.unary());
     if (!operand.ok) return operand;
     return {
       ok: true,
@@ -730,7 +785,7 @@ class Parser {
   private relativeDate(direction: "next" | "last", keyword: Token): Parsed<Node> {
     this.advance();
     const operandToken = this.peek();
-    const operand = this.primary();
+    const operand = this.descend(() => this.primary());
     if (!operand.ok) return operand;
 
     if (operand.value.kind !== "duration") {

@@ -214,12 +214,13 @@ describe("compile over a generated space of source strings", () => {
   // ParseError value. That is a statement about the sampled space and nothing
   // wider, and the entry below is named for it.
   //
-  // It does NOT establish that the function is total. The walks in the grammar
-  // and in the emitter are directly recursive, so a sufficiently DEEP source
-  // exhausts the host's stack rather than answering, and the entry after this
-  // one records two such sources by run. The generated space does not reach
-  // that depth - its members are short, and depth is what matters rather than
-  // length - which is exactly why a green run here is not the wider claim.
+  // It does NOT establish that the function is total. Totality over depth is
+  // a separate claim resting on a separate mechanism - the walks in the
+  // grammar and in the emitter are directly recursive and count their descent
+  // against a declared limit, which `test/source-depth.test.ts` pins - and the
+  // generated space reaches nothing like that depth, its members being short
+  // where depth rather than length is what matters. The entry after this one
+  // keeps the two sources that used to raise, to show they no longer do.
   //
   // Sabotage: having `compileAll` THROW the grammar's refusal instead of
   // answering it turned this red, the generated space being mostly sources the
@@ -252,21 +253,31 @@ describe("compile over a generated space of source strings", () => {
     expect(compiled + refused).toBe(2000);
   });
 
-  // The counter-example the entry above is bounded by, kept here rather than in
-  // prose so that it is checked rather than remembered. Both of these throw on
-  // this build, and running the stages one at a time locates each: the nested
-  // parentheses exhaust the stack in the grammar, the long chain in the
-  // emitter. Neither is fixed here - the arms of a fix change public surface
-  // and that is not this module's decision to take.
+  // The two sources the entry above used to be bounded by, kept here rather
+  // than in prose so that what changed about them is checked rather than
+  // remembered. Both of them used to run the host out of stack, and running
+  // the stages one at a time located each: the nested parentheses in the
+  // grammar, the long chain in the emitter. Both now answer, because each
+  // walk counts its own descent against the declared source depth and refuses
+  // past it. The depths written here are the ones that used to raise on one
+  // machine; they are kept as they were written so that this entry reads as
+  // the counter-example it was, and nothing about the bound is asserted from
+  // them. `test/source-depth.test.ts` holds the contract, written against the
+  // declared limit rather than against any machine.
   //
-  // Sabotage: reducing both depths to ones the stack survives - a hundred
-  // parentheses, a hundred terms - turned this red, both calls answering
-  // instead of throwing. Run and reverted.
-  it("exhausts the stack on a source deep enough, which is why the entry above is narrow", () => {
+  // Sabotage: removing the limit test from either walk turns this red, the
+  // call raising again rather than answering. Each was run and reverted.
+  it("answers rather than exhausting the stack on a source deep enough to", () => {
     const nested = `${"(".repeat(1000)}1${")".repeat(1000)}`;
-    expect(() => compile(nested)).toThrow(RangeError);
+    expect(compile(nested)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ reason: "nesting_depth_exceeded" }),
+    });
 
     const chained = Array.from({ length: 20000 }, (_, i) => `step_${i}`).join(" AND ");
-    expect(() => compile(chained)).toThrow(RangeError);
+    expect(compile(chained)).toEqual({
+      ok: false,
+      error: expect.objectContaining({ reason: "nesting_depth_exceeded" }),
+    });
   });
 });
