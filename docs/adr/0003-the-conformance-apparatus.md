@@ -609,8 +609,9 @@ hands its authored cases to the reference's own corpus generator,
 a source fails to compile, and the error arm of
 `scripts/lib/reference-transcript.exs` prints each problem and halts with a
 non-zero status. A refusal therefore has no oracle through it: the run that
-would record one ends instead. That generator also derives an instruction list
-and a result for every case it completes, and a rendering is neither, so a
+would record one ends instead. That generator also derives, for every
+case it completes, an instruction list, an outcome that is either a result or
+an error, a tier and a feature list. A rendering is none of those, so a
 decompile row has no field there to be written into. The second transcript is
 written by a script of its own that calls `Predicator.compile/1` and
 `Predicator.decompile/2` at the tag directly, over its authored list, in an
@@ -643,9 +644,14 @@ what differs between them. A producer that cannot write the field is a
 producer that cannot forget it.
 
 What was observed, on 2026-09-19, by running it at the tag: given a source
-whose decimal literal holds more digits than a finite double can carry,
+whose decimal literal names a magnitude outside the finite double range,
 `Predicator.compile/1` raises `ArgumentError` rather than answering a failing
-arm.
+arm. The number of digits is not the trigger: a literal carrying four hundred
+digits after the point compiles. The boundary is the range itself. A literal
+of one followed by three hundred and eight zeros and a fractional part
+compiles, and the same literal with one more zero raises; a literal for one
+point seven times that magnitude compiles, and one for one point eight times
+it raises.
 
 ### What this does not decide
 
