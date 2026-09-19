@@ -652,9 +652,9 @@ function isFloating(left: Value, right: Value): boolean {
  * remainder is smaller than its divisor. That is a statement about those two
  * paths and NOT about the opcodes they sit in - the divide opcode as a whole
  * can reach the refusal, by its float path, where a quotient overflows to an
- * infinity, and a test below asserts exactly that. Both paths route through
- * here anyway, because a reader checking a path against the record should not
- * have to redo that argument path by path.
+ * infinity, and a test in `test/evaluator.test.ts` asserts exactly that. Both
+ * paths route through here anyway, because a reader checking a path against
+ * the record should not have to redo that argument path by path.
  */
 function numericResult(magnitude: number, floating: boolean): Arithmetic {
   if (floating) {
@@ -958,7 +958,7 @@ function readMember(target: Value, name: string): Value {
  * and that written instruction is what this implements. The reference itself
  * reaches the same clause through a single test for its host language's atom
  * type, and ITS null value is one of those atoms, so the reference admits a
- * null key and answers an ordinary miss on it where this refuses it. That is a
+ * null key and looks it up like any other key, where this refuses it. That is a
  * deliberate divergence in favour of the written instruction over the behaviour
  * the host language happens to give the reference, not a consequence of the
  * domains differing. No conformance case pins either answer, so the question is
@@ -1813,6 +1813,17 @@ class Machine {
    * guard on the value decides before the helper that reads the direction is
    * ever reached. The depth, then the value on top of the stack, then the
    * direction.
+   *
+   * The value check is narrower than the reference's. This refuses anything
+   * on top of the stack that is not a duration, with the stack-value error.
+   * The reference's guard on that value is its host language's map test,
+   * which a duration passes and so does a map that is not one, and its
+   * conversion counts each duration unit it reads and does not find as zero;
+   * so an empty map, for one, moves the current time by nothing there and
+   * answers the current instant. Section 5 does not settle it: it names the
+   * refusal for a non-map, and in the reference a duration is itself a map.
+   * No conformance case pins either answer - the vendored corpus has no case
+   * that runs this opcode - so the question is open and unpinned here.
    */
   private relativeDate(direction: string, at: number): Step {
     if (this.stack.length < 1) return insufficientOperands("relative_date", at);
