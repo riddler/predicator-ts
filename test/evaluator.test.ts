@@ -10,8 +10,9 @@
 //                    implementation-local, so no case can pin them
 //   the policies     what a load of an absent root does under each setting,
 //                    which is an evaluation option and not in the corpus
-//   the refusals     a context the value domain has no member for, which a
-//                    case cannot carry because a case is written in the domain
+//   the refusals     a context or a literal the value domain has no member
+//                    for, which a case cannot carry because a case is written
+//                    in the domain
 //   the orderings    string order above the basic plane, which the corpus at
 //                    this version does not reach
 //
@@ -28,6 +29,7 @@ import {
   evaluateToValue,
   resolveOptions,
 } from "../src/evaluator.js";
+import { evaluate } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
 import { Duration, Float, float, PDate, PDateTime, Undefined, type Value } from "../src/values.js";
 
@@ -200,6 +202,81 @@ describe("a context the value domain cannot hold", () => {
       },
     );
     expect(outcome).toEqual({ ok: true, value: true });
+  });
+});
+
+describe("a literal integer outside the safe range", () => {
+  // A literal admits numbers into the domain as integers, so the rule the value
+  // boundary applies to a context binds it too: an integer outside the safe
+  // range is refused rather than rounded. No corpus case can carry such a
+  // literal, because a case is decoded from wire text and the decoder refuses
+  // the number before a program exists; a hand-built instruction list is the
+  // one way it reaches the machine, so the rule is pinned here, through the
+  // main entry point as well as the machine's own.
+  //
+  // Sabotage: removing the range check from the machine's lit method falsifies
+  // the rule that a literal admits no integer outside the safe range, and turns
+  // this test red, the literal answering ok with the number. It was run and
+  // reverted.
+  it("is refused with the boundary's reason, on either side of zero", () => {
+    const beyond = Number.MAX_SAFE_INTEGER + 1;
+    for (const limit of [beyond, -beyond, 2 ** 60]) {
+      const program: Program = [
+        ["load", "amount"],
+        ["lit", limit],
+        ["compare", "LT"],
+      ];
+      for (const outcome of [
+        evaluateToValue(program, { amount: 5000 }),
+        evaluate(program, { amount: 5000 }),
+      ]) {
+        expect(outcome.ok).toBe(false);
+        if (outcome.ok) continue;
+        expect(outcome.error.type).toBe("EvaluationError");
+        expect(outcome.error.reason).toBe("integer_out_of_range");
+        expect(outcome.error.position).toBe(1);
+      }
+    }
+  });
+
+  // An integer inside a list or a map operand is admitted just as one standing
+  // alone is, and an opcode can take it out again - indexing the list answers
+  // it - so the refusal looks at the whole operand, not only its top.
+  //
+  // Sabotage: stopping the literal's walk at the operand's top, so that it no
+  // longer descends lists and maps, falsifies the rule that an integer is
+  // refused wherever the operand carries it, and turns this test red. It was
+  // run and reverted.
+  it("is refused wherever the operand carries it", () => {
+    const beyond = Number.MAX_SAFE_INTEGER + 1;
+    for (const operand of [
+      [100, beyond],
+      { creditLimit: beyond },
+      [{ card: "visa", limits: [-beyond] }],
+    ]) {
+      const outcome = evaluateToValue([["lit", operand]]);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.reason).toBe("integer_out_of_range");
+    }
+  });
+
+  // The admitted range is closed at both ends: the largest and the smallest
+  // safe integer are integers of the domain. A float is not an integer at all
+  // and carries no safe-range rule, so a float of the same magnitude as a
+  // refused integer is admitted.
+  //
+  // Sabotage: tightening the check so that it refuses a magnitude AT the bound
+  // falsifies the rule that the bound itself is admitted, and turns this test
+  // red. It was run and reverted.
+  it("admits an integer at the bound, and a float past it", () => {
+    const biggest = Number.MAX_SAFE_INTEGER;
+    expect(evaluateToValue([["lit", biggest]])).toEqual({ ok: true, value: biggest });
+    expect(evaluateToValue([["lit", [-biggest]]])).toEqual({ ok: true, value: [-biggest] });
+    const outcome = evaluateToValue([["lit", float(2 ** 60)]]);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.value).toBeInstanceOf(Float);
   });
 });
 
@@ -1595,13 +1672,16 @@ describe("the six failures a well-formed store answers", () => {
   // A raw number that is not a safe integer is not an integer of this domain, so
   // it is refused as a segment rather than spelled as a key. The list case is
   // why this matters: a fractional index against a list would pad the list and
-  // write to a property the projection drops, which no caller could detect.
+  // write to a property the projection drops, which no caller could detect. A
+  // magnitude past the safe range is not among the segments below because a
+  // literal carrying one is refused at the literal, before the store is
+  // reached; the literal's own tests pin that.
   //
   // Sabotage: testing the segment with a bare typeof rather than the domain's
   // own integer predicate falsifies the rule that a segment is a string or an
   // integer and nothing else. It was run and reverted.
   it("refuses a segment that is a number the domain admits as no integer", () => {
-    for (const segment of [1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53] as Value[]) {
+    for (const segment of [1.5, Number.NaN, Number.POSITIVE_INFINITY] as Value[]) {
       const error = failure(
         [
           ["lit", "attempts"],
