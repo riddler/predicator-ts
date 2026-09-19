@@ -2041,51 +2041,58 @@ what the codec writes" made the tagged encoder keep the sign of negative zero,
 writing a float negative zero as `-0.0`, and said that `spell` in
 `src/tagged.ts` writes the sign. It did not change the `::string` cast, the
 concatenation `add` performs, or the `JSON.stringify` builtin, and each of
-those went on writing a float negative zero as `0.0`. This amendment decides
-that each of them writes it as `-0.0`.
+those went on answering text in which a float negative zero was written `0.0`.
+This amendment decides that each of them writes it as `-0.0`.
 
 **Why: the reference writes `-0.0` at each of them.** Run at predicator-ex
 `v9.4.1` (Elixir 1.18.3, OTP 27) with a context binding `x` to the float
 negative zero: `x::string` answered `"-0.0"`, `JSON.stringify(x)` answered
-`"-0.0"`, `"s" + x` answered `"s-0.0"`, `x + "s"` answered `"-0.0s"`, and the
-conformance encoder's canonical text for the value was `-0.0`. No case in the
-vendored corpus writes a float negative zero, so the corpus does not pin it.
+`"-0.0"`, `"s" + x` answered `"s-0.0"`, and `x + "s"` answered `"-0.0s"`.
+The reference's conformance encoder, `Predicator.Conformance.Values.to_json`
+followed by `Predicator.Conformance.JSON.encode_canonical`, wrote the value as
+`-0.0`. No file under the vendored `conformance/` contains the text `-0.0`, so
+the corpus does not pin it.
 
 **A float is written in one place.** `floatText` in `src/floats.ts` writes it:
 the host's own spelling with the sign of negative zero written, and a `.0`
 appended when that spelling carries neither a point nor an exponent. The string
-cast (`numberText` in `src/cast.ts`, which `add`'s concatenation calls), the
-tagged encoder (`encodeValue` in `src/tagged.ts`) and the JSON serializer
-(`serialize` in `src/functions/json.ts`) each call it. The module is internal:
-neither entry point re-exports it. `spell` in `src/tagged.ts` now writes an
-integer's sign only.
+cast (`numberText` in `src/cast.ts`), the tagged encoder (`encodeValue` in
+`src/tagged.ts`) and the JSON serializer (`serialize` in
+`src/functions/json.ts`) each call it. A concatenation writes a number through
+the string cast's function (`applyAdd` in `src/evaluator.ts`). The module is
+internal: neither entry point re-exports it. `spell` in `src/tagged.ts` is now
+called for an integer only (`encodeInteger` in `src/tagged.ts`).
 
-Before this change the three sites each kept a copy of the rule. Run over one
-table of floats before they were joined, the copies answered alike for every
-float in it except negative zero, which the tagged encoder wrote as `-0.0` and
-the other two as `0.0`.
+Before this change the string cast, the tagged encoder and the JSON serializer
+each kept a copy of the rule, and the copies differed on negative zero: the
+tagged encoder wrote it as `-0.0`, and the string cast and the JSON serializer
+as `0.0`.
 
 **It is pinned** by "the one spelling of a float" in `test/floats.test.ts`. It
 asks each place that writes a float - the string cast, a concatenation in each
 order, `JSON.stringify` and the tagged encoder - for the same table of floats
-and their spellings: integral and fractional magnitudes, both zeros, and values
-either side of where the host switches to exponent form at the large end and at
-the small end, each with its negative. It fails when any one of them writes a
-row differently from the table.
+and their spellings. The floats are `3`, `1.5`, `0`, `1e20`, `1e21`, `1e-6`
+and `1e-7`, each with its negative; `1e20` and `1e21` sit either side of where
+the host switches to exponent form at the large end, and `1e-6` and `1e-7` at
+the small end. It fails when any one of them writes a row differently from the
+table.
 
 ### What this does not decide
 
-**An integer negative zero is not changed.** The tagged encoder writes it as
-`-0`; the string cast, the concatenation and `JSON.stringify` write it as `0`.
-The reference has no integer negative zero to run.
+**An integer negative zero is not changed.** Run at this change's head, the
+tagged encoder writes it as `-0`, and the string cast and `JSON.stringify`
+write it as `0`, as does a concatenation (the string `"s"` followed by the
+integer answers `"s0"`). The reference has no integer negative zero to run.
 
 **The digits are the host's.** Apart from the sign of negative zero, the
 spelling starts from the host's own, and that differs from the reference's
-wherever the two languages choose a different form. Run at `v9.4.1`, the
-reference writes the floats `1e20`, `1e21` and `1e-6` as `1.0e20`, `1.0e21`
-and `1.0e-6`, where this package writes `100000000000000000000.0`, `1e+21` and
-`0.000001`. That divergence predates this amendment and is not decided here.
+wherever the two languages choose a different form. Run at `v9.4.1` through
+the `::string` cast, `JSON.stringify`, a concatenation in each order and the
+conformance encoder, the reference writes the floats `1e20`, `1e21` and `1e-6`
+as `1.0e20`, `1.0e21` and `1.0e-6` at each of them, where this package writes
+`100000000000000000000.0`, `1e+21` and `0.000001`. That divergence predates
+this amendment and is not decided here.
 
-Consequences. A `::string` cast, a concatenation or a `JSON.stringify` of a
-float negative zero answers text carrying a minus sign where it answered
-`0.0`. What the tagged encoder writes is unchanged.
+Consequences. In the text a `::string` cast, a concatenation or a
+`JSON.stringify` answers, a float negative zero is now written `-0.0` where it
+was written `0.0`. What the tagged encoder writes is unchanged.
