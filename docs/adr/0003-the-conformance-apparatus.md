@@ -566,3 +566,103 @@ as agreeing with the reference except where it declares a difference.
 **This note extends that paragraph's list of citing comments**, the sentence
 beginning "Those are the comments declaring", by the comment on
 `DATETIME_TEXT` in `src/iso.ts`. The paragraph's other sentences stand.
+
+## Amendment: a compile transcript at the tag, and one report constructor (2026-09-19)
+
+Status: proposed (2026-09-19)
+
+Recorded for `pts-g3mm`. This amendment is appended, and removes no line above.
+A file it does not touch is cited as read at commit `a30e50f`; the reference is
+cited as read and run at its tag `v9.4.1`.
+
+What this amends. The amendment above adds one transcript of the reference,
+and that transcript records only what the reference answers when it runs a
+source to a value. ADR-0004 decides a compiler surface whose failing arm
+carries the reference's message verbatim, and whose `decompile` renders a
+syntax tree under its own options; neither is a value the corpus holds,
+and neither has a record of the reference's own answer here. This amendment
+adds a second transcript beside the first, generated at the same tag, covering
+what the reference compiles, what it refuses, and how it renders.
+
+**The second transcript is `conformance/transcript/compile.json`, with
+`conformance/transcript/compile-SOURCE.json` beside it.** Those are its names
+because `conformance/transcript/SOURCE.json` is the first transcript's, and
+this change renames no file. `compile-SOURCE.json` records what the first
+transcript's does: the upstream repository, the tag, the commit
+`conformance/SOURCE.json` names for that tag, the corpus hash, the toolchain
+the reference ran on, the instruction-set version the reference reported, the
+command that wrote the file, and the file's sha256.
+
+**It carries three kinds of row, and each is authored here.** A success row
+holds a source the reference compiles, for a construct no vendored case
+reaches. A refusal row holds a source the reference refuses, one row for each
+member of the closed reason union ADR-0004 fixes, carrying the reference's
+message, position and span as the reference gave them. A decompile row holds a
+source and one combination of `decompile`'s options, `parentheses` against
+`spacing`, and the rendering the reference answered for it. The first
+transcript holds no decompile row at all, so the option matrix is recorded
+here and nowhere else.
+
+**The generator that writes the first transcript cannot write this one.** It
+hands its authored cases to the reference's own corpus generator,
+`Predicator.Conformance.Generator.generate/1`, which answers `{:error, _}` when
+a source fails to compile, and the error arm of
+`scripts/lib/reference-transcript.exs` prints each problem and halts with a
+non-zero status. A refusal therefore has no oracle through it: the run that
+would record one ends instead. That generator also derives an instruction list
+and a result for every case it completes, and a rendering is neither, so a
+decompile row has no field there to be written into. The second transcript is
+written by a script of its own that calls `Predicator.compile/1` and
+`Predicator.decompile/2` at the tag directly, over its authored list, in an
+export of the tag, and that is the whole of what it calls.
+
+**Its hash rule is the first transcript's.** The script is the only thing that
+writes `compile.json`, it is run by a person, and its diff is read like any
+other; no build step, test or gate stage runs the reference or rewrites the
+file. The file is never hand-edited: a row that reads wrongly is a row whose
+authored source changes, followed by a regeneration. The suite checks that
+`compile.json`'s sha256 is the one `compile-SOURCE.json` records, and that that
+file's tag, commit and corpus hash are `conformance/SOURCE.json`'s, before it
+reads a row. A refresh of the corpus to a later tag is followed by a
+regeneration of both transcripts at that tag.
+
+**This transcript is not a conformance record either.** It is outside the
+registry, a row that agrees is not a claim of conformance, and the corpus
+remains the contract.
+
+**Every conformance report, on either surface, is built by one shared
+constructor.** Today `runEvaluator` in `test/conformance/runner.ts` is the
+only thing that builds a report of a run over the corpus, and it writes that
+report's `isa_version` from `isaVersion()`, the accessor in
+`src/instructions.ts` that `src/index.ts` re-exports. A compiler-surface
+report is a second producer, and a second producer that assembles a report of
+its own can assemble one without that field, or with a version read from
+somewhere else. So the report object is built in one place, by a constructor
+both surfaces call, which writes that field from the accessor and takes only
+what differs between them. A producer that cannot write the field is a
+producer that cannot forget it.
+
+What was observed, on 2026-09-19, by running it at the tag: given a source
+whose decimal literal holds more digits than a finite double can carry,
+`Predicator.compile/1` raises `ArgumentError` rather than answering a failing
+arm.
+
+### What this does not decide
+
+**Whether the reference is total stays open.** The observation above says that
+a refusal transcript is not a transcript of everything the reference does to a
+source it will not compile, and nothing here decides what this package answers
+for such a source, or whether a row for one belongs in this transcript. That
+question is recorded on its own.
+
+**The transcript's content is not fixed here.** Which constructs a success row
+covers, and which source stands for a reason family, are chosen when the
+transcript is written, in a later change; what is decided here is that there is
+one, where it lives, how it is generated and what it must not be edited into.
+
+Consequences. A sentence about what the reference refuses, and a sentence about
+how it renders, can go red where today neither can. The cost is a second file
+that a corpus refresh obliges a regeneration of, and a second generation path
+to keep reading the same export. The report constructor costs the evaluator
+surface nothing today and is what makes the compiler surface's report carry the
+version without a second author remembering to write it.
