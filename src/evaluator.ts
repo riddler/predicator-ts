@@ -538,35 +538,44 @@ function isIntegral(value: Value): value is number {
 }
 
 /**
- * Whether a literal operand carries an integral number outside the safe range,
- * standing alone or anywhere inside its lists and maps.
+ * Why a literal operand's own properties refuse it, beyond its shape: it
+ * carries an integral number outside the safe range, or its properties nest
+ * past the depth limit. `undefined` when neither.
  *
  * Only an integral number is tested: a number the domain would hold as an
  * integer if it were in range. The walk descends every list and every object
  * `isPlainMap` reads as a map, and treats every other member as a leaf. It
- * visits each of a container's own properties rather than only its enumerable
- * ones, because a member access reads any own property. It keeps its own list
- * of what is left to visit instead of recursing, and visits each container
- * once, so neither a cycle nor a deep chain of properties the nesting check
- * does not follow can exhaust the stack or loop.
+ * follows each own string-keyed DATA property of a container, enumerable or
+ * not, because a member access reads any own property; it reads a property's
+ * value from its descriptor and never calls a getter, so no host code runs
+ * here and no getter can hand it a new object to visit. A container is
+ * visited once however many paths reach it, so a cycle ends the path it
+ * closes. The outermost container is level one, as in the nesting check, and
+ * a container past `DEPTH_LIMIT` refuses the operand, so the recursion is
+ * never deeper than one level past the limit.
  */
-function carriesUnsafeInteger(operand: Value): boolean {
-  const pending: unknown[] = [operand];
-  const visited = new Set<object>();
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (typeof value === "number") {
-      if (Number.isInteger(value) && !Number.isSafeInteger(value)) return true;
-      continue;
-    }
-    if (value === null || typeof value !== "object") continue;
-    if (!Array.isArray(value) && !isPlainMap(value)) continue;
-    if (visited.has(value)) continue;
-    visited.add(value);
-    const members = value as { [key: string]: unknown };
-    for (const name of Object.getOwnPropertyNames(value)) pending.push(members[name]);
+function literalFault(
+  value: unknown,
+  depth: number,
+  visited: Set<object>,
+): "integer_out_of_range" | "depth_limit_exceeded" | undefined {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && !Number.isSafeInteger(value)
+      ? "integer_out_of_range"
+      : undefined;
   }
-  return false;
+  if (value === null || typeof value !== "object") return undefined;
+  if (!Array.isArray(value) && !isPlainMap(value)) return undefined;
+  if (visited.has(value)) return undefined;
+  if (depth > DEPTH_LIMIT) return "depth_limit_exceeded";
+  visited.add(value);
+  for (const name of Object.getOwnPropertyNames(value)) {
+    const property = Object.getOwnPropertyDescriptor(value, name);
+    if (property === undefined || !("value" in property)) continue;
+    const fault = literalFault(property.value, depth + 1, visited);
+    if (fault !== undefined) return fault;
+  }
+  return undefined;
 }
 
 /** Whether either operand is a float, which is what makes a result one. */
@@ -1214,13 +1223,20 @@ class Machine {
    * outside the safe range is refused here too, wherever the operand carries
    * it, rather than rounded - the rule the value boundary applies to a host's
    * context. The shape is checked first, so an operand that fails both
-   * answers the shape's reason. Nothing else about the operand is checked
-   * here.
+   * answers the shape's reason. The walk that looks for such an integer also
+   * follows the non-enumerable data properties the shape check passes over,
+   * and an operand whose properties nest past the depth limit there is
+   * refused with the shape's reason too. Nothing else about the operand is
+   * checked here.
    */
   private lit(operand: Value, at: number): Step {
     const fault = nestingFault(operand, isPlainMap);
     if (fault !== undefined) return { ok: false, error: nestingError(fault, "the literal", at) };
-    if (carriesUnsafeInteger(operand)) {
+    const carried = literalFault(operand, 1, new Set());
+    if (carried === "depth_limit_exceeded") {
+      return { ok: false, error: nestingError(carried, "the literal", at) };
+    }
+    if (carried === "integer_out_of_range") {
       return {
         ok: false,
         error: new EvaluationError(

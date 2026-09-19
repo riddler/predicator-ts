@@ -31,6 +31,7 @@ import {
 } from "../src/evaluator.js";
 import { evaluate } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
+import { DEPTH_LIMIT } from "../src/nesting.js";
 import { Duration, Float, float, PDate, PDateTime, Undefined, type Value } from "../src/values.js";
 
 const APPROVED = [
@@ -340,6 +341,64 @@ describe("a literal integer outside the safe range", () => {
         ]),
       ).toEqual({ ok: true, value: biggest });
     }
+  });
+
+  // The literal's check reads a property's value from its descriptor and never
+  // calls a getter, so a getter that answers a new object every time it is
+  // read - here one that answers by name, a signup step whose next step is
+  // built on demand - cannot hand the walk an endless chain. The getter runs
+  // once, when the member access itself reads it.
+  //
+  // Sabotage: reading each property by value, which calls the getter,
+  // falsifies the rule that the literal's check runs no host code, and turns
+  // this test red: the walk follows the chain until the depth limit refuses
+  // it. It was run and reverted.
+  it("never calls a getter on the operand", () => {
+    let reads = 0;
+    const step = (name: string): object => {
+      const built = { name };
+      Object.defineProperty(built, "next", {
+        get: () => {
+          reads += 1;
+          return step(`${name}-next`);
+        },
+        enumerable: false,
+      });
+      return built;
+    };
+    const outcome = evaluateToValue([
+      ["lit", step("plan") as unknown as Value],
+      ["access", "next"],
+      ["access", "name"],
+    ]);
+    expect(outcome).toEqual({ ok: true, value: "plan-next" });
+    expect(reads).toBe(1);
+  });
+
+  // The nesting check follows only enumerable members, so a chain of
+  // non-enumerable data properties is the literal's own walk to bound. It
+  // counts levels as the nesting check does: at the limit the operand is
+  // admitted, one level deeper it is refused with the nesting reason.
+  //
+  // Sabotage: dropping the depth test from the literal's walk falsifies the
+  // rule that the walk refuses an operand whose properties nest past the depth
+  // limit, and turns this test red. It was run and reverted.
+  it("refuses an operand whose hidden properties nest past the limit", () => {
+    const chain = (levels: number): object => {
+      let value: object = { amount: 4200 };
+      for (let level = 1; level < levels; level += 1) {
+        const outer = {};
+        Object.defineProperty(outer, "inner", { value, enumerable: false });
+        value = outer;
+      }
+      return value;
+    };
+    expect(evaluateToValue([["lit", chain(DEPTH_LIMIT) as unknown as Value]]).ok).toBe(true);
+    const past = evaluateToValue([["lit", chain(DEPTH_LIMIT + 1) as unknown as Value]]);
+    expect(past.ok).toBe(false);
+    if (past.ok) return;
+    expect(past.error.reason).toBe("depth_limit_exceeded");
+    expect(past.error.position).toBe(0);
   });
 });
 
