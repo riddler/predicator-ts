@@ -38,7 +38,8 @@ import {
 import type { Registry, RegistryEntry } from "../../scripts/lib/registry-encoding.mjs";
 import { encodeRegistry } from "../../scripts/lib/registry-encoding.mjs";
 import { isaVersion } from "../../src/index.js";
-import type { Report } from "./runner.js";
+import { loadCorpus } from "./reports.js";
+import type { CorpusInput, Report } from "./runner.js";
 import { runCompiler, runEvaluator } from "./runner.js";
 
 const registryPath = fileURLToPath(new URL("../../conformance/registry.json", import.meta.url));
@@ -210,7 +211,7 @@ function withEntries(entries: readonly RegistryEntry[], claims: Registry["claims
  * so the set of runs follows the registry's entries. Adding a surface to the
  * conformance runner adds its row here and nothing else.
  */
-const runs: Readonly<Record<Surface, (tier: number) => Report>> = {
+const runs: Readonly<Record<Surface, (tier: number, corpus: CorpusInput) => Report>> = {
   compiler: runCompiler,
   evaluator: runEvaluator,
 };
@@ -289,7 +290,7 @@ describe("the registry this package ships", () => {
     const surfaces = new Set(registry.entries.map((entry) => entry.surface));
     const reports = [...surfaces].flatMap((surface) => {
       const run = runs[surface as Surface];
-      return run === undefined ? [] : [run(topTier)];
+      return run === undefined ? [] : [run(topTier, loadCorpus(topTier))];
     });
     expect(currencyProblems(registry, reports)).toEqual([]);
   });
