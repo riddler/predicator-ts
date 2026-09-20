@@ -15,11 +15,6 @@ This package is the TypeScript sibling: same language, same instruction set,
 same answers, so an expression authored once can be compiled on a server and
 evaluated in a browser or in a React Native app without a round trip.
 
-> **Pre-release.** `package.json` carries the version `0.0.0`, and nothing
-> built from this repository has been published. The surface below is this
-> build's, and what this build claims against the shared conformance corpus is
-> recorded in `conformance/registry.json`.
-
 ## Install
 
 **The name carries an earlier generation of this project.**
@@ -36,12 +31,13 @@ deprecated but not recalled. A registry is live: read it yourself rather than
 trusting this paragraph's date.
 
 ```bash
-pnpm add @riddler/predicator
+pnpm add @riddler/predicator@^0.2.0
 ```
 
-A bare install resolves to whatever the registry offers as `latest` under the
-name. Nothing but a publish from this repository moves that pointer to a
-build of this code.
+The version is named because a bare install resolves to whatever the registry
+offers as `latest` under the name, and nothing but a publish from this
+repository moves that pointer to a build of this code. Naming it asks for a
+build of this code whatever `latest` points at.
 
 The package has **no runtime dependencies** - there is no `dependencies` key in
 its `package.json` at all - and assumes no host environment. It imports no Node
