@@ -601,19 +601,23 @@ const LITERAL_CONTAINER_LIMIT = 65536;
 
 /**
  * Why a literal operand's own properties refuse it, beyond its shape: it
- * carries an integral number outside the safe range, a container the walk
- * first reaches past the depth limit, more containers than
- * `LITERAL_CONTAINER_LIMIT`, or a list whose prototype is not the array
- * prototype. `undefined` when none of those.
+ * carries an integral number outside the safe range, a number that is not
+ * finite, a container the walk first reaches past the depth limit, more
+ * containers than `LITERAL_CONTAINER_LIMIT`, or a list whose prototype is not
+ * the array prototype. `undefined` when none of those.
  *
  * A list's prototype is checked because the opcodes read a list's element by
  * index, and an index the list does not hold itself reads through its
  * prototype. With the array prototype as the only one admitted, what such a
  * read finds is the built-in prototype's and not the operand's.
  *
- * Only an integral number is tested: a number the domain would hold as an
- * integer if it were in range. The walk descends every list and every object
- * `isPlainMap` reads as a map, and treats every other member as a leaf. It
+ * Two faults a raw number can carry are tested: an integral number outside the
+ * safe range, and a number that is not finite, for which the domain has no
+ * member at all. A finite number that is not integral carries neither and is
+ * not refused here; the record says why. A `Float` is a leaf, like every other
+ * class the machine holds, so only a raw number reaches either test. The walk
+ * descends every list and every object `isPlainMap` reads as a map, and treats
+ * every other member as a leaf. It
  * follows each own string-keyed DATA property of a container, enumerable or
  * not, because a member access reads any own string-keyed property of a map;
  * on a list that includes the properties that are not elements, which no
@@ -634,11 +638,13 @@ function literalFault(
   visited: Set<object>,
 ):
   | "integer_out_of_range"
+  | "non_finite_number"
   | "depth_limit_exceeded"
   | "too_many_containers"
   | "unsupported_host_value"
   | undefined {
   if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "non_finite_number";
     return Number.isInteger(value) && !Number.isSafeInteger(value)
       ? "integer_out_of_range"
       : undefined;
@@ -1331,9 +1337,16 @@ class Machine {
    * A literal also admits numbers into the domain as integers, so an integer
    * outside the safe range is refused here too, wherever the operand holds it
    * in a data property, rather than rounded - the rule the value boundary
-   * applies to a host's context. The shape is checked first, so an operand
-   * that fails both answers the shape's reason. The walk that looks for such
-   * an integer also follows the data properties the shape check passes over:
+   * applies to a host's context. A number that is not finite is refused the
+   * same way and in the same places, with the reason the value boundary
+   * carries at that bound, `"non_finite_number"`: the domain has no member for
+   * it, and admitting one let a `::float` cast of it raise the float class's
+   * error out of an entry point, where errors are values. A finite number that
+   * is not integral is neither of those and is still admitted; the record says
+   * why, and the store's segment check is where the machine refuses it. The
+   * shape is checked first, so an operand that fails both answers the shape's
+   * reason. The walk that looks for such a number also follows the data
+   * properties the shape check passes over:
    * the non-enumerable ones, and a list's properties that are not elements.
    * It answers the first fault it meets. It refuses, with the depth limit's
    * reason, an operand in which it first reaches a container past the depth
@@ -1375,6 +1388,16 @@ class Machine {
         error: new EvaluationError(
           "integer_out_of_range",
           "the literal carries an integer outside the safe range",
+          at,
+        ),
+      };
+    }
+    if (carried === "non_finite_number") {
+      return {
+        ok: false,
+        error: new EvaluationError(
+          "non_finite_number",
+          "the literal carries a number that is not finite",
           at,
         ),
       };
