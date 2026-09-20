@@ -421,12 +421,19 @@ describe("every rule catches what it documents", () => {
 describe("the bare builtin list", () => {
   // Sabotage: dropping the running Node's list from `bareNodeBuiltins` in
   // scripts/engine-neutrality.mjs, leaving the written list alone, turns this
-  // red on the builtins the written list lacks.
+  // red on the builtins the written list lacks; deleting the summary line that
+  // file writes after its findings turns the completeness assertion red alone.
   it("refuses every builtin the running Node lists, bare and by subpath", () => {
     const bare = builtinModules.filter((name) => !name.startsWith("node:"));
     expect(bare.length).toBeGreaterThan(0);
     const { status, output } = scanLine(root, bare.map((name) => `import "${name}";`).join("\n"));
     expect(status).toBe(1);
+    // This is by far the longest report the check writes, and it is read back
+    // out of a pipe. Its summary line is the last thing written, so asking for
+    // that line here separates a report that arrived short from a builtin that
+    // was not refused - two different failures which otherwise look the same,
+    // a findings list that stops early. The count is the enumeration above.
+    expect(output).toContain(`engine-neutrality: ${bare.length} findings in 1 files`);
     expect(findings(output)).toEqual(
       bare.map((_name, i) => `fixture.ts:${i + 1}: node-builtin-import-bare`),
     );
