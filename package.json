@@ -1,6 +1,6 @@
 {
   "name": "@riddler/predicator",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "description": "A conformant TypeScript sibling of the Predicator reference implementation: the expression language, its instruction set architecture, and the shared conformance corpus.",
   "license": "MIT",
   "type": "module",
