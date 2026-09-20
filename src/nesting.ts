@@ -124,31 +124,62 @@ export function enterContainer(
  * package did not define as a map, so such an object is walked here too
  * rather than passed over as a leaf. It stops at the first fault, so its own
  * recursion never goes deeper than one level past the limit.
+ *
+ * **It descends each container once**, however many paths reach it. A
+ * container it has already descended without fault is remembered together
+ * with its own height - how many levels its deepest container sits below it,
+ * itself counting as one - and a later path that reaches the same container
+ * answers from that height rather than walking it again. So the work is
+ * bounded by the number of distinct containers and the references between
+ * them rather than by the number of paths through them, and a value built out
+ * of shared lists or maps answers instead of taking time that doubles with
+ * every level. The answer is the same either way: a container already
+ * descended without fault holds no cycle, and whether it fits under the limit
+ * where a later path puts it is a question its height settles.
+ *
+ * One consequence worth stating, because it is the only thing a host can
+ * observe: the members of a shared container are read once rather than once
+ * per path, so a getter or a proxy trap on such a value runs once here.
  */
 export function nestingFault(
   value: unknown,
   isMap: (value: object) => boolean,
   level = 1,
 ): NestingReason | undefined {
-  return walk(value, level, new Set(), isMap);
+  return walk(value, level, new Set(), new Map(), isMap);
 }
 
+/**
+ * `checked` maps a container this walk has already descended without fault to
+ * its height. A container is recorded only after every member below it
+ * answered, so it is never one of `ancestors`: a walk still inside a container
+ * has not recorded it yet.
+ */
 function walk(
   value: unknown,
   depth: number,
   ancestors: Set<object>,
+  checked: Map<object, number>,
   isMap: (value: object) => boolean,
 ): NestingReason | undefined {
   if (value === null || typeof value !== "object") return undefined;
   const isList = Array.isArray(value);
   if (!isList && !isMap(value)) return undefined;
+  const height = checked.get(value);
+  if (height !== undefined) {
+    return depth + height - 1 > DEPTH_LIMIT ? "depth_limit_exceeded" : undefined;
+  }
   const fault = enterContainer(value, depth, ancestors);
   if (fault !== undefined) return fault;
   const members: unknown[] = isList ? Array.from(value as unknown[]) : Object.values(value);
+  let tallest = 1;
   for (const member of members) {
-    const inner = walk(member, depth + 1, ancestors, isMap);
+    const inner = walk(member, depth + 1, ancestors, checked, isMap);
     if (inner !== undefined) return inner;
+    const below = member !== null && typeof member === "object" ? checked.get(member) : undefined;
+    if (below !== undefined && below + 1 > tallest) tallest = below + 1;
   }
   ancestors.delete(value);
+  checked.set(value, tallest);
   return undefined;
 }

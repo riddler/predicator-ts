@@ -2540,3 +2540,77 @@ rather than on a value this package answered, is outside every one of those and
 holds the shape of what it passes. The projection's doc comment in
 `src/values.ts` now says so, and says that what it raises is the engine's own
 error rather than a refusal of this package's.
+
+## Amendment: the shape walk descends each container once (2026-09-20)
+
+Status: proposed (2026-09-20)
+
+Recorded for `pts-504`. This amendment is appended and removes no line above.
+The amendment on cycles, nesting and the one depth limit rules what a walk
+answers about a value's shape, and says nothing about what answering costs.
+That left one shape unbounded. `nestingFault` in `src/nesting.ts` (read at
+`615e264`) held the containers on the path from the root and gave a container
+its level back on the way out, so a container several paths reach was
+descended once per path although the value holds one of it. The paths through
+a value whose members share their containers double with every level it
+gains, so a value a host builds out of a few dozen small maps took time no
+caller can wait out - and a walk that neither answers nor raises is outside
+the promise that failure is a value, which covers outcomes only.
+
+### The shape walk descends each container once
+
+**`nestingFault` in `src/nesting.ts` records each container it has descended
+without fault, together with that container's height - how many levels its
+deepest container sits below it, itself counting as one - and answers a later
+path that reaches the same container from that height rather than descending
+it again.** The work is then bounded by how many containers the value holds
+and how many references run between them, rather than by how many paths run
+through them.
+
+**Neither answer moves.** A container already descended without fault holds
+no cycle, so a later path through it closes none: only a container that is
+its own ancestor is a cycle, and a container a walk is still inside has not
+been recorded yet. Whether that container fits under the limit where a later
+path puts it is what its height settles, which is why the height is
+remembered beside it rather than the bare fact of having been descended. The
+reasons are the two this record already declares and no reason is added.
+
+### What this does not reach, and why
+
+**Normalization, `fromHost` in `src/values.ts` (read at `615e264`), and the
+encode direction of the codec, `encodeTagged` in `src/tagged.ts` (read at
+`615e264`), still descend a shared container once per path.** Each builds an
+answer whose size is the number of paths: the amendment above rules that such
+a value "is normalized, or written, at each place it appears", and a
+normalized copy and a run of wire text are per path by construction, so
+remembering a container in either would change what it answers rather than
+only what it costs to answer. That is a separate decision and is not taken
+here.
+
+**So what this amendment bounds is the shape check alone** - the check a
+`lit` operand, a `store` write and a result each pass through, and that each
+operand of a comparison or a membership test passes through in turn, the
+second only when the first answered clean. All of them are named under "What
+counts against the limit" above, and each still answers exactly what it
+answered before.
+
+### One thing a host can observe
+
+**The members of a container are read once rather than once per path**, so a
+getter or a proxy trap on a container two paths share runs once per shape
+check rather than once per path that reaches it. It is not once per call into
+this package: a shape check runs at each instruction that has one, and at the
+entry points that check what they hand back, so one call may run several. An
+error such a getter throws still propagates unchanged, as the section on host
+code that throws requires; what moves is how many times it can be thrown
+from.
+
+### What pins it
+
+`test/nesting.test.ts` builds a signup funnel sixty levels deep whose every
+step holds the same next step under two keys, gives the walk a map test that
+counts what it is asked and refuses past a budget, and asserts the walk
+answers having asked no more than twice the funnel's levels. Beside it: a
+cycle reached through a container two paths share is still refused, a
+container two paths share is still admitted, and a container that fits where
+one path puts it is still refused where a deeper path puts it.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { describeFault, jsonFault } from "../src/functions/json.js";
 import { evaluate, execute, executeValue, type Program } from "../src/index.js";
-import { DEPTH_LIMIT } from "../src/nesting.js";
+import { DEPTH_LIMIT, nestingFault } from "../src/nesting.js";
 import { decodeTagged, encodeTagged, evaluateTagged } from "../src/tagged.js";
 import { Duration, fromHost, PDate, type Value } from "../src/values.js";
 
@@ -612,6 +612,138 @@ describe("the JSON parse builtin", () => {
       expect(jsonFault(text)).toBeUndefined();
       expect(parse(text).ok).toBe(true);
     }
+  });
+});
+
+/**
+ * A signup funnel `levels` deep whose every step holds the SAME next step
+ * under two keys, so the value holds one map per level while the number of
+ * paths from the outermost step to the innermost doubles at every level.
+ */
+function sharedFunnel(levels: number): Record<string, unknown> {
+  let step: Record<string, unknown> = { step: "done" };
+  for (let level = 1; level < levels; level += 1) step = { skipped: step, taken: step };
+  return step;
+}
+
+/** The map test a walk is given, reading a plain object as a map. */
+function plainMap(value: object): boolean {
+  return Object.getPrototypeOf(value) === Object.prototype;
+}
+
+/**
+ * The same map test, counting what it is asked and refusing to answer past a
+ * budget. A walk that fans out stops at the budget rather than running until
+ * the suite gives up, so the count is what the assertion reads and how long
+ * the machine takes is not.
+ */
+function budgetedMapTest(budget: number): {
+  readonly asked: () => number;
+  readonly isMap: (value: object) => boolean;
+} {
+  let asked = 0;
+  return {
+    asked: () => asked,
+    isMap: (value: object): boolean => {
+      asked += 1;
+      if (asked > budget) throw new Error(`the walk asked about more than ${budget} members`);
+      return plainMap(value);
+    },
+  };
+}
+
+/**
+ * The same funnel with each step's two members behind a getter that counts
+ * the reads and refuses past a budget, so a walk that reads them once per
+ * path stops at the budget rather than running until the suite gives up. The
+ * machine's own literal check reads a property's value from its descriptor
+ * and never calls a getter, so what these count is the shape walk's reads.
+ */
+function budgetedFunnel(levels: number, budget: number): Record<string, unknown> {
+  let read = 0;
+  const counted = (member: unknown): unknown => {
+    read += 1;
+    if (read > budget) throw new Error(`the walk read more than ${budget} members`);
+    return member;
+  };
+  let step: Record<string, unknown> = { step: "done" };
+  for (let level = 1; level < levels; level += 1) {
+    const next = step;
+    step = {
+      get skipped(): unknown {
+        return counted(next);
+      },
+      get taken(): unknown {
+        return counted(next);
+      },
+    };
+  }
+  return step;
+}
+
+/** `count` lists piled around a value. */
+function piled(count: number, inner: unknown): unknown {
+  let value = inner;
+  for (let level = 0; level < count; level += 1) value = [value];
+  return value;
+}
+
+describe("the shape walk over a value built from shared containers", () => {
+  // Deep enough that a walk taking one path at a time would not finish: the
+  // paths double at every level, and the containers do not.
+  const LEVELS = 60;
+
+  // Sabotage: dropping the `checked` lookup from the walk, so a container is
+  // descended once per path again, makes the map test refuse past its budget
+  // and this raise instead of answering. It was run and reverted.
+  it("descends each container once however many paths reach it", () => {
+    const test = budgetedMapTest(LEVELS * 8);
+    expect(nestingFault(sharedFunnel(LEVELS), test.isMap)).toBeUndefined();
+    expect(test.asked()).toBeLessThanOrEqual(LEVELS * 2);
+  });
+
+  // Sabotage: answering `"cyclic_value"` from the `checked` lookup - reading
+  // it as "seen at all" rather than "descended without fault" - refuses this
+  // shared card. It was run and reverted.
+  it("admits a container two paths share", () => {
+    const card = { brand: "visa", last4: "4242" };
+    expect(
+      nestingFault({ primary: card, backup: card, cards: [card, card] }, plainMap),
+    ).toBeUndefined();
+  });
+
+  // Sabotage: recording a container in `checked` before its members answer -
+  // moving the record above the loop - admits this cycle. It was run and
+  // reverted.
+  it("still refuses a cycle reached through a container two paths share", () => {
+    const card: Record<string, unknown> = { brand: "visa" };
+    const cardholder: Record<string, unknown> = { name: "Ada", primary: card, backup: card };
+    card.cardholder = cardholder;
+    expect(nestingFault(cardholder, plainMap)).toBe("cyclic_value");
+  });
+
+  // The remembered height is what a later path measures against, so a
+  // container that fits where one path puts it is still refused where a
+  // deeper one does. Sabotage: answering `undefined` from the `checked` lookup
+  // without comparing the depth against the height admits the second row. It
+  // was run and reverted.
+  it("measures a shared container again where a deeper path puts it", () => {
+    const branch = piled(8, 4200);
+    expect(
+      nestingFault({ near: branch, far: piled(DEPTH_LIMIT - 9, branch) }, plainMap),
+    ).toBeUndefined();
+    expect(nestingFault({ near: branch, far: piled(DEPTH_LIMIT - 8, branch) }, plainMap)).toBe(
+      "depth_limit_exceeded",
+    );
+  });
+
+  // A `lit` operand is checked for its shape at its own instruction, so the
+  // fan-out was reachable from a published entry point. Sabotage: dropping the
+  // `checked` lookup makes the budget's error propagate out of `execute`
+  // rather than this answering. It was run and reverted.
+  it("answers a lit operand built from shared maps", () => {
+    const funnel = budgetedFunnel(LEVELS, LEVELS * 8) as Value;
+    expect(execute([["lit", funnel]])).toEqual({ ok: true, context: {} });
   });
 });
 
