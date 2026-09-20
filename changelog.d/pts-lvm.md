@@ -5,10 +5,13 @@
   rather than entering the evaluation as a successful value, as a host's
   context value already was.
 - A `lit` operand built from a class, or from an object with another
-  prototype, that contains itself or nests past the depth limit is refused at
-  its own instruction with `cyclic_value` or `depth_limit_exceeded`. Before,
-  it was admitted, and one that contained itself or nested deep enough raised
-  a stack overflow when it was compared or handed back.
+  prototype, that contains itself through its enumerable members, or that
+  nests past the depth limit, is refused at its own instruction with
+  `cyclic_value` or `depth_limit_exceeded`; a self-reference held in a hidden
+  property is not one the cycle check follows, and such an operand is still
+  admitted. Before, every such operand was admitted, and one that contained
+  itself or nested deep enough raised a stack overflow when it was compared
+  or handed back.
 - A `lit` operand in which the literal's range check would visit more than
   65536 distinct lists and maps is refused with `depth_limit_exceeded`, unless
   that check meets another fault first. So the range check visits a bounded
