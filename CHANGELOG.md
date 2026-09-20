@@ -10,8 +10,9 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
-This package has not been released. The first version section appears here when
-the first release is cut.
+A version section here is written when that release is prepared, which is before
+it is published. A section records what its version carries; whether that version
+is on the registry is a question for the registry.
 
 ## [0.2.0] 2026-09-20
 
