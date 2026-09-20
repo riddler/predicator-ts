@@ -5,7 +5,7 @@
 | [0001](0001-a-conformant-sibling.md) | A conformant sibling, not a second reference implementation | accepted |
 | [0002](0002-the-value-domain-and-the-host-boundary.md) | The value domain in TypeScript, and the host boundary | accepted |
 | [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | accepted |
-| [0004](0004-the-compiler-surface.md) | The compiler surface | proposed |
+| [0004](0004-the-compiler-surface.md) | The compiler surface | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences). A record that states a public signature adds a Typespecs

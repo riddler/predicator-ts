@@ -1,6 +1,6 @@
 # ADR-0004: The compiler surface - `compile` answers a program of domain values, and a parse failure is a value
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 ## Context
 
@@ -467,7 +467,7 @@ ADR-0001's Consequences section says is never fixed by touching the corpus.
 
 ## Amendment: a numeric literal the domain cannot represent is refused, under a member this package authors (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 Recorded for `pts-zfre`. This amendment is appended, and removes no line above.
 
@@ -711,7 +711,7 @@ implementation, and it goes away with the implementation.
 
 ## Amendment: a source nesting deeper than the walks will follow is refused, under a member this package authors (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-19; proposed 2026-09-19)
 
 What this amends. This entry's decision falsifies two statements above, and
 each is named here rather than edited, so no line above is removed.
@@ -1002,3 +1002,84 @@ later refresh of the corpus will. The row's source is authored beside the
 others in `scripts/lib/reference-compile.exs`. Read as being about the corpus,
 "the conformance run is silent about it" stays true; what is no longer silent
 is the diff against the transcript.
+
+## Note: this record's acceptance, and its two amendments' (2026-09-19)
+
+Recorded for `pts-thly`. This note records that the record above and both of
+its amendments moved from proposed to accepted together. It decides nothing,
+so it carries no Status line, and it removes no line. Code is cited as read
+at commit `f89705e`; the reference is cited as run at its tag `v9.4.1`.
+
+**The three status words moved together, and could not have moved apart.**
+The amendment on nesting depth declares the record's opening Decision
+sentence untrue, and the amendment on a numeric literal declares six further
+statements untrue. Accepting the body while either amendment stayed at
+proposed would have left a reader of an accepted record meeting a statement
+that record's own file says is false, corrected only by an entry not yet
+adopted.
+
+**The sentence saying this package compiles what the reference's
+`Predicator.compile/1` compiles is still untrue, and the amendment on
+nesting depth is what says so.** Run in a detached export of the tag whose
+`mix.exs` declares version `9.4.1`, `Predicator.compile/1` answers
+`{:ok, _}` for an integer wrapped in each of 256, 257, 300, 1000, 5000,
+10000, 50000 and 100000 parentheses: eight depths, every one answered. Run at
+`f89705e`, this package compiles 255 written parentheses and refuses 256
+under `nesting_depth_exceeded`. What the acceptance changes is not that
+sentence but its correction's standing, which is now an adopted entry rather
+than a pending one.
+
+**Every other claim was re-checked before the status words moved**, against
+the tree at `f89705e` rather than against the tree each entry was appended
+over: the iterative walk over a chain's left spine, the transcript row
+holding the depth divergence, and the note below both amendments all landed
+afterwards. Each claim was re-located by anchor, and a claim about the
+reference was run in that export rather than read.
+
+**The union is closed at twenty-four members.** `ParseReason` in
+`src/errors.ts` was parsed a member at a time: twenty-four, no duplicate,
+terminated. The first twenty-two are the two tables' rows in the tables'
+order, then `number_out_of_range` and `nesting_depth_exceeded`.
+
+**The messages are still the reference's, byte for byte.** Each of the
+twenty-two members of the first kind was produced from both sides and
+compared: the six lexer families, including the single-quoted wording and an
+unterminated datetime literal reported with the date wording, and the sixteen
+parser families. So were the three end-of-input spellings, both assignment
+sources answering the assignment family, and `len 1` answering the
+trailing-token family.
+
+**The positions and the spans still hold.** `compileWithPositions` and
+`compileWithSpans` on `score > 85` answer the same three instructions with
+the two tables this record shows, each matching the reference's run. A string
+literal holding one astral character reports the next refused character at
+column 6 rather than the 7 a UTF-16 index would give; a one-character refusal
+at line 1 column 3 carries a span ending at column 4; `compile("score >")`
+carries a zero-width span at line 1 column 8; and a refusal on a second line
+reports line 2, column 1.
+
+**The numeric bound still bisects where this record says.** At the tag, a
+literal of seventeen significant digits followed by two hundred ninety-two
+zeros and a fractional part compiles at three hundred eleven characters and
+its successor of the same length raises `ArgumentError`; four hundred digits
+after the point compile. At `f89705e` both numeric halves answer
+`number_out_of_range` under one message, and the largest finite double still
+compiles.
+
+**The promise that `compile` never throws was probed rather than reasoned
+about.** Seventeen pathological sources, among them a list of two hundred
+thousand elements, an identifier and an unterminated string literal each a
+million characters long, a lone surrogate, a nul byte, three hundred thousand
+unbalanced openers, and nestings and chains a hundred thousand deep, each
+answered an arm. None threw.
+
+**The deepest expression in the vendored corpus nests four levels as a tree,
+and costs three against the bound.** The sentence stating the tree depth
+stands: the deepest source-bearing case is a property access under two casts,
+four nodes from root to leaf. Since `visitChain` in `src/emitter.ts` began
+walking a left spine in a loop, that case's chain costs one level rather than
+three, so the deepest count any source-bearing case reaches is three. The
+count was taken by compiling every source-bearing case against a lowered
+limit and bisecting, over the two hundred and three source-bearing cases a
+parse of every corpus file finds. Each sentence using the number says only
+that no case reaches the bound, which holds at either count.
