@@ -27,7 +27,7 @@
 
 import { EvaluationError } from "./errors.js";
 import { type EvaluateOptions, evaluateToValue, type ProjectedEvaluation } from "./evaluator.js";
-import { floatText } from "./floats.js";
+import { floatMagnitude, floatText } from "./floats.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
 import { isPlainMap, setKey } from "./maps.js";
@@ -488,9 +488,7 @@ export function encodeTagged(value: Value): EncodeResult {
 function encodeValue(value: Value | undefined, depth: number, ancestors: Set<object>): string {
   if (value === Undefined) return tagAt(depth, 0, '{"$type":"undefined"}');
   if (value === null) return "null";
-  // No finiteness check: a Float wraps a finite number by construction, and
-  // `floatText` writes it so that it decodes as a float, sign included.
-  if (value instanceof Float) return floatText(value);
+  if (value instanceof Float) return encodeFloat(value);
   if (value instanceof PDate) {
     return tagAt(depth, 0, `{"$type":"date","value":"${encodeDate(value)}"}`);
   }
@@ -550,6 +548,22 @@ function tagAt(depth: number, inner: number, text: string): string {
  */
 function spell(value: number): string {
   return Object.is(value, -0) ? "-0" : String(value);
+}
+
+/**
+ * Writes a float, refusing one whose field is not a finite number.
+ *
+ * `floatText` spells the field the class's `instanceof` test read, so that the
+ * text decodes as a float, sign included. Every float this package builds
+ * carries a finite field, because the constructor refuses anything else. The
+ * test asks that field to be a number and not to be finite, though, so an
+ * object a host built to the shape it admits can carry `NaN` or an infinity,
+ * and this encoding has no text for either: the check the constructor makes is
+ * made again here, over whatever the test admitted.
+ */
+function encodeFloat(value: Float): string {
+  if (!Number.isFinite(floatMagnitude(value))) throw new EncodeSignal("non_finite_number");
+  return floatText(value);
 }
 
 function encodeInteger(value: number): string {

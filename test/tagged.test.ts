@@ -20,6 +20,23 @@ import {
   type Value,
 } from "../src/values.js";
 
+/**
+ * An object built to the whole shape the value classes' `instanceof` test asks
+ * for - a prototype of its own, frozen, the float key as an own data property
+ * set true, and `n` as an own data property holding a number - carrying a
+ * `valueOf` of its own.
+ *
+ * It is host code impersonating the class, which the value-domain record puts
+ * outside what this package promises, and it is still a `Float` to the test.
+ * What these tests pin is what the package writes when it is handed one.
+ */
+function forgedFloat(field: number, answer: () => unknown): Float {
+  const claim = Object.create({ valueOf: answer }) as object;
+  Object.defineProperty(claim, Symbol.for("predicator.float"), { value: true });
+  Object.defineProperty(claim, "n", { value: field, enumerable: true });
+  return Object.freeze(claim) as Float;
+}
+
 /** The value a decode answered. Fails loudly rather than defaulting. */
 function decoded(text: string): Value {
   const result = decodeTagged(text);
@@ -368,6 +385,21 @@ describe("encodeTagged", () => {
     expect(encodeRefusal(Number.POSITIVE_INFINITY)).toBe("non_finite_number");
     expect(encodeRefusal(Symbol("other") as unknown as Value)).toBe("unsupported_host_value");
     expect(encodeRefusal(new Duration({ days: Number.NaN }))).toBe("non_finite_number");
+  });
+
+  // Sabotage: spelling a float through `value.valueOf()` in place of
+  // `floatMagnitude` turns this red - the impersonating object's own method
+  // answers and the text becomes {"rate":}.0}, which no JSON parser reads.
+  it("writes a float from the field the instanceof test checked", () => {
+    expect(encoded({ rate: forgedFloat(1.5, () => "}") })).toBe('{"rate":1.5}');
+    expect(encoded({ rate: forgedFloat(2, () => "}") })).toBe('{"rate":2.0}');
+  });
+
+  // Sabotage: dropping the finiteness check from `encodeFloat` turns this red
+  // - the encoder writes NaN.0 and Infinity.0 instead of refusing.
+  it("refuses a float whose field is not finite", () => {
+    expect(encodeRefusal(forgedFloat(Number.NaN, () => 1))).toBe("non_finite_number");
+    expect(encodeRefusal(forgedFloat(Number.POSITIVE_INFINITY, () => 1))).toBe("non_finite_number");
   });
 
   // Sabotage: writing a date without the read-back check (formatDate alone)

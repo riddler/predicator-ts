@@ -1,12 +1,14 @@
 /**
- * Two small primitives on maps that several modules need: the test for a plain
- * map, and the write of one key into a map being built.
+ * Three small primitives that several modules need: the test for a plain map,
+ * the write of one key into a map being built, and the read of one own data
+ * property.
  *
  * This module is internal: neither entry point re-exports it. The value
  * boundary, the context's write path, the tagged codec, the JSON functions and
  * the machine's object opcode import what they use of it from here rather than
  * each keeping a copy, so that the package answers one way to what a plain map
- * is and how a key is written into one.
+ * is, how a key is written into one, and how a property is read without running
+ * host code.
  */
 
 import type { Value } from "./values.js";
@@ -54,4 +56,21 @@ export function setKey<T>(target: { [key: string]: T }, key: string, value: T): 
     enumerable: true,
     configurable: true,
   });
+}
+
+/** What `ownData` answers for a property that is absent or is an accessor. */
+const NOT_DATA = Symbol("not a data property");
+
+/**
+ * Reads an object's own data property through its descriptor, so that no
+ * getter runs; an absent property or an accessor answers `NOT_DATA`.
+ *
+ * The value classes' `instanceof` test reads the key and the fields it asks
+ * for this way, and the two writers that spell a float read its field the same
+ * way, so that what they write is the property the test read rather than the
+ * answer of a method on the object.
+ */
+export function ownData(candidate: object, key: PropertyKey): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
+  return descriptor !== undefined && "value" in descriptor ? descriptor.value : NOT_DATA;
 }
