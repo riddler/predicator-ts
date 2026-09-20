@@ -7,6 +7,7 @@
  * rule, so that the package spells a float one way wherever it writes one.
  */
 
+import { ownData } from "./maps.js";
 import type { Float } from "./values.js";
 
 /**
@@ -33,7 +34,31 @@ import type { Float } from "./values.js";
  * differs, with both answers.
  */
 export function floatText(value: Float): string {
-  return floatSpelling(value.valueOf());
+  return floatSpelling(floatMagnitude(value));
+}
+
+/**
+ * Reads the number a float carries, from the field the class's `instanceof`
+ * test checked rather than from the instance's `valueOf`.
+ *
+ * `valueOf` is a method, and a method answers whatever the object it belongs
+ * to was built to answer. The test admits any object carrying the shape a
+ * constructor gives an instance, so an object a host built to that shape is
+ * taken for a float - host code impersonating a class of this package's, which
+ * the value-domain record puts outside what this package promises - and a
+ * writer that called its `valueOf` would put that method's answer into its
+ * output in place of the field the test read. Reading the field through its
+ * descriptor makes what a writer emits a function of what was checked. It is
+ * not a defence, and there is nothing here to defend: a host that builds such
+ * an object is already inside the process.
+ *
+ * The answer is a number, because that is what the test read. It is not
+ * necessarily finite, because the test does not ask that, so a writer whose
+ * output has no text for a non-finite number checks before it spells one.
+ * The field is the one `shareAcrossCopies` names for `Float` in `./values.ts`.
+ */
+export function floatMagnitude(value: Float): number {
+  return ownData(value, "n") as number;
 }
 
 /**

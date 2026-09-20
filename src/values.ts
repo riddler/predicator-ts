@@ -14,7 +14,8 @@
  * every rule this module implements.
  */
 
-import { hasPlainPrototype, setKey } from "./maps.js";
+import { floatMagnitude } from "./floats.js";
+import { hasPlainPrototype, ownData, setKey } from "./maps.js";
 import { enterContainer, type NestingReason } from "./nesting.js";
 
 /** The registered keys that mark an instance of each value class. */
@@ -22,18 +23,6 @@ const FLOAT_KEY = Symbol.for("predicator.float");
 const DATE_KEY = Symbol.for("predicator.date");
 const DATETIME_KEY = Symbol.for("predicator.datetime");
 const DURATION_KEY = Symbol.for("predicator.duration");
-
-/** What `ownData` answers for a property that is absent or is an accessor. */
-const NOT_DATA = Symbol("not a data property");
-
-/**
- * Reads an object's own data property through its descriptor, so that no
- * getter runs; an absent property or an accessor answers `NOT_DATA`.
- */
-function ownData(candidate: object, key: PropertyKey): unknown {
-  const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
-  return descriptor !== undefined && "value" in descriptor ? descriptor.value : NOT_DATA;
-}
 
 /**
  * Lets `instanceof` recognize an instance of a value class that another copy
@@ -57,6 +46,12 @@ function ownData(candidate: object, key: PropertyKey): unknown {
  * descriptor, so the test runs no getter. A key names one class's
  * representation, so a change to what a class holds takes a new key rather
  * than reusing this one.
+ *
+ * A proxy is outside what that buys. The language routes the prototype read,
+ * the frozen test and each descriptor read to the proxy's own traps, so a
+ * proxy's code runs while this test runs and answers it, and what the test
+ * then says is a statement about those answers rather than about the object
+ * behind them. This test does not detect a proxy and makes no claim about one.
  */
 function shareAcrossCopies(
   valueClass: abstract new (...args: never[]) => object,
@@ -496,7 +491,10 @@ export function fromHost(value: unknown): Normalization {
  * Projects a value back to plain JavaScript.
  *
  * The projection loses the integer/float distinction - a float comes back as
- * the wrapped `number`, with the brand gone - and it loses nothing else.
+ * the wrapped `number`, with the brand gone - and it loses nothing else. It
+ * takes that number from the field the class's `instanceof` test read, through
+ * `floatMagnitude` in `./floats.ts`, rather than from the instance's `valueOf`,
+ * so what it answers for anything that test admits is a number.
  * Predicator's undefined comes back as JavaScript's. A date, a datetime and a
  * duration come back as themselves, which is the one part of a plain result
  * for which a host imports a type from this package.
@@ -527,7 +525,7 @@ export function fromHost(value: unknown): Normalization {
 export function toHost(value: Value): HostValue {
   if (value === Undefined) return undefined;
   if (value === null) return null;
-  if (value instanceof Float) return value.valueOf();
+  if (value instanceof Float) return floatMagnitude(value);
   if (value instanceof PDate || value instanceof PDateTime || value instanceof Duration) {
     return value;
   }

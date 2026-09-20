@@ -17,6 +17,23 @@ import {
   type Value,
 } from "../src/values.js";
 
+/**
+ * An object built to the whole shape the value classes' `instanceof` test asks
+ * for - a prototype of its own, frozen, the float key as an own data property
+ * set true, and `n` as an own data property holding a number - carrying a
+ * `valueOf` of its own.
+ *
+ * It is host code impersonating the class, which the value-domain record puts
+ * outside what this package promises, and it is still a `Float` to the test.
+ * What these tests pin is what the package writes when it is handed one.
+ */
+function forgedFloat(field: number, answer: () => unknown): Float {
+  const claim = Object.create({ valueOf: answer }) as object;
+  Object.defineProperty(claim, Symbol.for("predicator.float"), { value: true });
+  Object.defineProperty(claim, "n", { value: field, enumerable: true });
+  return Object.freeze(claim) as Float;
+}
+
 /** The refusal reason a normalization answered, or `null` when it succeeded. */
 function refusalOf(input: unknown): string | null {
   const result = fromHost(input);
@@ -367,6 +384,16 @@ describe("toHost", () => {
     expect(toHost(1)).toBe(1);
   });
 
+  // Sabotage: projecting a float with `value.valueOf()` in place of
+  // `floatMagnitude` turns this red - the impersonating object's own method
+  // answers and the projection hands back its string.
+  it("reads a float's number from the field the instanceof test checked", () => {
+    const claim = forgedFloat(1.5, () => "}");
+    expect(claim instanceof Float).toBe(true);
+    expect(toHost(claim)).toBe(1.5);
+    expect(toHost(float(1.5))).toBe(1.5);
+  });
+
   // Sabotage: projecting Undefined as null turns this red.
   it("projects the absence to the host's own undefined", () => {
     expect(toHost(Undefined)).toBe(undefined);
@@ -513,6 +540,29 @@ describe("two copies of the value module loaded together", () => {
     Object.defineProperty(settledOn, Symbol.for("predicator.date"), { value: true });
     expect(settledOn instanceof PDate).toBe(false);
     expect(refusalOf(settledOn)).toBe("unsupported_host_value");
+  });
+
+  // Sabotage: reading the key and the fields with a plain property read
+  // instead of their descriptors turns this red - the read goes through the
+  // proxy's `get` trap instead. The test answers true either way, which is
+  // the limit this pins and the helper's doc comment states: a proxy's own
+  // code runs while the test runs.
+  it("run a proxy's traps while they answer", () => {
+    const descriptors: PropertyKey[] = [];
+    const gets: PropertyKey[] = [];
+    const claim = new Proxy(float(1.5), {
+      getOwnPropertyDescriptor(target, key) {
+        descriptors.push(key);
+        return Object.getOwnPropertyDescriptor(target, key);
+      },
+      get(target, key, receiver) {
+        gets.push(key);
+        return Reflect.get(target, key, receiver) as unknown;
+      },
+    });
+    expect(claim instanceof Float).toBe(true);
+    expect(descriptors).toContain("n");
+    expect(gets).toEqual([]);
   });
 
   // Sabotage: reading a field with a plain property read instead of its own

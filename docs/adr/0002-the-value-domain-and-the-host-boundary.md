@@ -2805,3 +2805,81 @@ literal is emitted as a float and a non-finite one is refused at the literal
 (`literalValue` in `src/emitter.ts`, read at `a32fa1c`). The conformance run is
 unchanged. Nothing in this amendment adds an opcode, a reason token or a
 wire-format change.
+
+## Amendment: what the writers read from a float, and the finite field (2026-09-20)
+
+Status: proposed (2026-09-20)
+
+Recorded for `pts-vdj`. This amendment is appended, and removes no line above.
+
+What this amends. The amendment above, "the value classes across copies, and
+what the codec writes", says which objects the class's `instanceof` test admits,
+and ends by saying that an object a host deliberately builds to that shape is
+taken for a member, that this is host code impersonating a class of this
+package's, and that it is outside what this record promises. That sentence is
+unchanged and nothing here withdraws any part of it. What the record did not say
+is what this package writes when it is handed such an object, and the answer was:
+whatever the object's own `valueOf` answered. This amendment decides that
+instead, and adds no rule about the test.
+
+### The writers read the field the test read
+
+**The projection and the tagged encoder take a float's number from the field the
+class's test checked rather than from the instance's `valueOf`.**
+`floatMagnitude` in `src/floats.ts` reads that field through its descriptor, and
+`toHost` in `src/values.ts` and `floatText` in `src/floats.ts` each take their
+number from it. `valueOf` is a method, and a method answers whatever the object
+carrying it was built to answer; the field is the property the test read. So what
+those two write is a function of what was checked.
+
+**This is not a boundary against an adversary and is not offered as one.** A host
+that builds an object to the admitted shape is host code inside the process this
+package runs in, and nothing here constrains it. What is now true is narrower:
+this package does not turn such an object into output it would not otherwise
+produce. Before this amendment a `valueOf` answering a string put that string
+where a number belongs, and the text the tagged encoder then wrote is text its own
+decoder rejects.
+
+### A float's field is finite where a float becomes text
+
+**The tagged encoder refuses a float whose field is not a finite number, with the
+reason `"non_finite_number"`.** `encodeFloat` in `src/tagged.ts` makes the check.
+That reason is already the encode direction's own, carried for a host's
+non-finite number and for a duration part that is not finite, so no reason token
+is added and the closed union is unchanged.
+
+Every float this package builds carries a finite field, because `Float`'s
+constructor in `src/values.ts` (read at `1c9c12c`) refuses anything else. The
+class's test asks that field to be a number, and `NaN` and an infinity are
+numbers, so the check the constructor makes for a float this package builds is
+made again where a float becomes text.
+
+**The projection refuses nothing, and still refuses nothing.** `toHost` in
+`src/values.ts` answers `HostValue`, which has no failing arm, as the note above
+on the projection says. Reading the field gives it a number for anything the test
+admits, and it hands that number back; it gains no guard, no reason token and no
+change of return type.
+
+### What the test says about a proxy
+
+**The test's doc comment now states that a proxy's traps run while the test
+runs.** `shareAcrossCopies` in `src/values.ts` reads the prototype, the frozen
+state and each property of the object it is given, and the language routes every
+one of those reads on a proxy to that proxy's own traps. The test does not detect
+a proxy and makes no claim about the object behind one. Nothing about what the
+test admits changes; what changes is that its comment now says this, where before
+it said only that no getter runs.
+
+**It is pinned by shipped tests.** "reads a float's number from the field the
+instanceof test checked" and "run a proxy's traps while they answer" in
+`test/values.test.ts`; "writes a float from the field the instanceof test
+checked" and "refuses a float whose field is not finite" in
+`test/tagged.test.ts`.
+
+Consequences. A host that hands this package an object built to the shape the
+class's test admits gets, from the projection, the number in that object's
+field. No exported signature changes, no reason token is added, and no opcode
+and no wire-format change follow. The string cast and the JSON builtin spell a
+float through `floatText` and so read the same field; neither is given a
+finiteness check here, and this amendment decides nothing about what either
+writes for a field that is not finite.
