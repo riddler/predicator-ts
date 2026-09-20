@@ -400,23 +400,33 @@ const rules = [
   },
 ];
 
-// `--rules` hands the table to the suite, so the documenting sentences live
-// exactly once - here, beside the pattern they describe.
 const args = process.argv.slice(2);
-if (args.includes("--rules")) {
-  console.log(
-    JSON.stringify(
-      rules.map(({ id, documentedBy, violation }) => ({ id, documentedBy, violation })),
-      null,
-      2,
-    ),
-  );
-  process.exit(0);
-}
+
+// HOW THIS STAGE LEAVES, AND WHY IT MATTERS THAT IT LEAVES THIS WAY.
+//
+// Every path below finishes by returning a status to the bottom of this file,
+// which sets `process.exitCode` and lets the process end on its own. None of
+// them calls `process.exit`, and that is deliberate: `process.exit` does not
+// wait for a write to stdout or stderr that has not finished, so a report long
+// enough to be written in more than one piece can be cut short while the exit
+// status survives intact. A caller that reads this stage through a pipe - the
+// suite does, and so does anything else that captures it - would then see a
+// check that reported fewer findings than it made, with nothing in the status
+// to say so. Under-reporting is the one failure a check like this must not
+// have, so the exit is written the way the runtime guarantees the output
+// arrives whole.
+//
+// The same reasoning covers the rule table, which is JSON that a reader parses
+// rather than prose a human skims: a short read there is a parse error, not a
+// missing line.
+
+// A refusal carries its message out to the bottom of the file rather than
+// printing and exiting on the spot, so that `fail` never returns to its caller
+// and the message still goes through the one exit path above.
+class Refusal extends Error {}
 
 function fail(message) {
-  console.error(`engine-neutrality: ${message}`);
-  process.exit(1);
+  throw new Refusal(message);
 }
 
 // The scanned set is the directory of every entry the build lists, so a new
@@ -467,27 +477,9 @@ async function entryRoots(configPath) {
   };
 }
 
-// With a directory argument the stage scans that directory, which is how the
-// suite points the real check at a fixture. With `--config` it derives its
-// roots from that build config, and with neither from the repository's own
-// `tsup.config.ts`, which is what the gate runs.
-const configFlag = args.indexOf("--config");
-let base;
-let sourceRoots;
-if (configFlag !== -1 || args.length === 0) {
-  const configArg = configFlag === -1 ? "tsup.config.ts" : args[configFlag + 1];
-  if (configArg === undefined) fail("--config needs a path");
-  const configPath = isAbsolute(configArg) ? configArg : resolve(repoRoot, configArg);
-  if (!existsSync(configPath)) fail(`cannot read the build config ${configArg}`);
-  ({ base, roots: sourceRoots } = await entryRoots(configPath));
-} else {
-  sourceRoots = [resolve(repoRoot, args[0])];
-  base = sourceRoots[0];
-}
-
 // A path as the output shows it: relative to the config's directory, or to
 // the directory given, which then shows as itself.
-const shown = (dir) => `${relative(base, dir).split(sep).join("/") || dir}/`;
+const shown = (base, dir) => `${relative(base, dir).split(sep).join("/") || dir}/`;
 
 function sourceFiles(dir) {
   const found = [];
@@ -502,7 +494,7 @@ function sourceFiles(dir) {
   return found.sort();
 }
 
-function findingsIn(file) {
+function findingsIn(file, base) {
   const text = readFileSync(file, "utf8");
   const lines = text.split("\n");
   const found = [];
@@ -522,34 +514,82 @@ function findingsIn(file) {
   return found;
 }
 
-const files = [];
-for (const root of sourceRoots) {
-  let found;
-  try {
-    found = sourceFiles(root);
-  } catch {
-    fail(`cannot read ${shown(root)}`);
+async function run() {
+  // `--rules` hands the table to the suite, so the documenting sentences live
+  // exactly once - here, beside the pattern they describe.
+  if (args.includes("--rules")) {
+    console.log(
+      JSON.stringify(
+        rules.map(({ id, documentedBy, violation }) => ({ id, documentedBy, violation })),
+        null,
+        2,
+      ),
+    );
+    return 0;
   }
-  // A check that silently scanned nothing would report the same success as a
-  // clean tree. It is not allowed to, for any one root.
-  if (found.length === 0) fail(`no source files found under ${shown(root)}`);
-  files.push(...found);
+
+  // With a directory argument the stage scans that directory, which is how the
+  // suite points the real check at a fixture. With `--config` it derives its
+  // roots from that build config, and with neither from the repository's own
+  // `tsup.config.ts`, which is what the gate runs.
+  const configFlag = args.indexOf("--config");
+  let base;
+  let sourceRoots;
+  if (configFlag !== -1 || args.length === 0) {
+    const configArg = configFlag === -1 ? "tsup.config.ts" : args[configFlag + 1];
+    if (configArg === undefined) fail("--config needs a path");
+    const configPath = isAbsolute(configArg) ? configArg : resolve(repoRoot, configArg);
+    if (!existsSync(configPath)) fail(`cannot read the build config ${configArg}`);
+    ({ base, roots: sourceRoots } = await entryRoots(configPath));
+  } else {
+    sourceRoots = [resolve(repoRoot, args[0])];
+    base = sourceRoots[0];
+  }
+
+  const files = [];
+  for (const root of sourceRoots) {
+    let found;
+    try {
+      found = sourceFiles(root);
+    } catch {
+      fail(`cannot read ${shown(base, root)}`);
+    }
+    // A check that silently scanned nothing would report the same success as a
+    // clean tree. It is not allowed to, for any one root.
+    if (found.length === 0) fail(`no source files found under ${shown(base, root)}`);
+    files.push(...found);
+  }
+
+  const findings = files.flatMap((file) => findingsIn(file, base));
+
+  if (findings.length > 0) {
+    for (const finding of findings) {
+      console.error(`${finding.file}:${finding.line}:${finding.column}: ${finding.rule.id}`);
+      console.error(`    ${finding.text}`);
+      console.error(`    ${finding.rule.why}`);
+    }
+    const plural = findings.length === 1 ? "" : "s";
+    console.error(
+      `engine-neutrality: ${findings.length} finding${plural} in ${files.length} files`,
+    );
+    console.error("Do not silence this by narrowing the rule. See Conventions in CLAUDE.md.");
+    return 1;
+  }
+
+  console.log(
+    `engine-neutrality: ${files.length} files clean under ${sourceRoots
+      .map((root) => shown(base, root))
+      .join(", ")}, ${rules.length} rules`,
+  );
+  return 0;
 }
 
-const findings = files.flatMap(findingsIn);
-
-if (findings.length > 0) {
-  for (const finding of findings) {
-    console.error(`${finding.file}:${finding.line}:${finding.column}: ${finding.rule.id}`);
-    console.error(`    ${finding.text}`);
-    console.error(`    ${finding.rule.why}`);
-  }
-  const plural = findings.length === 1 ? "" : "s";
-  console.error(`engine-neutrality: ${findings.length} finding${plural} in ${files.length} files`);
-  console.error("Do not silence this by narrowing the rule. See Conventions in CLAUDE.md.");
-  process.exit(1);
+// The one exit. A refusal prints its message here, so that every path leaves
+// through the same statement and none of them cuts its own output short.
+try {
+  process.exitCode = await run();
+} catch (error) {
+  if (!(error instanceof Refusal)) throw error;
+  console.error(`engine-neutrality: ${error.message}`);
+  process.exitCode = 1;
 }
-
-console.log(
-  `engine-neutrality: ${files.length} files clean under ${sourceRoots.map(shown).join(", ")}, ${rules.length} rules`,
-);
