@@ -786,3 +786,37 @@ note corrects it.
 ADR-0004, at proposed, records what this package answers for a source naming
 a magnitude the domain cannot represent; it says nothing about whether a row
 for such a source belongs in this transcript, and neither does this record.
+
+## Note: where the runner's report writing lives (2026-09-20)
+
+**`writeReport` is no longer read in `test/conformance/runner.ts`.** The note on
+the stamp above cites it there; it is now `test/conformance/reports.ts`, beside
+the reading of the vendored corpus that used to sit with it. Nothing about the
+stamp changed. `writeReport` still writes the report and the stamp beside it,
+and `buildHash`, `writeStamp` and `stampProblem` are still
+`scripts/lib/build-stamp.mjs`'s. Only the file the function is read in moved.
+
+**Why it moved.** The runner is now the run and nothing else, taking the corpus
+as an argument rather than reading it, so that the same run can be bundled for a
+host with no filesystem and its report compared case for case against the one
+produced here. A module that reads files cannot be bundled for such a host, and
+neither can a module that merely imports one which does: a bundler targeting no
+platform resolves a host module specifier before it discards unused code.
+
+**`runsAtVersion` moved the same way, and the cite of it above still resolves.**
+The rules deciding which cases a run attempts are now
+`scripts/lib/corpus-rules.mjs`, separated from the loading for that same reason.
+`scripts/lib/corpus.mjs` re-exports each of them, so a reader that asked that
+module for one still gets it; what moved is where the function is written, not
+where it is imported from.
+
+**Every other cite of the runner in this record still holds.** `runEvaluator`,
+`runCompiler`, `runSurface` and `sameValue` are each still read in
+`test/conformance/runner.ts`, and `runSurface` still holds that file's sole
+write of a report's `isa_version` and its sole call of `isaVersion()`, the shape
+`test/conformance/compiler.test.ts` asserts on the runner's own text.
+`runSurface` is exported now rather than private to its module, because a second
+caller exists that is not a surface wrapper - a run inside another host. A
+second caller reaching the shared constructor is what the one-constructor
+decision asks for; what it forbids is a second caller assembling a report of its
+own.
