@@ -41,6 +41,9 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "gate": "node --version && pnpm run typecheck && pnpm run lint && pnpm run neutrality && vitest run --coverage && pnpm run corpus:check && pnpm run build && pnpm run identity",
     "gate:loop": "pnpm run typecheck && pnpm run lint && pnpm run test",
