@@ -500,6 +500,29 @@ export function fromHost(value: unknown): Normalization {
  * Predicator's undefined comes back as JavaScript's. A date, a datetime and a
  * duration come back as themselves, which is the one part of a plain result
  * for which a host imports a type from this package.
+ *
+ * This is an export, but it is not an entry point for host input. Its return
+ * type has no failing arm, so it refuses nothing, and it applies no depth
+ * limit of its own: the limit this package declares governs the walks that
+ * compute a nesting fault, not this projection, so a value nesting past that
+ * limit projects cleanly here. What it does instead is descend a list and a
+ * map with neither a depth count nor an ancestor set, so a value that contains
+ * itself, or one deep enough to exhaust the call stack, raises the engine's
+ * own error out of this function. Where that depth falls is a property of the
+ * engine and of whatever is already on the stack rather than of this package.
+ *
+ * That is deliberate and recorded: the amendment on cycles, nesting and the
+ * one depth limit in
+ * `docs/adr/0002-the-value-domain-and-the-host-boundary.md` rules that this
+ * function gains no guard. Every entry point checks the value it hands the
+ * projection, and the context projection is covered by an invariant instead of
+ * by a check: a cyclic or over-deep value cannot be in a context, because
+ * `fromHost` refuses one a host hands in and a store write refuses a value
+ * with a nesting fault.
+ *
+ * A host that calls this function on a structure it built itself, rather than
+ * on a value this package answered, is outside both and holds the shape of
+ * what it passes.
  */
 export function toHost(value: Value): HostValue {
   if (value === Undefined) return undefined;

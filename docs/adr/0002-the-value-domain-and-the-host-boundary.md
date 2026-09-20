@@ -2485,3 +2485,58 @@ argument. The argument is only that the behaviour is wrong to reproduce, and
 that argument is weaker than a measurement would be. A later reading may
 overturn this and close the divergence; what this amendment fixes is that
 doing so is a decision and not a repair.
+
+## Note: the projection is an export and is not an entry point for host input (2026-09-20)
+
+The amendment on cycles, nesting and the one depth limit leaves the projection
+unguarded, and the acceptance that recorded that guarding work says no
+stack-overflow error escapes any public entry point. Read loosely, "public
+entry point" reaches every export, and `toHost` in `src/values.ts` is an
+export. This note states what has been true since that amendment landed and
+decides nothing, so it carries no status line and rides the acceptance of the
+amendment it makes precise.
+
+**"Entry point" in that promise means a function that runs a program and
+answers its result, not every export.** Those are `evaluate`, `execute` and
+`executeValue` in `src/index.ts` and `evaluateTagged` in `src/tagged.ts`. Each
+answers a result type with a failing arm, which is what makes a refusal sayable
+there. `toHost` in `src/values.ts` answers `HostValue`, which has no failing
+arm, so it has nowhere to put one.
+
+**The projection refuses nothing, and applies no depth limit of its own.** It
+descends a list and a map with neither a depth count nor an ancestor set. The
+limit declared above governs the walks that compute a nesting fault, not this
+projection, so a value nesting past that limit projects cleanly here. What
+raises is a value that contains itself, or one deep enough to exhaust the call
+stack, and what comes out is the engine's own error rather than a refusal of
+this package's. Where that depth falls varies with the engine and with whatever
+is already on the stack - the same reason the walks are given a declared limit
+rather than an inherited one. Measured on 2026-09-20 on one machine under node
+24.21.0, by projecting hand-built values of increasing depth: values nesting
+257, 500 and 2000 levels each projected cleanly - the deepest of them several
+times the declared limit - and the shallowest value that raised moved between
+measurements, in the low thousands. That movement is the variability the
+declared limit exists to keep out of the walks. Nothing in this note adds a
+guard, changes a return type, adds a reason token or edits a line of an
+accepted record.
+
+**Every value the projection is handed is covered, by a check or by an
+invariant.** `evaluateToValue` in `src/evaluator.ts` answers a nesting fault as
+an evaluation error instead of answering the value, and it is the function
+whose value `evaluate` in `src/index.ts` and the untagged arm of
+`evaluateTagged` in `src/tagged.ts` project. `executeValue` in `src/index.ts`
+checks the value itself and refuses onto its failing arm before projecting.
+The remaining case is the context, which `execute` and `executeValue` in
+`src/index.ts` both answer and neither checks: `projectContext` in
+`src/evaluator.ts` is covered by an invariant rather than by a check, because
+`fromHost` in `src/values.ts` refuses a cyclic or over-deep context a host
+hands in and the machine's `store` method in `src/evaluator.ts` refuses a write
+whose value has a nesting fault, so no such value is ever in a context to
+project. Those are every call of the projection under `src/`, its own recursion
+aside.
+
+**What a host holds.** A host calling `toHost` on a structure it built itself,
+rather than on a value this package answered, is outside every one of those and
+holds the shape of what it passes. The projection's doc comment in
+`src/values.ts` now says so, and says that what it raises is the engine's own
+error rather than a refusal of this package's.
