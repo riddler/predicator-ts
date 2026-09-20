@@ -22,39 +22,56 @@ evaluated in a browser or in a React Native app without a round trip.
 
 ## Install
 
-**There is no install that reaches this build, and the name is already taken.**
-`@riddler/predicator` exists on npm and belongs to an earlier generation of
-this project. Read from the live registry on 2026-09-17:
-`npm view @riddler/predicator version` answers `0.1.1`, its `dist-tags` are
-`{ latest: '0.1.1' }`, its description is "Safe predicate engine", its
-`repository` names `github.com/riddler/predicator-js` rather than this
-repository, it declares a runtime dependency on `chevrotain`, its `time`
-metadata records publishes of `0.1.0` and `0.1.1` on 2019-08-08Z, and `0.1.1`
-is the only version it now offers. A registry is live: check it yourself
-rather than trusting this paragraph's date.
-
-So this command succeeds today - on that same date, `npm pack
-@riddler/predicator` fetched that package's tarball - and what it installs is
-that 2019 package, with no error and no warning that it is not this one:
+**The name carries an earlier generation of this project.**
+`@riddler/predicator` on npm is a 2019 package, built from
+`github.com/riddler/predicator-js` rather than from this repository. Read
+from the live registry on 2026-09-20: `npm view @riddler/predicator version`
+answered `0.1.1`, its `dist-tags` were `{ latest: '0.1.1' }`, its description
+was "Safe predicate engine", it declared a runtime dependency on
+`chevrotain`, and its `time` metadata recorded publishes of `0.1.0` and
+`0.1.1` on 2019-08-08Z. No version of that `0.1.x` line is this code. It is
+retired by deprecation at the first publish from this repository -
+deprecation rather than removal, because a published version can be
+deprecated but not recalled. A registry is live: read it yourself rather than
+trusting this paragraph's date.
 
 ```bash
 pnpm add @riddler/predicator
 ```
 
-No version of that name resolves to this build, and which name and version
-line this code will ship under is not decided in this repository. Until it is,
-reach this package from a checkout rather than from the registry.
+A bare install resolves to whatever the registry offers as `latest` under the
+name. Nothing but a publish from this repository moves that pointer to a
+build of this code.
 
 The package has **no runtime dependencies** - there is no `dependencies` key in
 its `package.json` at all - and assumes no host environment. It imports no Node
-built-in and touches no DOM, so it runs unchanged on a server runtime, in a
-browser, and on React Native's JavaScript engine. A gate stage checks `src/`
-for those constructs rather than leaving the rule to review.
+built-in and touches no DOM, so nothing under `src/` reaches for anything a
+server runtime, a browser or React Native's JavaScript engine does not offer.
+A gate stage checks `src/` for those constructs rather than leaving the rule
+to review.
+
+That is a check on the text. On the last of those three there is also a check
+on a run: `scripts/hermes-conformance.mjs` bundles both conformance surfaces
+and the vendored corpus into one self-contained file, runs it on the
+JavaScript engine React Native uses, and diffs the two reports against a run
+of the same corpus on the server runtime in the same invocation. Both
+surfaces diffed clean, row for row. What answered is the standalone
+command-line build of that engine, release `0.12.0` at bytecode version `96`,
+which is an older release than the one a current React Native ships - so the
+run is evidence about that engine family and about this package's use of the
+language, rather than a run on the exact build an application ships. It is
+run by hand and is not a stage of the gate; `conformance/README.md` says what
+it needs and what it bounds.
+
+`engines.node` in `package.json` is `>=20`, and that is the floor a
+consumer's runtime has to clear. It is not the toolchain: what builds and
+gates this repository is the one node and the one pnpm `mise.toml` pins, and
+the Development section below is how to provision them.
 
 ## The entry points
 
 ```ts
-import { compile, decompile, evaluate, execute, executeValue, float, isaVersion, parse } from "@riddler/predicator";
+import { compile, decompile, evaluate, execute, executeValue, float, isaVersion, parse, toHost } from "@riddler/predicator";
 import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/tagged";
 ```
 
@@ -177,6 +194,16 @@ for most members the reference implementation's for that site, reproduced
 verbatim - and is not something to match on.
 `docs/adr/0004-the-compiler-surface.md` is the record, and it enumerates the
 union.
+
+**`compile` never throws for any string input**, and no input class is
+reserved for a throw. What that took is a declared bound on how deep a source
+may nest: the grammar is a recursive descent and the emitter a recursive
+walk, so a source nesting deeper than either would follow used to exhaust the
+host's stack and raise where the contract said it answered. The bound is 256
+levels, the whole expression counting as the first, and a source past it is
+refused as a value under the reason `nesting_depth_exceeded`. Declaring the
+bound is what makes that refusal a property of the source rather than of the
+machine that compiled it.
 
 `evaluate`, `execute` and `executeValue` each take that source text directly as
 well, in place of the instruction list, and compile it before running it. The
@@ -385,13 +412,13 @@ any object graph with a back-reference - is refused with the reason
 context whose lists and maps nest past the depth limit is refused with
 `depth_limit_exceeded`. The limit is 256 levels, the context itself counting as
 the first, and it is a constant this package declares rather than whatever the
-host's stack happens to allow, so the same context answers the same way on
-every engine. A literal in the instruction list is held to the same limit, and
-so is a value the program builds for itself: a comparison or a membership test
-whose operand is nested past the limit, a store that would nest the context
-past it, and a result nested past it are each refused at that point rather
-than walked or handed over. A value reached by two paths without a cycle - one
-card object under two keys, say - is not refused.
+host's stack happens to allow, so where the refusal falls is a property of the
+context rather than of the engine running it. A literal in the instruction list
+is held to the same limit, and so is a value the program builds for itself: a
+comparison or a membership test whose operand is nested past the limit, a store
+that would nest the context past it, and a result nested past it are each
+refused at that point rather than walked or handed over. A value reached by two
+paths without a cycle - one card object under two keys, say - is not refused.
 
 ```ts
 import { evaluate } from "@riddler/predicator";
@@ -528,6 +555,15 @@ boundary are the ones a host meets first:
 states that as its one loss.** A host that needs the distinction to survive a
 round trip reaches for the tagged encoding on the subpath.
 
+That projection is exported as `toHost`. It answers a host value, which has
+no failing arm, so it refuses nothing and applies no depth limit of its own.
+Every value this package hands it has already been through the checks above;
+a structure a host builds and passes straight to it has not, and one that
+contains itself or nests deeply enough to exhaust the call stack raises the
+engine's own error there rather than coming back as a refusal. It takes a
+float's number from the field the class's `instanceof` test checked rather
+than from the instance's `valueOf`.
+
 ## Evaluation options
 
 `EvaluateOptions` in `src/evaluator.ts` is the declaration; what each option
@@ -629,6 +665,13 @@ past it. In the text every bracket and brace counts, a tag's own included, so
 whatever `encodeTagged` writes, `decodeTagged` reads back. A getter or a proxy
 trap on a value handed to `encodeTagged` is host code running inside the walk,
 and an error it throws propagates unchanged, as it does at `evaluate`.
+
+`encodeTagged` writes a float from the field the class's `instanceof` test
+checked rather than from the instance's `valueOf`, and refuses a float whose
+field is not a finite number with `non_finite_number`. Every float this
+package builds carries a finite field, because `Float`'s constructor refuses
+anything else, so what that refusal answers is an object a host built to the
+shape the test admits.
 
 The encoding is the corpus's apparatus rather than a published serialization
 format: predicator-ex's `conformance/README.md` specifies it, it is revised by
