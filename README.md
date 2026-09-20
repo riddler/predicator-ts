@@ -89,6 +89,16 @@ import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/
 `package.json` declares those two under `exports`, each shipped as ESM and
 CommonJS with type declarations.
 
+A consumer that reads that map - TypeScript's `node16`, `nodenext` or
+`bundler` resolution, and every bundler that honors conditional exports -
+reaches both entry points in both formats. TypeScript's older `node10`
+resolution reads no `exports` map at all, so the manifest also carries a
+top-level `main` and `types` naming the main entry point's CommonJS build
+and its declarations. That fallback covers the main entry point only: the
+`./tagged` subpath needs a resolution mode that reads `exports`. A gate
+stage compiles a consumer in each mode and reads the compiler's own
+resolution trace, so neither half of that can change without saying so.
+
 **Compiling an expression from its source text is `compile`**, and the
 statement grammar is not compiled here: assignment, the statement separator and
 the control-flow keywords are refused by the expression grammar with their own
