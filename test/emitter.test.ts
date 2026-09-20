@@ -34,6 +34,7 @@ import { tokenize } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
 import { decodeTagged } from "../src/tagged.js";
 import { Float, PDate, PDateTime, Undefined, type Value } from "../src/values.js";
+import { declaredOf } from "./conformance/compile-divergences.js";
 import { compileTranscriptLines } from "./conformance/compile-transcript.js";
 import { sameValue } from "./conformance/runner.js";
 
@@ -46,6 +47,22 @@ function programOf(source: string): Program {
   const emitted = emit(tree.ast);
   if (!emitted.ok) throw new Error(`emitter refused as ${emitted.error.reason}`);
   return emitted.instructions;
+}
+
+/**
+ * The reason the pipeline refuses a source, or `null` when it answers.
+ *
+ * It reads the reason off whichever of the three stages refuses, because a
+ * caller of `compile` is not told which one did and a row declared as a
+ * refusal is declared against the reason rather than against a stage.
+ */
+function refusalReasonOf(source: string): string | null {
+  const tokens = tokenize(source);
+  if (!tokens.ok) return tokens.error.reason;
+  const tree = parse(tokens.tokens);
+  if (!tree.ok) return tree.error.reason;
+  const emitted = emit(tree.ast);
+  return emitted.ok ? null : emitted.error.reason;
 }
 
 /** The whole emission, so the side tables can be read beside the program. */
@@ -155,6 +172,21 @@ describe("the compile transcript", () => {
   // and-right-operand-two-instructions and mixed-precedence - and seven tests
   // in this file failed in all. Reverted.
   for (const { line, row } of rows) {
+    const declared = declaredOf(row.id);
+    if (declared?.kind === "refusal") {
+      // A row the reference answered and this package refuses. It is held to
+      // the reason declared for it rather than exempted, so the difference is
+      // still checked here and this block still states something true of every
+      // row it reads.
+      //
+      // Sabotage: raising `SOURCE_DEPTH_LIMIT` in src/nesting.ts past the depth
+      // that row's source nests to makes the pipeline answer a program, which
+      // turns this red on the reason. It was run and reverted.
+      it(`refuses what the reference answered for ${row.id}, as declared`, () => {
+        expect(refusalReasonOf(row.source)).toBe(declared.reason);
+      });
+      continue;
+    }
     it(`answers what the reference answered for ${row.id}`, () => {
       const decoded = decodeTagged(line);
       if (!decoded.ok)

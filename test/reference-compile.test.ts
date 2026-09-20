@@ -32,16 +32,26 @@
 // `parse`'s, not a compiled program's, because the renderer takes the syntax
 // tree.
 //
-// DIVERGENCES ARE DECLARED, NEVER NARROWED. `DECLARED` below holds both
-// answers for any row where this package and the reference differ, beside a
-// pointer to the place in `src/` that declares the difference, exactly as
+// DIVERGENCES ARE DECLARED, NEVER NARROWED. `DECLARED`, in
+// `test/conformance/compile-divergences.ts`, holds both answers for any row
+// where this package and the reference differ, beside a pointer to the place
+// in `src/` that declares the difference, exactly as
 // `test/reference-transcript.test.ts` does for the first transcript. A
 // declared row fails when either side moves and when the two come to agree,
 // since a declaration of a difference that no longer exists is as false as a
-// missing one. At the sha these cases were written the map is EMPTY: every
-// row of this transcript agrees. The machinery stays because the next
-// regeneration may not, and the alternative to declaring a difference here is
-// editing the transcript, which is not an alternative at all.
+// missing one. The alternative to declaring a difference is editing the
+// transcript, which is not an alternative at all. It lives in a module
+// rather than here because the transcript has three readers and a difference
+// declared in one of them leaves the other two asserting what is no longer
+// true; that module says the rest.
+//
+// ITS ONE ENTRY is the only place this package does not accept what the
+// reference accepts: a source nesting past the depth this package declares,
+// which the reference compiles. That difference cannot reach this suite
+// through the vendored corpus - the deepest expression there nests four
+// levels - so the row's source is authored beside the others in the script
+// that runs the reference, and the reference's answer to it is recorded by
+// the same run that records every other row.
 //
 // The rows are read through `compileTranscriptLines`, which hands out no line
 // until the file's sha256 is the one its SOURCE.json records and that file's
@@ -51,35 +61,12 @@
 import { describe, expect, it } from "vitest";
 import type { DecompileOptions, ParseReason, Position, Span } from "../src/index.js";
 import { compile, decompile, parse } from "../src/index.js";
+import { SOURCE_DEPTH_LIMIT } from "../src/nesting.js";
 import { decodeTagged } from "../src/tagged.js";
 import type { Value } from "../src/values.js";
+import { DECLARED, declaredOf, writtenNestingDepth } from "./conformance/compile-divergences.js";
 import { compileTranscriptLines } from "./conformance/compile-transcript.js";
 import { sameValue } from "./conformance/runner.js";
-
-/** One row the reference answered differently, with both answers. */
-interface Declared {
-  /** The reference's answer, as the transcript records it. */
-  readonly reference: string;
-  /** This package's answer. */
-  readonly ours: string;
-  /** Where in `src/` the difference is declared. */
-  readonly declaredBy: string;
-}
-
-/**
- * Every row where this package and the reference differ.
- *
- * Empty at the sha these cases were written: the diff over all three kinds
- * found no row that disagrees. An entry is added here, never by editing the
- * transcript and never by dropping a row from the enumeration.
- *
- * Sabotage, run and reverted, because a branch an empty map never reaches is
- * a branch nothing has tested: an entry added here for a row the two agree on
- * turns that row red on the assertion that the two no longer agree. It was
- * run once on a compile row and once on a decompile row, which are the two
- * places the map is consulted.
- */
-const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([]);
 
 /**
  * Every member of the closed refusal union, as values.
@@ -217,11 +204,6 @@ function sameSpan(left: Span, right: Span): boolean {
   return samePosition(left.start, right.start) && samePosition(left.end, right.end);
 }
 
-/** The text a declared row's two answers are held as. */
-function declaredOf(id: string): Declared | undefined {
-  return DECLARED.get(id);
-}
-
 describe("the reference compile transcript", () => {
   // Sabotage: an id added to DECLARED that no row carries turns this red. It
   // was run and reverted.
@@ -242,6 +224,26 @@ describe("the reference compile transcript", () => {
     ]);
   });
 
+  // Sabotage: raising `SOURCE_DEPTH_LIMIT` in src/nesting.ts past the depth
+  // this row's source nests to turns this red on the depth comparison, because
+  // the source is then inside the bound and the row stands for nothing. It was
+  // run and reverted.
+  it("declares its depth refusals on sources that nest past the declared bound", () => {
+    const depthRows = [...DECLARED.entries()].filter(
+      ([, declared]) => declared.kind === "refusal" && declared.reason === "nesting_depth_exceeded",
+    );
+    expect(depthRows.length, "the depth divergence is held by no row").toBeGreaterThan(0);
+    for (const [id] of depthRows) {
+      const row = COMPILE_ROWS.find((candidate) => candidate.id === id);
+      expect(row, `${id}: no compile row carries this id`).toBeDefined();
+      if (row === undefined) continue;
+      expect({ id, pastTheBound: writtenNestingDepth(row.source) > SOURCE_DEPTH_LIMIT }).toEqual({
+        id,
+        pastTheBound: true,
+      });
+    }
+  });
+
   // Sabotage, each run and reverted: a member dropped from PARSE_REASONS turns
   // the typecheck red on NOTHING_UNLISTED, and a member spelled wrongly turns
   // it red on the `satisfies`. The first spelling of this check held an empty
@@ -260,6 +262,24 @@ describe("what the reference compiles, this package compiles", () => {
   // row. It was run and reverted.
   it.each(COMPILE_ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const compiled = compile(row.source);
+    const declaredRefusal = declaredOf(id);
+    if (declaredRefusal?.kind === "refusal") {
+      // Both answers, pinned: the program the reference emitted, and the
+      // reason this package answers instead. The row fails when either side
+      // moves and when this package comes to compile the source, since a
+      // declared refusal that no longer happens is as false as a missing one.
+      expect(JSON.stringify(row.instructions), `${id}: the reference's program moved`).toBe(
+        declaredRefusal.reference,
+      );
+      expect(compiled.ok, `${id}: this package now compiles a source it declares it refuses`).toBe(
+        false,
+      );
+      if (compiled.ok) return;
+      expect(compiled.error.reason, `${id}: this package refuses under another reason`).toBe(
+        declaredRefusal.reason,
+      );
+      return;
+    }
     expect(compiled.ok, `${id}: the reference compiled this source and this package refused`).toBe(
       true,
     );
@@ -276,6 +296,7 @@ describe("what the reference compiles, this package compiles", () => {
       ).toBe(true);
       return;
     }
+    if (declared.kind !== "answers") return;
     expect(JSON.stringify(row.instructions), `${id}: the reference's program moved`).toBe(
       declared.reference,
     );
@@ -329,6 +350,7 @@ describe("what the reference renders, this package renders", () => {
       expect(ours, `${id}: this package and the reference render differently`).toBe(row.rendered);
       return;
     }
+    if (declared.kind !== "answers") return;
     expect(row.rendered, `${id}: the reference's rendering moved`).toBe(declared.reference);
     expect(ours, `${id}: this package's rendering moved`).toBe(declared.ours);
     expect(ours === row.rendered, `${id}: the two now agree`).toBe(false);
