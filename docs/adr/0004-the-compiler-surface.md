@@ -915,3 +915,90 @@ this narrowing that is not about this package's own past.
 Where a source used to raise, it now answers. A caller that wrapped `compile`
 in a handler to catch the overflow finds that handler never fires, and reads
 the refusal out of the failing arm with every other one.
+
+## Note: chain length no longer counts against the source-depth bound, and a row now holds the divergence (2026-09-19)
+
+Recorded for `pts-miu0`. This note states what is now true of the amendment
+above and decides nothing, so it carries no Status line. It removes no line
+above and changes no code. Code is cited as read at `dab49f5`, the commit
+this note is written on top of.
+
+Two changes landed after that amendment. The first walks a flat chain's left
+spine in a loop, so chain length stops counting against the bound; the second
+pins the divergence from the reference in a transcript row that runs. The
+statements they falsify are named here rather than edited.
+
+### Chain length no longer counts against the bound
+
+`visitChain` in `src/emitter.ts` collects a left spine in a loop and appends
+each link from the inside out, so a whole chain costs the one level its root
+opened. The paragraph on `SOURCE_DEPTH_LIMIT` in `src/nesting.ts` that begins
+"What is NOT nesting is a chain" says the same beside the constant. Everything
+hanging off the spine still goes through the recursive `visit`, so genuine
+nesting is bounded exactly as it was.
+
+Run at the tree this note lands with: a flat allow-list of comparisons joined
+by `or` compiles at each of the six lengths it was run at - 255, 256, 257,
+1000, 100000 and 1048576 terms - and a parenthesized integer compiles at 255
+written parentheses and is refused at 256 under `nesting_depth_exceeded`. The
+nesting half of the bound is where it was; the chaining half is gone.
+
+In the Consequences, the sentence that begins "A source reaches the bound two
+ways". It names nesting and chaining, and the sentence after it says "Neither
+is reachable by an authored predicate". There is one way now, by nesting, and
+the flat allow-list that made that sentence's first clause false compiles.
+What that clause claims about an author stands over the one way that is left;
+what falls is the second way and the word that counts them.
+
+In the section headed "Where the two walks count, and why a flat chain is
+deep", two. "The emitter counts a level for each syntax node it enters" is
+untrue of a node on a chain's left spine. And the sentence beginning "That is
+why the bound is checked in both walks" gives a reason - that a long chain is
+a deep tree no descent of the grammar ever measured - which no longer obtains.
+The bound IS still checked in both walks, at `descend` in `src/parser.ts` and
+at `visit` in `src/emitter.ts`, and either can still be the one that refuses,
+because the two counts are not in step for genuine nesting. What falls is the
+reason given, and with it the second half of that heading.
+
+In "What this does not decide", "A source inside the limit is walked by
+recursion exactly as before" is untrue of a chain, and the clause predicting
+that an iterative walk "would raise the bound rather than remove the need for
+one" is not what followed: the walk became iterative on the spine and the
+declared bound stayed at two hundred and fifty-six. The sentence those open
+with, that the entry did not itself make the walks iterative, was true of that
+entry and stays true of it.
+
+Two statements nearby are NOT falsified and are named so a reader does not go
+looking. The account in "The promise this entry keeps, rather than qualifies"
+of a conjunction raising from the emitter at `a46bac4` records a run at that
+commit and stays true of it; it is not a claim about what a chain costs now.
+And "A caller writing predicates by hand cannot reach it", in the section
+headed "The bound diverges from the reference in what is accepted", was the
+sentence the allow-list falsified, and it is now true.
+
+### A row holds the divergence, and it runs
+
+In the section headed "The bound diverges from the reference in what is
+accepted", two.
+
+"Nothing mechanical catches this, and nothing will." The second clause is
+false. The row `compile/nesting/parentheses-past-the-source-depth-bound` in
+`conformance/transcript/compile.json` holds the reference's answer to a
+property access wrapped in three hundred parentheses, counted off that row's
+own source text, and the entry for it in `DECLARED` in
+`test/conformance/compile-divergences.ts` holds this package's refusal beside
+it. Both answers are pinned, so the row fails when either side moves and when
+the two come to agree.
+
+"This record is the only place it can be stated, which is why it is stated at
+length." It is no longer the only place: `DECLARED` states it too, in a form
+that runs. The length still earns itself, since the row states the difference
+and this record states why there is one.
+
+The sentence between those two stands, and it is why the row's source is
+authored rather than taken from the corpus: the deepest expression in the
+vendored corpus nests four levels, so no case there reaches the bound and no
+later refresh of the corpus will. The row's source is authored beside the
+others in `scripts/lib/reference-compile.exs`. Read as being about the corpus,
+"the conformance run is silent about it" stays true; what is no longer silent
+is the diff against the transcript.
