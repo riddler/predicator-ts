@@ -2614,3 +2614,54 @@ answers having asked no more than twice the funnel's levels. Beside it: a
 cycle reached through a container two paths share is still refused, a
 container two paths share is still admitted, and a container that fits where
 one path puts it is still refused where a deeper path puts it.
+
+## Note: the instance trap on the engine React Native uses (2026-09-20)
+
+Recorded for `pts-a9q`. This note is appended, and removes no line above. It
+decides nothing: every rule this record states stands. What it records is where
+one of them had been measured, and what a measurement on a second engine
+showed.
+
+**What was measured.** The amendment above, "the value classes across copies,
+and what the codec writes", makes two promises about a host that loads this
+package twice. The absence is one symbol, because `Undefined` in
+`src/values.ts` is taken from the language's global symbol registry (read at
+`cf9cbe8`). And `instanceof` on `Float`, `PDate`, `PDateTime` or `Duration`
+answers true for an instance another copy built, because `shareAcrossCopies` in
+`src/values.ts` gives each class a `Symbol.hasInstance` (read at `cf9cbe8`).
+Both are pinned by the suite and by the identity stage of the full gate, and
+both of those run on the server runtime alone. `scripts/hermes-mixed-copy.mjs`
+runs them on the engine React Native uses: two separately bundled copies of the
+value module in one VM, the run first establishing that the two really are
+distinct - separate class objects, a property written on one absent from the
+other, and a value whose prototype is not the other copy's - so that an
+identity it then reports cannot be the ordinary one.
+
+**The absence holds there. The classes do not.** On the standalone
+command-line build of that engine, which answers release 0.12.0 and bytecode
+version 96, the two copies share one absence, and an absence one copy exports
+normalizes through the other as that other's absence. `instanceof` does not
+answer true for another copy's float, date, datetime or duration: that engine
+offers `Symbol.hasInstance` as a symbol and lets a class define it, and its
+`instanceof` operator does not consult it. The run establishes that with a
+class of its own, whose trap answers true for one string and could not be
+satisfied by a prototype walk, so what it reports is the engine's and not this
+package's.
+
+**So the record's other arm is what holds there.** Each copy recognizes the
+values it built: a float, a date, a datetime and a duration are members of the
+copy that built them, which the run checks on both engines. A value from
+another copy is not a member. That engine names a float from the other copy a
+map, normalization refuses it with `"unsupported_host_value"`, and the
+projection answers an object - which is what the amendment above reports as
+the behaviour before it, and what a second copy still gets where the operator
+is incomplete.
+
+**What this bounds, and what it does not.** The build measured is the
+standalone command-line one, an older release than the engine current React
+Native ships, and the newer build is not measured here: the same limit the
+corpus run beside it carries, for the same reason. Nothing above is withdrawn.
+The promise is a promise about the language, it holds wherever `instanceof` is
+complete, and it is the behaviour of the runtime this package is tested on.
+What is now known is that a host running on an engine without that operator
+gets one absence and per-copy classes, rather than both promises.
