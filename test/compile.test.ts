@@ -257,16 +257,23 @@ describe("compile over a generated space of source strings", () => {
   // than in prose so that what changed about them is checked rather than
   // remembered. Both of them used to run the host out of stack, and running
   // the stages one at a time located each: the nested parentheses in the
-  // grammar, the long chain in the emitter. Both now answer, because each
-  // walk counts its own descent against the declared source depth and refuses
-  // past it. The depths written here are the ones that used to raise on one
-  // machine; they are kept as they were written so that this entry reads as
-  // the counter-example it was, and nothing about the bound is asserted from
+  // grammar, the long chain in the emitter. Neither raises now, and they no
+  // longer answer the same way, which is the whole of what this entry is
+  // about.
+  //
+  // The parentheses nest, so they meet the declared source depth and are
+  // refused as a value. The chain does not nest - it is written flat and both
+  // walks now read it flat - so it COMPILES, at a length nothing but a
+  // generator would write. The depths here are the ones that used to raise on
+  // one machine, kept as they were written so that this entry still reads as
+  // the counter-example it was; nothing about the bound is asserted from
   // them. `test/source-depth.test.ts` holds the contract, written against the
   // declared limit rather than against any machine.
   //
-  // Sabotage: removing the limit test from either walk turns this red, the
-  // call raising again rather than answering. Each was run and reverted.
+  // Sabotage: removing the limit test from either walk turns the first half
+  // red, the call raising again rather than answering; restoring the
+  // recursive spine in the emitter turns the second half red, the chain being
+  // refused for a nesting its author never wrote. Each was run and reverted.
   it("answers rather than exhausting the stack on a source deep enough to", () => {
     const nested = `${"(".repeat(1000)}1${")".repeat(1000)}`;
     expect(compile(nested)).toEqual({
@@ -274,10 +281,11 @@ describe("compile over a generated space of source strings", () => {
       error: expect.objectContaining({ reason: "nesting_depth_exceeded" }),
     });
 
-    const chained = Array.from({ length: 20000 }, (_, i) => `step_${i}`).join(" AND ");
-    expect(compile(chained)).toEqual({
-      ok: false,
-      error: expect.objectContaining({ reason: "nesting_depth_exceeded" }),
-    });
+    const terms = 20000;
+    const chained = Array.from({ length: terms }, (_, i) => `step_${i}`).join(" AND ");
+    const result = compile(chained);
+    expect(result.ok).toBe(true);
+    // One load per term, and one short-circuiting jump per operator.
+    if (result.ok) expect(result.instructions.length).toBe(terms + (terms - 1));
   });
 });

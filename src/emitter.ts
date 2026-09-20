@@ -41,11 +41,22 @@
  * sources this walk turns away, so here this package is the narrower of the
  * two - and it is why the promise that compiling a source string cannot throw
  * holds through this stage at any depth rather than only at the depths a host
- * stack happens to allow. The walk counts the nodes it is inside against
- * `SOURCE_DEPTH_LIMIT` and refuses a tree deeper than that as a value. A tree
- * gets deep two ways, and the second is the one worth knowing: a chain of
- * operators is left-associative, so it nests once per operator, and a long
- * chain is therefore a deep tree even though it is written flat.
+ * stack happens to allow. The walk counts the levels it is inside against
+ * `SOURCE_DEPTH_LIMIT` and refuses a tree that nests past that as a value.
+ *
+ * What counts as a level is the part worth knowing, because a syntax tree
+ * gets deep two ways and only one of them is nesting. A construct written
+ * inside another - a parenthesis, a bracket, a call's argument, a prefix
+ * operator's operand - nests, and this walk descends into it, so it counts.
+ * A CHAIN does not. A left-associative run of operators leans left once per
+ * operator, so `a or b or c` is a tree three deep although it is written flat
+ * and read flat, and a run of property accesses, indexes and casts leans the
+ * same way. The grammar already reads every one of those in a loop, and so
+ * does this walk: `visitChain` collects the left spine iteratively and emits
+ * it from the innermost operand outwards, at the ONE level its root opened.
+ * Chain length therefore costs no depth at all, and what is left under the
+ * bound is genuine nesting - which the vendored corpus's deepest expression
+ * reaches four levels of.
  */
 
 import type {
@@ -149,11 +160,12 @@ let depth = 0;
  * Walks one node, one level deeper, or refuses because the tree nests past
  * `SOURCE_DEPTH_LIMIT`.
  *
- * A tree is as deep as the source nests, and a left-associative chain of
- * operators nests once per operator even though nothing in it is written
- * inside anything else - which is why a long flat-looking chain is what
- * reaches this limit first, and why it is checked here and not only in the
- * grammar, whose own descent such a chain never deepens.
+ * It is checked here and not only in the grammar because the two count
+ * different things - a production the grammar re-enters is one level there, a
+ * node this walk descends into is one level here - and the shapes they see
+ * are not in step. A chain is neither: `visitChain` takes a whole left spine
+ * at the single level its root opened here, so a chain's length never
+ * reaches this test.
  */
 function visit(node: Node): readonly Annotated[] {
   if (depth >= SOURCE_DEPTH_LIMIT) {
@@ -189,46 +201,23 @@ function visitNode(node: Node): readonly Annotated[] {
     case "identifier":
       return [own(node, ["load", node.name])];
 
+    // Every kind whose designated child continues a flat chain leaves through
+    // the one iterative walk, the short-circuiting pair included.
     case "property_access":
-      return [...visit(node.object), own(node, ["access", node.property])];
-
     case "bracket_access":
-      return [...visit(node.object), ...visit(node.key), own(node, ["bracket_access"])];
-
     case "cast":
-      return [...visit(node.expression), own(node, ["cast", node.typeName])];
-
     case "comparison":
-      return [
-        ...visit(node.left),
-        ...visit(node.right),
-        own(node, ["compare", COMPARISONS[node.operator]]),
-      ];
-
     case "arithmetic":
-      return [...visit(node.left), ...visit(node.right), own(node, [ARITHMETIC[node.operator]])];
-
     case "membership":
-      return [...visit(node.left), ...visit(node.right), own(node, [MEMBERSHIP[node.operator]])];
+    case "logical_and":
+    case "logical_or":
+      return visitChain(node);
 
     case "unary":
       return [...visit(node.operand), own(node, [UNARY[node.operator]])];
 
     case "logical_not":
       return [...visit(node.operand), own(node, ["not"])];
-
-    // Short-circuiting: the jump sits between the operands and skips the right
-    // one, so its offset is a RELATIVE forward distance counted from the jump
-    // itself - the right operand's own length, plus one for the jump.
-    case "logical_and": {
-      const right = visit(node.right);
-      return [...visit(node.left), own(node, ["jump_if_falsy_or_pop", right.length + 1]), ...right];
-    }
-
-    case "logical_or": {
-      const right = visit(node.right);
-      return [...visit(node.left), own(node, ["jump_if_true_or_pop", right.length + 1]), ...right];
-    }
 
     // A list whose every element is a literal NODE folds to one `lit` carrying
     // the list. The test is shallow and on the node, not on the value: a
@@ -275,6 +264,176 @@ function visitNode(node: Node): readonly Annotated[] {
     case "relative_date":
       return [...visit(node.duration), own(node, ["relative_date", DIRECTIONS[node.direction]])];
   }
+}
+
+/**
+ * A node that leans on one designated child, which is what a flat chain in
+ * the source builds.
+ *
+ * The three postfix kinds lean on the thing they are applied to and the five
+ * infix kinds lean on their left operand, and in every one of the eight that
+ * designated child sits beside the node in the source rather than inside it.
+ *
+ * For `property_access`, `bracket_access`, `cast`, `logical_or`,
+ * `logical_and` and `arithmetic` that is because a LOOPING production wrote
+ * them: the first three come out of `postfix`, which reads its object and
+ * then appends each suffix in a loop, and the other three out of
+ * `logicalOr`, `logicalAnd`, `addition` and `multiplication`, each of which
+ * reads its left operand and then appends each operator in a loop. A run of
+ * any of those six is written flat, read flat, and is a chain rather than
+ * nesting.
+ *
+ * `comparison` and `membership` are the remaining two, and neither ever
+ * runs. Both come out of the one production that takes the level below it on
+ * both sides and does NOT loop (`src/parser.ts`, the `comparison`
+ * production, whose own comment says so), which is why comparison is
+ * non-associative and why `a > b > c` is refused as a trailing token. They
+ * are chain nodes for the other half of the rule: the child each leans on is
+ * the arithmetic chain beneath it, and that one link would cost the whole
+ * chain a level if it were not walked with the spine it sits on.
+ */
+type ChainNode = Extract<
+  Node,
+  {
+    kind:
+      | "property_access"
+      | "bracket_access"
+      | "cast"
+      | "comparison"
+      | "arithmetic"
+      | "membership"
+      | "logical_and"
+      | "logical_or";
+  }
+>;
+
+function isChainNode(node: Node): node is ChainNode {
+  switch (node.kind) {
+    case "property_access":
+    case "bracket_access":
+    case "cast":
+    case "comparison":
+    case "arithmetic":
+    case "membership":
+    case "logical_and":
+    case "logical_or":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** The child a chain node leans on, which is the next link down its spine. */
+function leaning(node: ChainNode): Node {
+  switch (node.kind) {
+    case "property_access":
+    case "bracket_access":
+      return node.object;
+    case "cast":
+      return node.expression;
+    default:
+      return node.left;
+  }
+}
+
+/**
+ * Emits a whole chain at one level, by descending its spine in a LOOP.
+ *
+ * This is the one place the walk deliberately does not recurse where the tree
+ * does, and the reason is the depth bound rather than the stack: a chain is
+ * flat in the source, so counting a level per link would make the bound count
+ * chain LENGTH, and a hand-written allow-list of a few hundred comparisons
+ * joined by `or` would be refused for nesting that its author never wrote.
+ * The spine is collected outermost-first, the innermost operand is emitted
+ * through `visit` like any other child, and each link is then appended from
+ * the inside out - which is the same post-order the recursive walk produced,
+ * because a link's own instructions always follow the ones below it.
+ *
+ * Only the spine is flattened. Everything hanging OFF it - a right operand,
+ * an index's key - goes through `visit` and counts its level, so a source
+ * that nests those really does nest and really is bounded.
+ */
+function visitChain(root: ChainNode): readonly Annotated[] {
+  const spine: ChainNode[] = [root];
+  let innermost: Node = leaning(root);
+  while (isChainNode(innermost)) {
+    spine.push(innermost);
+    innermost = leaning(innermost);
+  }
+
+  const emitted: Annotated[] = [];
+  append(emitted, visit(innermost));
+  for (let link = spine.length - 1; link >= 0; link -= 1) {
+    appendLink(emitted, spine[link] as ChainNode);
+  }
+  return emitted;
+}
+
+/**
+ * Appends one link's own instructions to the chain built so far.
+ *
+ * The short-circuiting pair is the one link that is not simply an append
+ * after its operands: its jump sits BETWEEN them and skips the right one, so
+ * its offset is a relative forward distance counted from the jump itself -
+ * the right operand's own length, plus one for the jump.
+ */
+function appendLink(emitted: Annotated[], node: ChainNode): void {
+  switch (node.kind) {
+    case "property_access":
+      emitted.push(own(node, ["access", node.property]));
+      return;
+
+    case "bracket_access":
+      append(emitted, visit(node.key));
+      emitted.push(own(node, ["bracket_access"]));
+      return;
+
+    case "cast":
+      emitted.push(own(node, ["cast", node.typeName]));
+      return;
+
+    case "comparison":
+      append(emitted, visit(node.right));
+      emitted.push(own(node, ["compare", COMPARISONS[node.operator]]));
+      return;
+
+    case "arithmetic":
+      append(emitted, visit(node.right));
+      emitted.push(own(node, [ARITHMETIC[node.operator]]));
+      return;
+
+    case "membership":
+      append(emitted, visit(node.right));
+      emitted.push(own(node, [MEMBERSHIP[node.operator]]));
+      return;
+
+    case "logical_and": {
+      const right = visit(node.right);
+      emitted.push(own(node, ["jump_if_falsy_or_pop", right.length + 1]));
+      append(emitted, right);
+      return;
+    }
+
+    case "logical_or": {
+      const right = visit(node.right);
+      emitted.push(own(node, ["jump_if_true_or_pop", right.length + 1]));
+      append(emitted, right);
+      return;
+    }
+  }
+}
+
+/**
+ * Appends every entry of one list to another, one at a time.
+ *
+ * A spread would read better and cannot be used: the chains this walk now
+ * accepts are as long as an author cares to write, and both `push(...items)`
+ * and `concat` over a list that long are the kind of call that reaches the
+ * host's stack - which is the failure this whole change exists to keep away
+ * from a caller.
+ */
+function append(into: Annotated[], items: readonly Annotated[]): void {
+  for (const item of items) into.push(item);
 }
 
 /**

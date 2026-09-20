@@ -51,13 +51,22 @@ export const DEPTH_LIMIT = 256;
  * reads back, this one bounds the text a caller compiles. They carry the same
  * number today, and nothing requires them to keep carrying it.
  *
- * Nesting here is what a walk descends into. The grammar counts a level each
- * time a production re-enters itself - a parenthesis, a bracket, a brace, a
- * call's argument, a prefix operator's operand - and the emitter counts a
- * level for each syntax node it enters, so a left-associative chain of
- * operators is as deep as it is long even though nothing in it is written
- * inside anything else. A source at exactly this depth compiles; one level
- * deeper is refused as a value.
+ * Nesting here is what a walk descends into: a parenthesis, a bracket, a
+ * brace, an index's key, a call's argument, a prefix operator's operand. The
+ * grammar counts a level each time a production re-enters itself, and the
+ * emitter counts a level for each syntax node it descends into, and the two
+ * counts are not in step - which is why each walk carries its own and either
+ * can be the one that refuses. A source at exactly this depth compiles; one
+ * level deeper is refused as a value.
+ *
+ * What is NOT nesting is a chain. A left-associative run of operators leans
+ * left once per operator, and a run of property accesses, indexes or casts
+ * leans the same way, so each builds a tree as deep as it is long out of
+ * source that is written flat. The grammar reads every one of those in a
+ * loop, and the emitter walks the left spine in a loop too, so chain length
+ * costs no depth in either. That is deliberate: the alternative refuses a
+ * flat allow-list of a few hundred comparisons joined by `or`, which is a
+ * thing an author writes and the reference compiles.
  *
  * Why the bound is declared rather than left to the host, which is the same
  * argument the value limit rests on: how deep a source may nest before the
