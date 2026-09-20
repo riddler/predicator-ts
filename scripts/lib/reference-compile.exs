@@ -158,7 +158,38 @@ compile_sources = [
   # assumed.
   {"tagged-operand/date", "#2026-09-19#"},
   {"tagged-operand/datetime", "#2026-09-19T10:30:00Z#"},
-  {"tagged-operand/absence", "undefined"}
+  {"tagged-operand/absence", "undefined"},
+
+  # A source nested far deeper than any other authored here, for the one
+  # place this package does not accept what the reference accepts.
+  #
+  # This package declares how deep a source may nest and refuses one past
+  # that depth; the reference declares nothing and compiles it. Every other
+  # difference between the two is held by a row that runs, and until this
+  # row there was none for this one - the deepest expression in the vendored
+  # corpus nests four levels, two orders of magnitude short of the bound, so
+  # no vendored case can reach it and no refresh of the corpus will. The
+  # difference was held by prose alone, which is the same class of thing as
+  # an assertion that cannot fail.
+  #
+  # WHY PARENTHESES. Nesting is what is pinned here, not length. A written
+  # parenthesis opens a level in the reference's own descent and in this
+  # package's grammar, and it opens no node in either emitter, so the row
+  # stands on the nesting alone and does not move if a walk over a flat
+  # chain is ever rewritten to stop descending. The compiled answer is two
+  # instructions whatever the depth, which keeps the row's recorded program
+  # small enough to read.
+  #
+  # WHY THREE HUNDRED. This file runs inside the reference and cannot read
+  # the constant this package declares, so the depth is written here and the
+  # reading side checks it: the case that consumes this row counts the
+  # source's own nesting and asserts it is past the declared bound, so a
+  # bound raised above this depth fails there rather than turning the row
+  # quietly meaningless. Three hundred is past today's two hundred and
+  # fifty-six with room to spare, and far below any depth at which the
+  # reference was observed to stop - it was not observed to stop at all.
+  {"nesting/parentheses-past-the-source-depth-bound",
+   String.duplicate("(", 300) <> "charge.amount" <> String.duplicate(")", 300)}
 ]
 
 # --------------------------------------------------------------------------

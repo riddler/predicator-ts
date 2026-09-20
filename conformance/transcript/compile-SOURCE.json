@@ -7,11 +7,11 @@
   "otp": "27",
   "isa_version": 6,
   "counts": {
-    "compile": 61,
+    "compile": 62,
     "decompile": 45,
     "refusal": 26,
-    "rows": 132
+    "rows": 133
   },
   "generator": "node scripts/reference-compile.mjs --from <export of riddler/predicator-ex at v9.4.1> --tag v9.4.1",
-  "transcript_hash": "sha256:5ca9d80a9482e6790b192b6ff6c12a16e1e80a9830247280ede10a09021c526e"
+  "transcript_hash": "sha256:03260064c9a38ddf23144d3442aa9f840d389d59130c4aacc1040bcda9cd5a12"
 }

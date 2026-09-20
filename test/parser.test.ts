@@ -32,6 +32,7 @@ import type { ParseError, Position, Span } from "../src/errors.js";
 import { formatDate, formatDateTime } from "../src/iso.js";
 import { type Token, type TokenType, tokenize } from "../src/lexer.js";
 import { parse } from "../src/parser.js";
+import { declaredOf } from "./conformance/compile-divergences.js";
 import { compileTranscriptLines } from "./conformance/compile-transcript.js";
 
 /** The tree, or a failure loud enough to read. */
@@ -981,12 +982,42 @@ describe("the reference's own answers at the tag", () => {
   // Sabotage: ending a duration literal after its first component turns this
   // red. It was run and reverted.
   it("parses every row the reference compiled and every case that carries a source", () => {
-    const compiled = transcript.filter((row) => row.kind !== "refusal");
-    const refusedRows = compiled.filter((row) => {
+    // A row declared as a difference is one the reference answered and this
+    // package refuses, so it is held to the reason declared for it rather than
+    // to parsing. Held here as well as in the diff suite, because a row left
+    // out of this enumeration with nothing put in its place is how a declared
+    // difference stops being checked at the stage that makes it.
+    //
+    // WHAT THIS ASSUMES, stated because the next declared row may break it:
+    // that this stage is the one that refuses. The declaration names a reason
+    // and not a stage, so a row the grammar reads and only the emitter refuses
+    // would fail here on a parsed row rather than on anything real, and the
+    // repair then is to record which stage refuses rather than to drop the
+    // row. Every declared row today is one this stage refuses.
+    const answered = transcript.filter(
+      (row) => row.kind !== "refusal" && declaredOf(row.id) === undefined,
+    );
+    const declaredRefusals = transcript.filter(
+      (row) => row.kind !== "refusal" && declaredOf(row.id)?.kind === "refusal",
+    );
+    const refusedRows = answered.filter((row) => {
       const lexed = tokenize(row.source);
       return !lexed.ok || !parse(lexed.tokens).ok;
     });
-    expect([compiled.length > 0, refusedRows.map((row) => row.id)]).toEqual([true, []]);
+    expect([answered.length > 0, refusedRows.map((row) => row.id)]).toEqual([true, []]);
+
+    const declaredAnswers = declaredRefusals.map((row) => {
+      const lexed = tokenize(row.source);
+      if (!lexed.ok) return { id: row.id, reason: lexed.error.reason };
+      const parsed = parse(lexed.tokens);
+      return { id: row.id, reason: parsed.ok ? null : parsed.error.reason };
+    });
+    expect(declaredAnswers).toEqual(
+      declaredRefusals.map((row) => {
+        const declared = declaredOf(row.id);
+        return { id: row.id, reason: declared?.kind === "refusal" ? declared.reason : null };
+      }),
+    );
 
     const conformance = fileURLToPath(new URL("../conformance/", import.meta.url));
     const manifest = JSON.parse(readFileSync(join(conformance, "manifest.json"), "utf8")) as {
