@@ -191,6 +191,36 @@ const bareNodeAlternation = bareNodeBuiltins.join("|");
 // lets every one of them through.
 const subpath = String.raw`(?:/[\w.-]+)*`;
 
+// A BARE specifier - one that is neither relative, nor absolute, nor carrying
+// a URL scheme - names a package rather than a file, and this package declares
+// no dependencies at all. A bundler with no dependency list to hold back
+// inlines whatever such an import resolves to, so the published tarball would
+// carry a copy of that package while the manifest still said there was none.
+//
+// The body below is the character set a package name is written in, matched
+// to the closing quote, and it does three jobs rather than one. It is what
+// makes the rule specific: `from` is a keyword of the language this package
+// parses, so its lexer and its parser write that word as a quoted string
+// beside other quoted strings, and a body that accepted a comma or a space
+// read the text between two such strings as a specifier. Both fired that way
+// before this was narrowed. The first character excludes a dot and a slash,
+// which is every relative and absolute form. And no character of it is a
+// colon, so a specifier carrying a scheme cannot reach the closing quote
+// through it - which is what keeps this rule off the prefixed builtin form
+// and off source text written into a URL, each of which has a rule of its own.
+//
+// The single lookahead does the remaining exclusion: a bare builtin name with
+// its optional subpath, the alternation the rule above matches. What is left
+// is exactly the specifiers no other rule here looks at, so the rules that
+// read a specifier divide them up and an import is reported once, never twice.
+//
+// A type-only import is refused on the same terms as a value import. The
+// bundler erases it, so it ships no code; the declaration build keeps it, and
+// the emitted types would name a package the consumer has not installed. That
+// is the same undeclared dependency arriving through the other file the
+// tarball ships.
+const bareSpecifier = String.raw`(?!(?:${bareNodeAlternation})${subpath}["'])[\w@][\w.@/+-]*`;
+
 // Globals that only exist in a browser. Four names a browser also defines are
 // absent on purpose, because each is a plausible identifier in a compiler:
 // `location` in a lexer that tracks token positions, `Node` and `Element` in
@@ -310,6 +340,14 @@ const rules = [
     documentedBy:
       "This module names no bare Node built-in specifier and no subpath of one, in any of the four import shapes.",
     violation: 'import "fs/promises";',
+  },
+  {
+    id: "package-import",
+    pattern: new RegExp(`${specifierPrefix}["']${bareSpecifier}["']`, "g"),
+    why: "shipped source may not import a package; this package declares no dependencies, and a bundler inlines whatever a source file imports",
+    documentedBy:
+      "This module names no bare import specifier, so no package outside this one can be bundled into it.",
+    violation: 'import { luhn } from "card-validator";',
   },
   {
     id: "module-resolve",

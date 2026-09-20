@@ -439,19 +439,80 @@ describe("the bare builtin list", () => {
     );
   });
 
-  // Sabotage: letting the names Node lists only with the prefix into
-  // `bareNodeBuiltins` with the prefix stripped, in
-  // scripts/engine-neutrality.mjs, turns the quiet half red.
-  it("refuses a prefix-only builtin with its prefix and leaves the bare name alone", () => {
+  // A name Node lists only with the prefix is a builtin with it and an
+  // ordinary package name without it, so the two halves are refused by
+  // different rules and neither half is quiet. Sabotage: letting these names
+  // into `bareNodeBuiltins` with the prefix stripped, in
+  // scripts/engine-neutrality.mjs, turns the bare half red - it is then
+  // reported as a builtin rather than as a package.
+  it("refuses a prefix-only builtin as a builtin with its prefix and as a package without it", () => {
     const prefixOnly = builtinModules.filter((name) => name.startsWith("node:"));
+    expect(prefixOnly.length).toBeGreaterThan(0);
     for (const name of prefixOnly) {
       const prefixed = scanLine(root, `import "${name}";`);
       expect(firedRules(prefixed.output), name).toEqual(["node-builtin-import"]);
       const bareName = name.slice("node:".length);
-      const quiet = scanLine(root, `import "${bareName}";`);
-      expect(quiet.output, bareName).toContain("clean");
-      expect(quiet.status, bareName).toBe(0);
+      const bare = scanLine(root, `import "${bareName}";`);
+      expect(firedRules(bare.output), bareName).toEqual(["package-import"]);
+      expect(bare.status, bareName).toBe(1);
     }
+  });
+});
+
+describe("a bare specifier names a package", () => {
+  // The package declares no dependencies, so a bundler inlines whatever a
+  // source file imports by name. Sabotage: widening the specifier body in
+  // `bareSpecifier` in scripts/engine-neutrality.mjs back to everything up to
+  // the closing quote turns the two keyword cases below red, because `from` is
+  // a keyword of the language this package parses and its lexer and parser
+  // write it as a quoted string beside other quoted strings.
+  it.each([
+    ["a package by name", 'import { luhn } from "card-validator";'],
+    ["a scoped package", 'import { track } from "@signup/ab-testing";'],
+    ["a subpath of a package", 'import { cvv } from "card-validator/checks";'],
+    ["a side-effect import", 'import "card-validator";'],
+    ["a dynamic import", 'const form = await import("card-validator");'],
+    ["a type-only import", 'import type { Card } from "card-validator";'],
+  ] as const)("refuses %s", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(status, line).toBe(1);
+    expect(firedRules(output), line).toEqual(["package-import"]);
+  });
+
+  // Sabotage: letting the body of `bareSpecifier` in
+  // scripts/engine-neutrality.mjs begin with a dot or a slash turns the three
+  // relative cases red.
+  it.each([
+    ["a relative specifier", 'import { parse } from "./parser.js";'],
+    ["a parent-relative specifier", 'import { parse } from "../parser.js";'],
+    ["a relative re-export", 'export * from "./instructions.js";'],
+    ["the from keyword written as a token", 'const t = [["from", ["from_op", "from"]]];'],
+    ["the from keyword written in a comment", '// duration ("ago" | "from" "now")?'],
+  ] as const)("leaves %s alone", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(output, line).toContain("clean");
+    expect(status, line).toBe(0);
+  });
+
+  // The rules that look at a specifier divide the specifiers between them:
+  // each line below is reported by one of them and never by two. Sabotage:
+  // letting a colon into the body of `bareSpecifier` in
+  // scripts/engine-neutrality.mjs reports the prefixed builtin and the data
+  // URL twice, and dropping its builtin lookahead reports the two bare
+  // builtin lines twice.
+  it.each([
+    ['import "node:fs";', "node-builtin-import"],
+    ['import "fs";', "node-builtin-import-bare"],
+    ['import "fs/promises";', "node-builtin-import-bare"],
+    ['import "card-validator";', "package-import"],
+    [
+      'const card = await import("data:text/javascript,export default 1");',
+      "dynamic-code-data-url",
+    ],
+  ] as const)("reports %s once, as %s", (line, id) => {
+    const { status, output } = scanLine(root, line);
+    expect(status, line).toBe(1);
+    expect(firedRules(output), line).toEqual([id]);
   });
 });
 
