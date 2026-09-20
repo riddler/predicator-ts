@@ -1,12 +1,12 @@
 /**
- * The conformance runner: it reads the vendored corpus, runs one surface over
- * the cases that surface's case set holds, and writes a report.
+ * The conformance runner: given the vendored corpus, it runs one surface over
+ * the cases that surface's case set holds and answers a report.
  *
  * Which cases those are is not decided here. Tiers are cumulative, a surface's
  * case set is what it is, and a run claiming the corpus's instruction-set
  * version does not attempt a case tagged `retired`: those three rules are read
- * from `scripts/lib/corpus.mjs`, so that the ratchet script, the registry
- * check and this runner cannot disagree about them. What is decided here is
+ * from `scripts/lib/corpus-rules.mjs`, so that the ratchet script, the
+ * registry check and this runner cannot disagree about them. What is decided here is
  * what running a case means, and what a run writes down.
  *
  * A CASE RESULT IS `pass` OR `fail`, AND THERE IS NO THIRD VALUE. Anything
@@ -39,9 +39,22 @@
  * distinctions this surface is run to catch. A failing case carries both
  * lists, because which instruction diverged is what a reader needs.
  *
- * ONE CONSTRUCTOR WRITES A REPORT. Both surfaces run through the same private
+ * NOTHING HERE REACHES THE HOST. This module is the run itself - decoding a
+ * case, running it, and building the report - and it imports the language and
+ * the corpus rules and nothing else. Reading the vendored corpus off disk and
+ * writing a report to one are `test/conformance/reports.ts`'s, which is why a
+ * caller hands the corpus in rather than naming a tier and letting the run go
+ * and find it. That separation is what lets the same run happen inside a host
+ * with no filesystem, given the corpus as data, and answer a report to compare
+ * with this one: a run that could only happen where `node:fs` resolves could
+ * not be compared against anywhere else.
+ *
+ * ONE CONSTRUCTOR WRITES A REPORT. Both surfaces run through the same shared
  * function, which is the only place a report's fields are written and the only
- * caller of the version accessor here. A surface that built its own report
+ * caller of the version accessor here. It is exported because a second caller
+ * exists that is not a surface wrapper - a run inside another host, given the
+ * corpus as data - and a second caller reaching the constructor is the point;
+ * a second caller assembling a report of its own is what the rule forbids. A surface that built its own report
  * literal could write a version from somewhere else - the corpus manifest's,
  * or a constant - and the report would still satisfy the schema while saying
  * something untrue about the build that produced it. The qualifier matters:
@@ -49,19 +62,24 @@
  * suites construct to exercise a reader.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { writeStamp } from "../../scripts/lib/build-stamp.mjs";
-import type { CaseMetadata, Surface } from "../../scripts/lib/corpus.mjs";
-import { loadCases, loadManifest, runnableCases } from "../../scripts/lib/corpus.mjs";
+import type { CaseMetadata, Manifest, Surface } from "../../scripts/lib/corpus-rules.mjs";
+import { runnableCases } from "../../scripts/lib/corpus-rules.mjs";
 import type { PredicatorError } from "../../src/errors.js";
 import { compile, isaVersion } from "../../src/index.js";
 import type { Instruction, Program } from "../../src/instructions.js";
 import { decodeTagged, encodeTagged, evaluateTagged } from "../../src/tagged.js";
 import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "../../src/values.js";
 
-const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+/**
+ * The vendored corpus, as a run needs it: the manifest, and the cases of the
+ * tiers the run covers. The caller that reads them off disk is
+ * `test/conformance/reports.ts`; a caller carrying them as inlined data hands
+ * the same shape in, which is what makes two runs of one corpus comparable.
+ */
+export interface CorpusInput {
+  readonly manifest: Manifest;
+  readonly cases: readonly CaseMetadata[];
+}
 
 /** What a case expects: a value on success, or an error shape on failure. */
 export type Expectation =
@@ -340,14 +358,12 @@ export function runCompileCase(item: CaseMetadata): CaseResult {
  * refuses is a different problem that has to be visible as itself rather than
  * buried under the same reason as everything else.
  */
-function runSurface(surface: Surface, tier: number): Report {
-  const manifest = loadManifest();
+export function runSurface(surface: Surface, tier: number, corpus: CorpusInput): Report {
   const claimed = isaVersion();
-  const cases = loadCases(tier, manifest);
-  const attempted = runnableCases(cases, surface, claimed, manifest.isa_version);
+  const attempted = runnableCases(corpus.cases, surface, claimed, corpus.manifest.isa_version);
   return {
     isa_version: claimed,
-    corpus_hash: manifest.corpus_hash,
+    corpus_hash: corpus.manifest.corpus_hash,
     tier,
     surface,
     results: attempted.map((item) =>
@@ -357,30 +373,13 @@ function runSurface(surface: Surface, tier: number): Report {
 }
 
 /** Runs the evaluator surface over tiers 1 through `tier`. */
-export function runEvaluator(tier: number): Report {
-  return runSurface("evaluator", tier);
+export function runEvaluator(tier: number, corpus: CorpusInput): Report {
+  return runSurface("evaluator", tier, corpus);
 }
 
 /** Runs the compiler surface over tiers 1 through `tier`. */
-export function runCompiler(tier: number): Report {
-  return runSurface("compiler", tier);
-}
-
-/**
- * Writes a report under the ignored reports directory, and the stamp beside
- * it that ties it to the build and corpus on disk.
- *
- * A report is a build artifact and is never committed: nothing reads one out
- * of the repository, and no check trusts one it did not just produce. The
- * stamp is what lets the ratchet, which reads a report written earlier,
- * refuse one produced by any other build.
- */
-export function writeReport(report: Report): string {
-  const target = join(repoRoot, "reports", `${report.surface}.json`);
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  writeStamp(target);
-  return target;
+export function runCompiler(tier: number, corpus: CorpusInput): Report {
+  return runSurface("compiler", tier, corpus);
 }
 
 const HASH_PATTERN = /^sha256:[0-9a-f]{64}$/;

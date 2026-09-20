@@ -128,6 +128,41 @@ A run writes one report per surface under `reports/`, which is ignored.
 Reports are build artifacts and are never committed: nothing reads a report out
 of the repository, and no check trusts one it did not just produce.
 
+## The second evidence path: the corpus on another engine
+
+`scripts/hermes-conformance.mjs` runs both surfaces over this corpus on the
+JavaScript engine React Native uses, and diffs the two reports against a run of
+the same corpus on the server runtime in the same invocation. Zero differences
+on both surfaces is what it is run for; a difference is a finding about this
+package or about that engine, recorded and explained, and never answered by
+dropping the case or by narrowing what the README claims.
+
+It is the run behind the README's sentence about where this package's source
+goes. The gate's neutrality stage checks the source for the constructs that
+would make that sentence false, which is a check on the text; a text check
+cannot see two engines disagreeing about a result, and this can.
+
+The engine has no module loader and no filesystem, so the run is bundled into
+one self-contained file with the corpus carried in it as data. That is why the
+conformance runner takes the corpus as an argument rather than finding it:
+`test/conformance/runner.ts` is the run and reaches nothing outside the
+language, `test/conformance/reports.ts` is the half that reads the corpus off
+disk and writes a report to it, and `scripts/lib/corpus-rules.mjs` holds the
+rules deciding which cases a run attempts, separately from the loading that
+reads them. The script refuses a bundle carrying a host module specifier rather
+than warning about one.
+
+The engine, the bundler and the class transform the older standalone build
+needs are development tools for producing this evidence, kept in a directory
+outside the repository that the script is pointed at; none of them is a
+dependency of this package. The script's own header says what fills that
+directory and what a step running this on a build machine would need. It is run
+by hand and is not a stage of the gate.
+
+The proof it produces is against the standalone command-line build of that
+engine, which is an older release than the one current React Native ships, and
+the script's header says what that bounds.
+
 ## The contract
 
 The upstream `conformance/README.md` is the corpus contract - the two surfaces,

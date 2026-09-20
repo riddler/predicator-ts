@@ -35,11 +35,12 @@ import {
   surfaceCaseSet,
 } from "../../scripts/lib/corpus.mjs";
 import { isaVersion } from "../../src/index.js";
-import { reportProblems, runCompiler, runEvaluator, writeReport } from "./runner.js";
+import { loadCorpus, writeReport } from "./reports.js";
+import { reportProblems, runCompiler, runEvaluator } from "./runner.js";
 
 const manifest = loadManifest();
 const TIER = 9;
-const report = runCompiler(TIER);
+const report = runCompiler(TIER, loadCorpus(TIER));
 
 describe("the compiler surface at the tier this build claims", () => {
   // Sabotage: giving a passing result an unknown key turns this red, and the
@@ -106,7 +107,9 @@ describe("the compiler surface at the tier this build claims", () => {
     for (const item of nullSource) expect(reported.has(item.id)).toBe(false);
     const compilerSet = new Set(surfaceCaseSet(cases, "compiler").map((item) => item.id));
     for (const item of nullSource) expect(compilerSet.has(item.id)).toBe(false);
-    const evaluated = new Set(runEvaluator(TIER).results.map((result) => result.id));
+    const evaluated = new Set(
+      runEvaluator(TIER, loadCorpus(TIER)).results.map((result) => result.id),
+    );
     for (const item of nullSource) {
       if (item.features.includes("retired")) continue;
       expect(evaluated.has(item.id)).toBe(true);
@@ -132,7 +135,7 @@ describe("the compiler report on disk", () => {
   // it is removed first and the stamp read is the one this write produced.
   //
   // Sabotage: deleting the stamp write from `writeReport` in
-  // test/conformance/runner.ts turns this red - the report is written and
+  // test/conformance/reports.ts turns this red - the report is written and
   // nothing ties it to a build. It was run and reverted.
   it("is stamped with the build and corpus it was run against", () => {
     rmSync(stampPath(writeReport(report)), { force: true });

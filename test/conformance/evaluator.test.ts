@@ -21,11 +21,12 @@ import { describe, expect, it } from "vitest";
 import { stampPath, stampProblem } from "../../scripts/lib/build-stamp.mjs";
 import { loadCases, loadManifest, surfaceCaseSet } from "../../scripts/lib/corpus.mjs";
 import { isaVersion } from "../../src/index.js";
-import { decodeCase, reportProblems, runEvaluator, writeReport } from "./runner.js";
+import { loadCorpus, writeReport } from "./reports.js";
+import { decodeCase, reportProblems, runEvaluator } from "./runner.js";
 
 const manifest = loadManifest();
 const TIER = 9;
-const report = runEvaluator(TIER);
+const report = runEvaluator(TIER, loadCorpus(TIER));
 
 describe("the evaluator surface at the tier this build claims", () => {
   // Sabotage: giving a result an unknown key, or dropping the reason from a
@@ -109,7 +110,7 @@ describe("the report on disk", () => {
   // is removed first and the stamp read is the one this write produced.
   //
   // Sabotage: deleting the stamp write from `writeReport` in
-  // test/conformance/runner.ts turns this red - the report is written and
+  // test/conformance/reports.ts turns this red - the report is written and
   // nothing ties it to a build. Without the removal it survived, read from the
   // stamp a previous run left.
   it("is stamped with the build and corpus it was run against", () => {
