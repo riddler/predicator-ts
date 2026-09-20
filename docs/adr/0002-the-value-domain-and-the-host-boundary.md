@@ -2665,3 +2665,143 @@ The promise is a promise about the language, it holds wherever `instanceof` is
 complete, and it is the behaviour of the runtime this package is tested on.
 What is now known is that a host running on an engine without that operator
 gets one absence and per-copy classes, rather than both promises.
+
+## Amendment: a `lit` operand refuses a number that is not finite (2026-09-20)
+
+Status: proposed (2026-09-20)
+
+Recorded for `pts-1ib`. This amendment is appended, and removes no line above.
+
+What this amends. The amendment headed "a `lit` operand refuses an integer
+outside the safe range" ends its rules with a paragraph saying that a raw
+non-integral or non-finite number in a `lit` operand is not a member of the
+domain either, that it is not an integer outside the safe range, that the
+amendment decides nothing about it, and that such an operand is admitted
+exactly as it was before. This amendment decides it. It also splits the two
+numbers that paragraph holds together, because the domain does not treat them
+alike, and answers only one of them with a refusal.
+
+**A `lit` operand carrying a number that is not finite is refused at its own
+instruction, with the reason `"non_finite_number"`.** The refusal is an
+`EvaluationError` at the instruction's position, answered on the failing arm
+and never pushed. The test is in the same walk the safe-range rule uses,
+`literalFault` in `src/evaluator.ts`, so it answers wherever the operand holds
+such a number: at the operand's top, and in any own string-keyed data property
+of a list or of an object the machine reads as a map. Where both a shape fault
+and this one are present the shape's reason is answered, as it already is for
+the safe-range fault, because the shape is checked first.
+
+Why that reason, and why no reason is added. The domain has no member for a
+number that is not finite, and this package already says so at that bound with
+this token in three places: the value boundary refuses a host's number with it
+(`normalizeNumber` in `src/values.ts`, read at `a32fa1c`), an arithmetic result
+that is not finite refuses with it (`numericResult` in `src/evaluator.ts`, read
+at `a32fa1c`), and the tagged decoder refuses a wire number with it
+(`decodeTagged` in `src/tagged.ts`, read at `a32fa1c`). The literal is one more
+site at the same bound, so it carries the same token. Nothing here adds an
+opcode, a reason token or a wire-format change.
+
+**What the refusal closes.** Run at `cf9cbe8`, a `::float` cast of such an
+operand raised the float class's `TypeError` out of `evaluate`, `execute` and
+`executeValue` in `src/index.ts` (each read at `a32fa1c`), which answer an
+error on a failing arm rather than throwing it: the float class refuses a
+non-finite number by throwing,
+since reaching it with one is a defect in this package (`Float` in
+`src/values.ts`, read at `a32fa1c`), and the cast built a float from any raw
+number (`toFloat` in `src/cast.ts`, read at `a32fa1c`). A `::integer` cast of
+the same operand answered the number unchanged (`toInteger` in `src/cast.ts`,
+read at `a32fa1c`). Neither is reachable now, because the operand is refused
+before the cast. The amendment headed "the cast exemption reaches the
+non-finite bound" says of that first case only that it decides nothing about a
+cast of such an operand and records what a run answered; read that sentence
+beside this one, which removes the case rather than deciding it.
+
+**A finite number that is not integral is NOT refused, and that is this
+amendment's second decision.** The two halves are not alike, and four things
+say so, each of them a fact about this package rather than a preference:
+
+- The domain has a member for such a number. The value boundary admits one and
+  builds a float from it, where at the non-finite bound it refuses
+  (`normalizeNumber` in `src/values.ts`, read at `a32fa1c`).
+- No reason this package carries is true of it. It is not an integer outside
+  the safe range, and it is not a number that is not finite. The third
+  candidate, `"unsupported_host_value"`, is the boundary's reason for a value
+  the domain has no member for, and the domain has one here. Refusing it would
+  need a new member of the closed reason union in `src/values.ts`, read at
+  `a32fa1c`, which is public surface, and this record does not add one.
+- Where such a number does harm, the machine already refuses it by name. A
+  path segment is the case, because a fractional index against a list would
+  pad the list and write to a property the projection drops: the machine's
+  `store` method in `src/evaluator.ts` tests every segment with the domain's
+  own predicate, `isInteger` in `src/values.ts` (both read at `a32fa1c`), and
+  answers a type mismatch.
+- Refusing it at the literal would take the raw-number arm away from that
+  test. The guard itself would stay reachable, and saying otherwise would
+  overstate this: the domain's predicate also refuses a float segment, and a
+  float segment reaches the store both from a host context and from a float
+  arithmetic result, each run on this branch. What would go is the one segment
+  that tells the domain's predicate apart from a bare `typeof` test. On a
+  float the two agree, both refusing; they part on a raw number the domain
+  holds as no integer, and the finite non-integral one is the only such number
+  still buildable, a raw non-finite number and a raw integer past the safe
+  range being refused at the literal already.
+
+  This is stated over admission rather than over the sites that push a number,
+  because the amendment headed "the out-of-range rule's sites, and the cast
+  exemption" ruled that a sentence which says every and then lists is falsified
+  by the next site somebody adds, and stated its own rule over admission for that
+  reason. **Of the sites that amendment names as admitting a number into the
+  value domain, only a `lit` operand can admit a raw number that is finite and
+  not integral.** Host-context normalization builds a float from one, and a
+  host or builtin function's answered value is normalized through the same
+  function (`normalizeNumber` in `src/values.ts`, read at `a32fa1c`), which is
+  why `Math.pow` past the safe range answers `"integer_out_of_range"` rather
+  than the number (`pow` in `src/functions/math.ts`, run at `cf9cbe8` and
+  again on this branch). The tagged decoder builds a float from a decimal
+  (`decodeTagged` in `src/tagged.ts`, read at `a32fa1c`). An arithmetic result
+  answers a float on the branch where either operand is a float, and on the
+  other branch answers only a safe integer, refusing anything else by name, so
+  it answers no raw non-integral number (`numericResult` in
+  `src/evaluator.ts`, read at `a32fa1c`). And no cast target answers such a
+  number that its operand did not already carry: the
+  float target answers a float, and the integer target answers an integral
+  number, an absence, or the raw number its operand handed it, which is the
+  case the leaves-open section below names (`castValue` in `src/cast.ts`, read
+  at `a32fa1c`). A site that does not admit answers from what is already on
+  the stack - `unary_minus` negates a number the domain already holds, an
+  access reads one out of a container already admitted - so none of them
+  produces such a number unless an admitting site produced one first, which is
+  the point. An author adding an admitting site carries this, as the amendment
+  above already requires of its own rule.
+
+**What this amendment leaves open.** The classification sites are still not
+changed. The module-local integer test, `isIntegral` in `src/evaluator.ts`,
+read at `a32fa1c`, still tests only that a value is a number, and it still
+disagrees with the domain's own predicate, `isInteger` in `src/values.ts`,
+read at `a32fa1c`, on the finite non-integral number the paragraph above
+leaves admitted - the disagreement the
+safe-range amendment describes, now narrowed to that one number. The visible
+consequence is that a `::integer` cast of such a `lit` operand answers the
+number unchanged, which is an integer of no domain this package defines.
+Closing that is a change to the cast rather than to the literal, and this
+amendment does not make it.
+
+**It is pinned by shipped tests** in `test/evaluator.test.ts`: "is refused with
+the boundary's reason, at either infinity and at NaN", through the main entry
+point as well as the machine's; "is refused wherever the operand carries it";
+"answers the failing arm where a cast of it used to raise"; and "admits a
+finite number that is not integral, which the store refuses", which asserts
+the second decision above and the segment refusal together. The store's own
+test, "refuses a segment that is a number the domain admits as no integer",
+now uses finite non-integral segments only, because the literal no longer
+delivers the other two.
+
+Consequences. A hand-built instruction list whose `lit` operand holds a number
+that is not finite, as data or at its top, now answers the failing arm where it
+answered a success or raised. No vendored corpus case carries such a literal:
+a case is read through the tagged decoder, which refuses the number before a
+program exists, and a compiled program cannot carry one either, since a decimal
+literal is emitted as a float and a non-finite one is refused at the literal
+(`literalValue` in `src/emitter.ts`, read at `a32fa1c`). The conformance run is
+unchanged. Nothing in this amendment adds an opcode, a reason token or a
+wire-format change.

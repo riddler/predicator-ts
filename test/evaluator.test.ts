@@ -525,6 +525,108 @@ describe("a literal integer outside the safe range", () => {
   });
 });
 
+describe("a literal number that is not finite", () => {
+  // A literal admits numbers into the domain, and the domain has no member for
+  // a number that is not finite: the value boundary refuses one a host binds
+  // into a context with the reason "non_finite_number", and the float class
+  // refuses one by throwing. Neither the compiler nor the tagged decoder can
+  // put one in an operand - each refuses a non-finite decimal literal at the
+  // literal - so a hand-built instruction list is the one way one reaches the
+  // machine, and the rule is pinned here, through the main entry point as well
+  // as the machine's own.
+  //
+  // Sabotage: removing the finiteness test from the literal's walk falsifies
+  // the rule that a literal admits no number that is not finite, and turns this
+  // test red, the literal answering ok with the number. It was run and
+  // reverted.
+  it("is refused with the boundary's reason, at either infinity and at NaN", () => {
+    for (const magnitude of [Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.NaN]) {
+      const program: Program = [["lit", magnitude]];
+      for (const outcome of [evaluateToValue(program), evaluate(program, {})]) {
+        expect(outcome.ok).toBe(false);
+        if (outcome.ok) continue;
+        expect(outcome.error.type).toBe("EvaluationError");
+        expect(outcome.error.reason).toBe("non_finite_number");
+        expect(outcome.error.position).toBe(0);
+      }
+    }
+  });
+
+  // It is refused wherever the operand holds it, not only at the operand's
+  // top, because an opcode can take a member out of a list or a map the
+  // literal pushed - the same reason the safe-range walk looks inside.
+  //
+  // Sabotage: testing only the operand's top, by returning undefined for a
+  // container instead of descending it, falsifies the rule that the number is
+  // refused wherever the operand carries it, and turns this test red. It was
+  // run and reverted.
+  it("is refused wherever the operand carries it", () => {
+    for (const operand of [
+      [100, Number.POSITIVE_INFINITY],
+      { creditLimit: Number.NaN },
+      [{ card: "visa", limits: [Number.NEGATIVE_INFINITY] }],
+    ]) {
+      const outcome = evaluateToValue([["lit", operand as unknown as Value]]);
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.reason).toBe("non_finite_number");
+    }
+  });
+
+  // The refusal closes an error that left the evaluation. A ::float cast
+  // builds a float from a raw number, and the float class refuses a non-finite
+  // one by throwing, since reaching it with one is a defect in this package;
+  // so while such an operand was admitted, a ::float cast of it raised that
+  // error through a published entry point, where errors are values. The
+  // operand no longer reaches the cast. A ::integer cast of the same operand
+  // answered it unchanged, which is no integer of this domain; it no longer
+  // reaches that cast either.
+  //
+  // Sabotage: removing the finiteness test from the literal's walk falsifies
+  // the rule that no such operand reaches a cast, and turns this test red - the
+  // float case by raising out of the entry point instead of answering the
+  // failing arm, the integer case by answering ok. It was run and reverted.
+  it("answers the failing arm where a cast of it used to raise", () => {
+    for (const type of ["float", "integer"]) {
+      const program: Program = [
+        ["lit", Number.POSITIVE_INFINITY],
+        ["cast", type],
+      ];
+      const outcome = evaluate(program, {});
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) continue;
+      expect(outcome.error.reason).toBe("non_finite_number");
+      expect(outcome.error.position).toBe(0);
+    }
+  });
+
+  // What the refusal does not reach: a finite number that is not integral is
+  // still admitted, since the domain does have a member for it and no reason
+  // this package carries is true of it. The machine still classes such an
+  // operand as an integer, and the store's segment check is where it is
+  // refused. This is the state the record describes, asserted so that a later
+  // change to it is a change to a test as well.
+  //
+  // Sabotage: widening the literal's number test to refuse any number that is
+  // not a safe integer falsifies the rule that a finite non-integral number is
+  // admitted, and turns this test red. It was run and reverted.
+  it("admits a finite number that is not integral, which the store refuses", () => {
+    expect(evaluateToValue([["lit", 1.5]])).toEqual({ ok: true, value: 1.5 });
+    const stored = evaluateToValue(
+      [
+        ["lit", "attempts"],
+        ["lit", 1.5],
+        ["lit", "approved"],
+        ["store", 2],
+      ],
+      { attempts: ["declined"] },
+    );
+    expect(stored.ok).toBe(false);
+    if (stored.ok) return;
+    expect(stored.error.type).toBe("TypeMismatchError");
+  });
+});
+
 describe("the errors that belong to the machine rather than to an opcode", () => {
   // Sabotage: answering the empty program as a successful absence turns this
   // red. It was run and reverted.
@@ -2168,13 +2270,16 @@ describe("the six failures a well-formed store answers", () => {
   // write to a property the projection drops, which no caller could detect. A
   // magnitude past the safe range is not among the segments below because a
   // literal carrying one is refused at the literal, before the store is
-  // reached; the literal's own tests pin that.
+  // reached; the literal's own tests pin that, and they pin the same of a
+  // magnitude that is not finite, which is why neither infinity nor NaN is
+  // among them either. A finite number that is not integral is the one such
+  // segment a literal still delivers, and this is where it is refused.
   //
   // Sabotage: testing the segment with a bare typeof rather than the domain's
   // own integer predicate falsifies the rule that a segment is a string or an
   // integer and nothing else. It was run and reverted.
   it("refuses a segment that is a number the domain admits as no integer", () => {
-    for (const segment of [1.5, Number.NaN, Number.POSITIVE_INFINITY] as Value[]) {
+    for (const segment of [1.5, -0.25] as Value[]) {
       const error = failure(
         [
           ["lit", "attempts"],
