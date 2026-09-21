@@ -133,11 +133,18 @@ number, and the two move independently.
 
 Placed last among the required steps because it is the only one that runs
 itself. `package.json` declares `prepack`, which runs
-`scripts/publish-guard.mjs`, and that script removes the build output, rebuilds
-it from the tree, and then refuses unless two properties hold of what the build
-wrote: no emitted map carries embedded source text, and every file the
-manifest's entry points name exists. A refusal exits non-zero, which stops the
-pack or the publish before a tarball exists.
+`scripts/publish-guard.mjs`. That script removes the build output and rebuilds
+it from the tree, then refuses unless three properties hold of what the build
+wrote: no emitted map carries embedded source text, every file those maps name
+as a source is one the `files` list ships, and every file the manifest's entry
+points name exists. A refusal exits non-zero, which stops the pack or the
+publish before a tarball exists.
+
+The middle property is the other half of the first, not a separate check. The
+build stops embedding source text in its maps only because the `files` list
+ships the source directory instead, so undoing either half on its own leaves
+every published map pointing at a file the tarball does not contain. The guard
+refuses on either, and says so in those terms when it does.
 
 **Why it is mechanical rather than a line on this checklist.** A published
 version cannot be replaced - the number can be retired but not reused - so the
@@ -146,10 +153,10 @@ had no build step, and the build output is not tracked, so a publish packed
 whatever happened to be sitting in the output directory. That shipped: a
 release went out carrying a build made the day before its own tree, with maps
 that still embedded the source the build config had stopped embedding, so the
-tarball carried the source three times over and unpacked to well over what the
-tree it claimed to be unpacks to, with nothing in the output to say so. A step telling a person to build first is exactly the step a
-person skips at the end of a release, which is why this one refuses instead of
-reminding.
+tarball carried the source three times over and unpacked to far more than the
+tree it was cut from, with nothing in the output to say so. A step telling a
+person to build first is exactly the step a person skips at the end of a
+release, which is why this one refuses instead of reminding.
 
 `prepack` is the hook, chosen for what it fires on. It runs on `npm publish`
 and on `npm pack` alike, so the tarball this checklist's own audits inspect is

@@ -15,30 +15,35 @@
 // rebuilt it, and the publish packed whatever was sitting there. The bytes
 // that shipped were an earlier build's - including its maps, which still
 // embedded the source that the build config had since stopped embedding, so
-// the tarball carried the source three times over and was most of a megabyte
-// larger than the tree it claimed to be. Nothing in the output said so. A
+// the tarball carried the source three times over and unpacked to far more
+// than the tree it was cut from. Nothing in the output said so. A
 // checklist step telling a person to build first is exactly the step a person
 // skips at the end of a release, so the refusal has to be mechanical.
 //
-// Three checks, in the order that matters:
+// Four checks, in the order that matters:
 //
 //   1. the build runs from a removed output directory, so what is packed
 //      cannot predate the tree - this alone answers the defect above, and the
-//      two below are what catch it if the build itself is misconfigured;
+//      three below are what catch it if the build itself is misconfigured;
 //   2. no emitted map carries embedded source content, which is the one-line
 //      property the shipped maps violated;
-//   3. every file the manifest's entry points name exists in the output, so a
+//   3. the files those maps point at are files the tarball will contain;
+//   4. every file the manifest's entry points name exists in the output, so a
 //      build that half-succeeded cannot pass for a build.
 //
-// Check 2 reads `sourcesContent`. The build turns it off deliberately and
-// ships the source as files instead, which is one decision with the `src`
-// entry in the manifest's file list: a map's `sources` are relative paths into
-// that directory, so the maps resolve because it ships. A map that carries
-// source text again means that decision came undone somewhere, and the check
-// is against the emitted bytes rather than against the config that produced
-// them - a config is a claim, and the map is the evidence.
+// Checks 2 and 3 are one decision read from both ends, not two checks that
+// happen to sit together. The build stopped embedding source text in its maps
+// and the manifest's file list started shipping the source directory instead,
+// and each half is worthless alone: source text back in the maps is bloat, and
+// a file list that stops shipping the source leaves every map pointing at a
+// file the tarball does not contain, which is a map that resolves to nothing.
+// Undoing either half breaks the maps, so the guard refuses on either half.
+// Both read the emitted bytes rather than the config that produced them - a
+// config is a claim, and the map is the evidence - and check 3 follows each
+// map's own `sources` entries wherever they lead rather than looking for a
+// directory named here, so it still holds if the build's layout moves.
 //
-// Check 3 walks the manifest itself rather than a list written here, so a new
+// Check 4 walks the manifest itself rather than a list written here, so a new
 // entry point is covered with no edit: the top-level `main` and `types`, and
 // every string leaf of the `exports` map, whatever conditions it nests under.
 //
@@ -55,7 +60,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
@@ -130,14 +135,60 @@ if (maps.length === 0) {
   die("the build emitted no maps, so the map check has nothing to read");
 }
 
+// The other half - that the files those maps point at are shipped - is read
+// from the same pass, so the two are never checked against different builds.
+const pointedAt = new Set();
+
 for (const map of maps) {
   const where = relative(packageRoot, map);
-  const embedded = JSON.parse(readFileSync(map, "utf8")).sourcesContent;
+  const emitted = JSON.parse(readFileSync(map, "utf8"));
+  const embedded = emitted.sourcesContent;
   const carries = Array.isArray(embedded) && embedded.some((text) => text != null);
   check(`${where} carries no embedded source`, !carries);
+
+  for (const source of emitted.sources ?? []) {
+    pointedAt.add(relative(packageRoot, resolve(dirname(map), source)));
+  }
 }
 
-// 3. Every file the manifest's entry points name exists in the output.
+// 3. The files those maps point at are files the tarball will contain.
+//
+// A map with no source text is only readable because the files its `sources`
+// name travel beside it. What decides that is the manifest's `files` list, so
+// each path is tested against that list rather than against the disk alone: a
+// source that exists in the checkout but is not shipped is exactly the failure
+// this catches, and it leaves no trace in the build output.
+//
+// A `files` entry can be a directory, which ships everything under it, so a
+// path is shipped when the list names it or any of its ancestors. A manifest
+// with no `files` list at all ships everything the ignore rules leave, and
+// there is nothing here to check.
+
+const shipped = manifest.files;
+
+if (pointedAt.size === 0) {
+  die("the emitted maps name no sources, so the shipped-source check has nothing to read");
+}
+
+if (!Array.isArray(shipped)) {
+  console.log("publish-guard: ok   the manifest ships every file, so every map resolves");
+} else {
+  const listed = new Set(shipped.map((entry) => entry.replace(/^\.\//, "").replace(/\/$/, "")));
+  const shipsPath = (path) => {
+    const segments = path.split("/");
+    return segments.some((_, index) => listed.has(segments.slice(0, index + 1).join("/")));
+  };
+
+  for (const source of [...pointedAt].sort()) {
+    if (source.startsWith("..")) {
+      check(`the maps' source ${source} is inside the package`, false);
+      continue;
+    }
+    check(`${source} is shipped, so the maps that name it resolve`, shipsPath(source));
+  }
+}
+
+// 4. Every file the manifest's entry points name exists in the output.
 
 function entryPointPaths(node, found) {
   if (typeof node === "string") {
@@ -167,6 +218,22 @@ for (const entry of [...named].sort()) {
 
 if (failures.length > 0) {
   console.error("");
+  if (failures.some((label) => label.includes("is shipped, so"))) {
+    console.error(
+      "publish-guard: the maps and the manifest's file list are one decision. The build stops",
+    );
+    console.error(
+      "publish-guard: embedding source text in the maps only because the file list ships that",
+    );
+    console.error(
+      "publish-guard: source instead; a file list that stops shipping it leaves every map",
+    );
+    console.error(
+      "publish-guard: pointing at a file the tarball does not contain. Restore the half that",
+    );
+    console.error("publish-guard: was dropped, or change both halves together and deliberately.");
+    console.error("");
+  }
   die(
     "refusing to pack this output. The checks above that read FAIL say what is wrong with it; " +
       "a published version cannot be replaced, so this stops here rather than shipping it.",
