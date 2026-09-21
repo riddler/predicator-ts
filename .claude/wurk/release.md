@@ -129,6 +129,43 @@ carrier is ever added, it gets a step in this file on the same day. Note that
 reference implementation's instruction set, not this package's release
 number, and the two move independently.
 
+## The required step you do not perform: the publish builds first
+
+Placed last among the required steps because it is the only one that runs
+itself. `package.json` declares `prepack`, which runs
+`scripts/publish-guard.mjs`, and that script removes the build output, rebuilds
+it from the tree, and then refuses unless two properties hold of what the build
+wrote: no emitted map carries embedded source text, and every file the
+manifest's entry points name exists. A refusal exits non-zero, which stops the
+pack or the publish before a tarball exists.
+
+**Why it is mechanical rather than a line on this checklist.** A published
+version cannot be replaced - the number can be retired but not reused - so the
+publish is the one step here whose mistake does not come back. This checklist
+had no build step, and the build output is not tracked, so a publish packed
+whatever happened to be sitting in the output directory. That shipped: a
+release went out carrying a build made the day before its own tree, with maps
+that still embedded the source the build config had stopped embedding, so the
+tarball carried the source three times over and unpacked to well over what the
+tree it claimed to be unpacks to, with nothing in the output to say so. A step telling a person to build first is exactly the step a
+person skips at the end of a release, which is why this one refuses instead of
+reminding.
+
+`prepack` is the hook, chosen for what it fires on. It runs on `npm publish`
+and on `npm pack` alike, so the tarball this checklist's own audits inspect is
+built from the tree as well; and it does not run on an install, so nothing in
+it reaches a routine `pnpm install`. Under this repo's package manager,
+`pnpm publish` runs the hook twice - once itself and once through the pack it
+delegates - so the build runs twice at a publish. That is slower and not
+wrong: the guard is idempotent, and the second run reads the first run's
+output.
+
+So your part at a release is to notice a refusal and read it, not to run
+anything. If the guard refuses, the output is wrong and the release stops
+there; the lines above the refusal name which property failed.
+
+This step touches no file and so is absent from the table below.
+
 ## The files a release commit touches
 
 Exactly these, and a release commit that touches anything else is wrong:
