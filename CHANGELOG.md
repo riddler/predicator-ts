@@ -14,6 +14,17 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.2.1] 2026-09-21
+
+A packaging release, carrying 0.2.0's code unchanged. The published source
+maps that 0.2.0's entry describes - maps that do not embed the package's
+source text - are not in the 0.2.0 tarball; they are in this one, and that
+is the reason to move.
+
+### Fixed
+
+- The published package carries the build made from the tree it was cut from. The 0.2.0 tarball was packed from an earlier build whose maps still embedded the TypeScript source, so it shipped that source three times over and unpacked to well over half again the intended size; this version ships the packaging 0.2.0's own entry describes.
+
 ## [0.2.0] 2026-09-20
 
 The first release of the TypeScript sibling of the Predicator reference
