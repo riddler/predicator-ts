@@ -31,7 +31,7 @@ deprecated but not recalled. A registry is live: read it yourself rather than
 trusting this paragraph's date.
 
 ```bash
-pnpm add @riddler/predicator@^0.2.0
+pnpm add @riddler/predicator@^0.2.1
 ```
 
 The version is named because a bare install resolves to whatever the registry
