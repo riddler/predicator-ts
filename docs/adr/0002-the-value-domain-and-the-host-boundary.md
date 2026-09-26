@@ -2280,7 +2280,7 @@ about what the reference does at the root.
 
 ## Note: which declared divergences the reference transcript now carries (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-26; proposed 2026-09-19)
 
 Recorded for `pts-4tm`. This note is appended, and removes no line above. It
 corrects no decision: every rule this record states stands unchanged. What it
@@ -2408,7 +2408,7 @@ describe.
 
 ## Amendment: a sign inside an offset field stays refused (2026-09-19)
 
-Status: proposed (2026-09-19)
+Status: accepted (2026-09-26; proposed 2026-09-19)
 
 Recorded for `pts-uenf`. This amendment is appended and removes no line above.
 The datetime cast declares a divergence over offsets whose hour or minute
@@ -2543,7 +2543,7 @@ error rather than a refusal of this package's.
 
 ## Amendment: the shape walk descends each container once (2026-09-20)
 
-Status: proposed (2026-09-20)
+Status: accepted (2026-09-26; proposed 2026-09-20)
 
 Recorded for `pts-504`. This amendment is appended and removes no line above.
 The amendment on cycles, nesting and the one depth limit rules what a walk
@@ -2668,7 +2668,7 @@ gets one absence and per-copy classes, rather than both promises.
 
 ## Amendment: a `lit` operand refuses a number that is not finite (2026-09-20)
 
-Status: proposed (2026-09-20)
+Status: accepted (2026-09-26; proposed 2026-09-20)
 
 Recorded for `pts-1ib`. This amendment is appended, and removes no line above.
 
@@ -2808,7 +2808,7 @@ wire-format change.
 
 ## Amendment: what the writers read from a float, and the finite field (2026-09-20)
 
-Status: proposed (2026-09-20)
+Status: accepted (2026-09-26; proposed 2026-09-20)
 
 Recorded for `pts-vdj`. This amendment is appended, and removes no line above.
 
@@ -2883,3 +2883,56 @@ and no wire-format change follow. The string cast and the JSON builtin spell a
 float through `floatText` and so read the same field; neither is given a
 finiteness check here, and this amendment decides nothing about what either
 writes for a field that is not finite.
+
+## Note: the acceptance of the last five entries at proposed (2026-09-26)
+
+This note records that five entries above moved from proposed to accepted
+together, on the operator's approval of 2026-09-26: the note on which declared
+divergences the reference transcript now carries, and the amendments on a sign
+inside an offset field, the shape walk, a `lit` operand that is not finite,
+and what the writers read from a float. It decides nothing, so it carries no
+Status line, and it removes no line. With it, no entry in this record reads
+proposed.
+
+**All five shipped in `@riddler/predicator` 0.2.0.** That version is on npm,
+built from the commit tagged `v0.2.0` (`c40e962`). Each entry's own change is
+in the tag: `fc6cc40` (request 66) for the transcript note, `3afdb1e` (request
+88) for the offset amendment, `a32fa1c` (request 103) for the shape walk,
+`89a1f2a` (request 107) for the non-finite literal and `e516a86` (request 109)
+for the float writers. Every claim below was re-checked in an export of that
+tag, re-located by anchor.
+
+**The transcript note.** Every row it names is in
+`conformance/transcript/transcript.json`: the three `float-cast/` rows and
+their `float-json/` twins, the three `integer-range/` rows, both `map-key/`
+rows, the four `json-form/` rows, both `leading-sign/` rows and
+`clock/two-reads-in-one-evaluation`. `test/reference-transcript.test.ts`
+declares the float rows by label and each other row it names as a divergence.
+The declaration at `serialize` in `src/functions/json.ts` says the encoder
+succeeded on all four, as the note says it was corrected to.
+
+**The offset amendment.** The seven `datetime-offset/` rows the amendment
+names are in the transcript and each is declared in
+`test/reference-transcript.test.ts`; `DATETIME_TEXT` in `src/iso.ts` still
+requires two digits in each field.
+
+**The shape walk.** `nestingFault` in `src/nesting.ts` records a container
+descended without fault, and `test/nesting.test.ts` holds the sixty-level
+funnel asserting no more than twice its levels asked, with the three tests
+beside it the amendment names.
+
+**The non-finite literal.** `literalFault` in `src/evaluator.ts` answers
+`"non_finite_number"`, and the four tests in `test/evaluator.test.ts` and the
+store's segment test carry the names the amendment gives.
+
+**The float writers.** `floatMagnitude` in `src/floats.ts` reads the field,
+`toHost` in `src/values.ts` and `floatText` in `src/floats.ts` take their
+number from it, and `encodeFloat` in `src/tagged.ts` refuses a field that is
+not finite with `"non_finite_number"`. The four tests the amendment names are
+in `test/values.test.ts` and `test/tagged.test.ts`.
+
+**The transcript note carries a Status line, and it is the second note to do
+so.** The rule in `docs/adr/README.md` names one note that carries a Status
+line, the note on statement mode, the two program entry points and the store
+write. The transcript note carried one from the day it landed, before this
+acceptance, and this note does not remove it. Read that rule as naming two.
