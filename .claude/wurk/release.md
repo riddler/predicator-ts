@@ -190,8 +190,13 @@ package's own version.
 ## What a release here still is not
 
 The skill does not tag, push, open a request or publish, and this extension
-does not either. In this repo those are the operator's, in every campaign and
-outside every campaign - `CLAUDE.md`'s authority table says so, and the one
-exception it names is a release-prep request: the version bump and the
-changelog promotion above, no tag, under a campaign consent clause that names
-it.
+does not either. A release commit is the version bump and the changelog
+promotion above, on a release bead the operator has named (in the campaign
+plan or their own words), and nothing more. What follows it is set by
+`CLAUDE.md` - its authority table and its Release preps paragraph - not here.
+The prep is pushed, opened and merged under the rows for those steps. Once the
+prep is merged to `origin/main`, the conductor or the session that owns the
+release bead tags that merged commit with the new version and pushes the tag;
+the tag never comes before the prep is on `origin/main`. The publish
+(`npm publish`) and the release itself stay the operator's, in every campaign
+and outside every campaign, and no consent or relay delegates them.
