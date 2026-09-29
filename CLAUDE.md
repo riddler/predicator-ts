@@ -74,9 +74,8 @@ operator has adopted verbatim that names automatic merges, with every
 condition that consent names met (full gate green, CI green, firewall scan
 clean with a positive control, any named review gate passed), the conductor's
 merge executes the operator's own authorization - the consent's text is what
-may be done and nothing more. (Recorded 2026-09-01 by the operator, campaign
-025 post-wrap queue walk; adopted here at bootstrap with the rest of the
-satellite authority table.)
+may be done and nothing more. (Recorded 2026-09-01 by the operator; adopted
+here at bootstrap with the rest of the satellite authority table.)
 
 **Release preps.** The version bump and the tag of a release prep are the
 family norm, not a grant a campaign consent has to name. On a release bead
