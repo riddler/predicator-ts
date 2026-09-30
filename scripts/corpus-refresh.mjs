@@ -1,7 +1,7 @@
 // Vendors the conformance corpus from the reference implementation at a named
 // tag.
 //
-//   node scripts/corpus-refresh.mjs --from <path-to-predicator-ex> --tag v9.4.1
+//   node scripts/corpus-refresh.mjs --from <path-to-predicator-ex> --tag v9.4.2
 //
 // A refresh is a deliberate, reviewed change. Nothing in the build, the suite
 // or the gate runs this script: it is run by a person, its diff is read like

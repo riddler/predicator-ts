@@ -987,17 +987,51 @@ function shiftChronological(
  * Reads one named member of a value, which never fails.
  *
  * A map answers the member it holds under that name, and the absence when it
- * holds none. Anything else answers the absence too: a name is never a list
- * index, and a target that is neither map nor list - the null value included -
- * has no member to read. Membership is asked with `hasOwn` rather than by
- * reading and testing, so a name every object inherits is a miss here rather
- * than a function pulled off the prototype.
+ * holds none. A duration reads as the map its shape is: each of its eight unit
+ * names answers that field, and any other name is a miss. Anything else
+ * answers the absence too: a name is never a list index, and a target that is
+ * neither map, duration nor list - the null value included - has no member to
+ * read. Membership is asked with `hasOwn` rather than by reading and testing,
+ * so a name every object inherits is a miss here rather than a function pulled
+ * off the prototype.
  */
 function readMember(target: Value, name: string): Value {
+  if (target instanceof Duration) return durationField(target, name);
   if (!isPlainMap(target)) return Undefined;
   if (!Object.hasOwn(target, name)) return Undefined;
   const member = target[name];
   return member === undefined ? Undefined : member;
+}
+
+/**
+ * One field of a duration, read by its unit name.
+ *
+ * The reference's instruction-set document makes a duration's shape normative:
+ * a map with the eight keys `years`, `months`, `weeks`, `days`, `hours`,
+ * `minutes`, `seconds` and `milliseconds`, all present. So a duration answers
+ * each of those names with its field, and any other name - including a name
+ * the class inherits - is a miss.
+ *
+ * That holds wherever the duration came from. The reference answers the field
+ * for a duration the host supplied, and the absence for one its duration
+ * opcode built; `docs/adr/0002` declares that divergence in its amendment on a
+ * duration's fields, and the `duration-field/` rows of the reference
+ * transcript pin it.
+ */
+function durationField(target: Duration, name: string): Value {
+  switch (name) {
+    case "years":
+    case "months":
+    case "weeks":
+    case "days":
+    case "hours":
+    case "minutes":
+    case "seconds":
+    case "milliseconds":
+      return target[name];
+    default:
+      return Undefined;
+  }
 }
 
 /**
@@ -1636,9 +1670,11 @@ class Machine {
    * end or below zero misses and answers the absence, while a key of any other
    * type - a string, a boolean, an absence, a float - is a type mismatch. A
    * map takes a wider set of key types, and a key it does not hold is an
-   * ordinary miss; a key outside that set is a type mismatch. A target that is
-   * neither map nor list answers the absence whatever the key, which is why
-   * the target is dispatched on before the key is judged.
+   * ordinary miss; a key outside that set is a type mismatch. A duration is
+   * indexed as the eight-key map its shape is, under the map's key rules. A
+   * target that is neither map, duration nor list answers the absence whatever
+   * the key, which is why the target is dispatched on before the key is
+   * judged.
    *
    * An INTEGER key against a map finds what that key's decimal spelling holds.
    * A map here is a plain object whose own enumerable keys are strings, so the
@@ -1674,7 +1710,7 @@ class Machine {
       this.stack.push(member === undefined ? Undefined : member);
       return { ok: true, next: at + 1 };
     }
-    if (isPlainMap(target)) {
+    if (isPlainMap(target) || target instanceof Duration) {
       if (!isMapKey(key)) return typeMismatch("bracket_access", "string", key, at);
       const spelled = typeof key === "string" ? key : isIntegral(key) ? String(key) : undefined;
       this.stack.push(spelled === undefined ? Undefined : readMember(target, spelled));

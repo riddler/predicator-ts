@@ -1333,6 +1333,73 @@ describe("indexing", () => {
     });
   });
 
+  // A duration's shape is the eight-key map section 3 of the reference's
+  // instruction-set document makes normative, so a name reads its field. The
+  // reference at v9.4.2 answers these for a duration the host supplied:
+  // `loan_period.days` 21, `loan_period.hours` 2, `loan_period.milliseconds`
+  // 0, `loan_period.fortnights` the absence.
+  //
+  // Sabotage: dropping the duration branch from the member read turns the
+  // first assertion red, answering the absence. It was run and reverted.
+  it("reads a duration's field by its unit name, and misses on any other name", () => {
+    const context = { loan_period: new Duration({ days: 21, hours: 2 }) };
+    const read = (name: string) =>
+      evaluateToValue(
+        [
+          ["load", "loan_period"],
+          ["access", name],
+        ],
+        context,
+      );
+    expect(read("days")).toEqual({ ok: true, value: 21 });
+    expect(read("hours")).toEqual({ ok: true, value: 2 });
+    expect(read("milliseconds")).toEqual({ ok: true, value: 0 });
+    expect(read("fortnights")).toEqual({ ok: true, value: Undefined });
+    // A name the class only inherits is a miss, like one a map only inherits.
+    expect(read("constructor")).toEqual({ ok: true, value: Undefined });
+    expect(read("toString")).toEqual({ ok: true, value: Undefined });
+  });
+
+  // The reference at v9.4.2 answers `loan_period["days"]` 21, a miss for an
+  // integer and a boolean key, and refuses a float key; its null-key answer is
+  // the map rule's, which this build refuses at a map as well.
+  //
+  // Sabotage: leaving a duration out of the map branch of `bracket_access`
+  // turns the first assertion red, answering the absence. It was run and
+  // reverted.
+  it("indexes a duration under a map's key rules", () => {
+    const context = { loan_period: new Duration({ days: 21 }) };
+    const index = (key: Value) =>
+      evaluateToValue([["load", "loan_period"], ["lit", key], ["bracket_access"]], context);
+    expect(index("days")).toEqual({ ok: true, value: 21 });
+    expect(index(1)).toEqual({ ok: true, value: Undefined });
+    expect(index(true)).toEqual({ ok: true, value: Undefined });
+    for (const key of [float(1.5), null]) {
+      const refused = index(key);
+      expect(refused.ok).toBe(false);
+      if (refused.ok) return;
+      expect(refused.error.type).toBe("TypeMismatchError");
+      expect(refused.error.reason).toBe("bracket_access");
+    }
+  });
+
+  // A duration the program built reads the same way. The reference at v9.4.2
+  // answers the absence for `(3d).days`: its duration opcode builds a map whose
+  // keys are its host language's atoms, which a string name never finds. That
+  // is a declared divergence (`docs/adr/0002`, the amendment on a duration's
+  // fields), pinned here so it stays a stated fact.
+  //
+  // Sabotage: answering the absence for a duration the opcode built turns this
+  // red. It was run and reverted.
+  it("reads a field of a duration the duration opcode built", () => {
+    expect(
+      evaluateToValue([
+        ["duration", [[3, "d"]]],
+        ["access", "days"],
+      ]),
+    ).toEqual({ ok: true, value: 3 });
+  });
+
   // Sabotage: admitting every key type at a map turns the second half red,
   // answering a miss where the refusal belongs. It was run and reverted.
   it("takes a wider set of keys at a map than a list does, and misses on them", () => {

@@ -146,10 +146,9 @@ describe("string escapes", () => {
     ]);
     const escapes = ['"', "\\t", "\\r", "\\\\", '\\"', "\\'", '"'].join("");
     expect(tokensOf(escapes)[0]?.value).toBe("\t\r\\\"'");
-    // The uppercase spelling is not refused at the tag: an escape the scanner
-    // does not recognize yields the escaped character itself, so the
-    // backslash is simply lost.
-    expect(tokensOf('"caf\\U00e9"')[0]?.value).toBe("cafU00e9");
+    // An escape the scanner does not recognize yields the escaped character
+    // itself, so the backslash is simply lost.
+    expect(tokensOf('"visa\\qgold"')[0]?.value).toBe("visaqgold");
   });
 
   // Sabotage: letting the lowercase numeric escape fall through to the
@@ -157,6 +156,20 @@ describe("string escapes", () => {
   // reverted.
   it("refuses the lowercase numeric escape by name, at the opening quote", () => {
     const error = refusalOf('"\\u0041"');
+    expect(error.reason).toBe("unsupported_escape");
+    expect(error.message).toBe(
+      "Unsupported escape sequence \\u in string literal: predicator has no " +
+        "numeric escape; write the character itself (string literals are UTF-8)",
+    );
+    expect(error.position).toEqual({ line: 1, column: 1 });
+    expect(error.span).toEqual({ start: { line: 1, column: 1 }, end: { line: 1, column: 2 } });
+  });
+
+  // Sabotage: refusing only the lowercase spelling lets the uppercase one fall
+  // through to the stand-for-itself arm and answers the token `cafU00e9`. It
+  // was run and reverted.
+  it("refuses the uppercase numeric escape with the lowercase spelling's message", () => {
+    const error = refusalOf('"caf\\U00e9"');
     expect(error.reason).toBe("unsupported_escape");
     expect(error.message).toBe(
       "Unsupported escape sequence \\u in string literal: predicator has no " +

@@ -1083,3 +1083,36 @@ count was taken by compiling every source-bearing case against a lowered
 limit and bisecting, over the two hundred and three source-bearing cases a
 parse of every corpus file finds. Each sentence using the number says only
 that no case reaches the bound, which holds at either count.
+
+## Note: the uppercase escape is refused at `v9.4.2` (2026-09-30)
+
+Recorded for `pts-lwa4` and `pts-p5e0`. This note records where the section
+"The uppercase escape follows the tag" now lands and decides nothing new, so
+it carries no Status line, and it removes no line above. Code is cited as this
+change leaves it, on a branch cut from `1b91277`.
+
+**The section's rule stands, and the tag it follows moved.** That section
+decides that this package matches the vendored tag on the uppercase numeric
+escape, and says the reference's refusal of the uppercase form rides the next
+corpus refresh. This change is that refresh: the vendored corpus is now
+predicator-ex `v9.4.2` (`conformance/SOURCE.json`), and at that tag the
+reference refuses `\U` as it refuses `\u`. Run in a detached export of the tag,
+`"caf\U00e9"` is refused with the reason `unsupported_escape` and the message
+the reason table above gives for `\u`, at line 1 column 1 with a span to
+column 2.
+
+**This package now refuses it the same way.** `takeString` in `src/lexer.ts`
+refuses a backslash followed by either spelling with that one message. The
+compile transcript regenerated at `v9.4.2` holds the row
+`refusal/unsupported_escape/uppercase-u` and no longer holds the compile row
+`compile/escape/uppercase-u-passes-through`; the authored source moved from
+the compiled list to the refusal list in `scripts/lib/reference-compile.exs`.
+"refuses the uppercase numeric escape with the lowercase spelling's message"
+in `test/lexer.test.ts` pins it.
+
+**So the section's sentences on `cafU00e9` describe `v9.4.1`.** The paragraph
+in Consequences opening "Matching the tag on the uppercase escape ships a known
+oddity" still holds for its general point: an escape the lexer does not
+recognize loses its backslash, as the compile row
+`compile/escape/unknown-stands-for-its-character` shows. The uppercase numeric
+escape is no longer an instance of it.

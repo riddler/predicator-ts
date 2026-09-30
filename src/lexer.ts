@@ -677,11 +677,12 @@ type TakenString =
  * Six escapes decode - the two quotes, the backslash and the three
  * whitespace letters - and every other escaped character stands for itself,
  * which is how an unrecognized escape quietly loses its backslash. The
- * lowercase numeric escape is the one exception: it is refused by name rather
- * than standing for its letter, so that a caller writing it is told that this
- * language has no numeric escape instead of getting the letter. The uppercase
- * spelling is not refused, which is the reference's behaviour at the tag and
- * the behaviour the vendored corpus was emitted against.
+ * numeric escape is the one exception: it is refused by name rather than
+ * standing for its letter, so that a caller writing it is told that this
+ * language has no numeric escape instead of getting the letter. Both
+ * spellings, `\u` and `\U`, are refused with the one message, which names the
+ * lowercase spelling; that is the reference's behaviour at the tag the
+ * vendored corpus was emitted against.
  *
  * A raw newline inside a literal is content: it moves the line and resets the
  * column, and it is why the token stores an end position rather than letting
@@ -707,7 +708,7 @@ function takeString(
     if (char === quote) {
       return { ok: true, content, next: index + 1, consumed, endLine: line, endColumn: column + 1 };
     }
-    if (char === "\\" && chars[index + 1] === "u") {
+    if (char === "\\" && (chars[index + 1] === "u" || chars[index + 1] === "U")) {
       return {
         ok: false,
         reason: "unsupported_escape",
