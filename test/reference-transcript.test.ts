@@ -24,6 +24,11 @@
 // that no longer exists is as false as a missing one. A row that differs is
 // never made green by editing the transcript; it is declared here, beside the
 // comment in `src/` that declares it.
+//
+// A row whose answer is the text of a JSON object is compared by the value
+// that text decodes to rather than as a string, so the order the reference
+// wrote the object's keys in is not part of the row (see
+// `JSON_OBJECT_TEXT_ROWS`).
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -34,7 +39,7 @@ import { compile } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
 import { decodeTagged, evaluateTagged } from "../src/tagged.js";
 import { PDate, PDateTime, Undefined, type Value } from "../src/values.js";
-import { type DecodedCase, decodeCase, sameValue } from "./conformance/runner.js";
+import { type DecodedCase, decodeCase, isMap, sameValue } from "./conformance/runner.js";
 
 const conformanceRoot = fileURLToPath(new URL("../conformance/", import.meta.url));
 const transcriptBytes = readFileSync(join(conformanceRoot, "transcript", "transcript.json"));
@@ -219,11 +224,14 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
       declaredBy: "serialize in src/functions/json.ts",
     },
   ],
+  // The duration row's literal lists the keys in the domain's unit order, which
+  // deliberately differs from the order the transcript records: the row is
+  // compared by parsed value, so the order is not compared.
   [
     "json-form/duration",
     {
       reference:
-        '{"seconds":0,"milliseconds":0,"years":0,"months":0,"weeks":0,"days":2,"hours":0,"minutes":0}',
+        '{"years":0,"months":0,"weeks":0,"days":2,"hours":0,"minutes":0,"seconds":0,"milliseconds":0}',
       ours: "refused: JSON.stringify has no JSON form for a duration",
       declaredBy: "serialize in src/functions/json.ts",
     },
@@ -289,6 +297,35 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
     { reference: false, ours: true, declaredBy: "clockFunction in src/functions/date.ts" },
   ],
 ]);
+
+/**
+ * The rows whose recorded answer is the text of a JSON object, and which are
+ * therefore compared by the value that text decodes to.
+ *
+ * The reference writes such an object's keys in an order that follows its host
+ * language's map ordering. That is a property of the build that generated the
+ * row, not of the tag, so a regeneration on another machine writes the same
+ * object with its keys in a different order. The key order is not part of what
+ * the row records.
+ */
+const JSON_OBJECT_TEXT_ROWS: ReadonlySet<string> = new Set(["json-form/duration"]);
+
+/**
+ * Whether two answers to the row `id` are the same answer. A row named in
+ * `JSON_OBJECT_TEXT_ROWS` holds text, and two texts are the same answer when
+ * they decode to the same value. A text that does not decode is compared as
+ * text: this package's answer for such a row is a refusal message, which is
+ * not JSON, and must still be compared with what the entry declares.
+ * Every other row compares by `sameValue`.
+ */
+function sameAnswer(id: string, left: Value, right: Value): boolean {
+  if (JSON_OBJECT_TEXT_ROWS.has(id) && typeof left === "string" && typeof right === "string") {
+    const decodedLeft = decodeTagged(left);
+    const decodedRight = decodeTagged(right);
+    if (decodedLeft.ok && decodedRight.ok) return sameValue(decodedLeft.value, decodedRight.value);
+  }
+  return sameValue(left, right);
+}
 
 /** The transcript's rows, decoded with the corpus decoder. */
 function rows(): DecodedCase[] {
@@ -363,6 +400,19 @@ describe("the reference transcript", () => {
     expect([...DECLARED.keys()].filter((id) => !ids.has(id))).toEqual([]);
   });
 
+  // Sabotage: dropping the duration row from `JSON_OBJECT_TEXT_ROWS` turns this
+  // red. A regeneration that adds a row answering a JSON object's text fails
+  // here until the row is named, rather than failing later on a key order.
+  it("names every row whose answer is the text of a JSON object", () => {
+    const withObjectText = ROWS.filter((row) => {
+      const value = row.expectation.kind === "result" ? row.expectation.value : null;
+      if (typeof value !== "string") return false;
+      const decoded = decodeTagged(value);
+      return decoded.ok && isMap(decoded.value);
+    }).map((row) => row.id);
+    expect(withObjectText.sort()).toEqual([...JSON_OBJECT_TEXT_ROWS].sort());
+  });
+
   // Sabotage, through scripts/sabotage.mjs, each run and reverted: one row's
   // answer changed in the transcript, an agreeing row and a declared row in
   // turn, turns that row red; so does trimming only the ASCII space in `trim`,
@@ -380,6 +430,9 @@ describe("the reference transcript", () => {
   // guard in `numericResult` turns `integer-range/sum-past-safe` red; and
   // reading the host clock inside the clock builtin rather than the
   // evaluation's memo turns `clock/two-reads-in-one-evaluation` red.
+  // Sabotage: comparing the duration row by text in `sameAnswer` turns it red on
+  // the reference's answer; dropping the row from the set turns the enumeration
+  // above red. Each was run and reverted.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const expected = row.expectation;
     expect(expected.kind).toBe("result");
@@ -388,17 +441,17 @@ describe("the reference transcript", () => {
     const declared = DECLARED.get(id);
     if (declared === undefined) {
       expect(ours, `${id}: this package and the reference disagree`).toSatisfy((value: Value) =>
-        sameValue(value, reference),
+        sameAnswer(id, value, reference),
       );
       return;
     }
     expect(reference, `${id}: the reference's answer moved`).toSatisfy((value: Value) =>
-      sameValue(value, declared.reference),
+      sameAnswer(id, value, declared.reference),
     );
     expect(ours, `${id}: this package's answer moved`).toSatisfy((value: Value) =>
-      sameValue(value, declared.ours),
+      sameAnswer(id, value, declared.ours),
     );
-    expect(sameValue(reference, ours), `${id}: the two now agree`).toBe(false);
+    expect(sameAnswer(id, reference, ours), `${id}: the two now agree`).toBe(false);
   });
 });
 

@@ -820,3 +820,37 @@ caller exists that is not a surface wrapper - a run inside another host. A
 second caller reaching the shared constructor is what the one-constructor
 decision asks for; what it forbids is a second caller assembling a report of its
 own.
+
+## Note: a transcript answer that is a JSON object's text is compared by its value (2026-09-30)
+
+Recorded for `pts-lg0b`. This note states how the transcript amendment's
+comparison reads for one class of row and decides nothing new, so it carries no
+Status line. Code is cited as this change leaves it, on a branch cut from
+`64a6e9d`.
+
+**The reference's answer for `json-form/duration` is the text of a JSON
+object, and the order of that object's keys is not a property of the tag.** The
+reference writes the object's keys in the order its host language gives the
+map, which depends on the build that ran it, so a regeneration at the same tag
+on another machine writes the same object with its keys in another order. The
+row's text is therefore not reproducible, and a comparison of that text would
+turn red on a regeneration that changed nothing the row is about.
+
+**A row whose answer is the text of a JSON object is compared by the value the
+text decodes to.** The rows are named in `JSON_OBJECT_TEXT_ROWS` in
+`test/reference-transcript.test.ts`, and `sameAnswer` in the same file decodes
+both texts and compares the decoded values with `sameValue`, which does not
+compare a map's key order. It is used for all four comparisons the amendment
+describes: this package's answer against the reference's on an agreeing row,
+and, on a declared row, the reference's answer against the entry's, this
+package's answer against the entry's, and the check that the two differ. So the
+amendment's sentence "compared in the value domain as the runner compares a
+case" reads, for such a row, as a comparison of the decoded values rather than
+of the strings.
+
+**The set is checked against the transcript, both ways.** A case in the same
+file fails when a row whose recorded answer decodes to a map is not named in
+`JSON_OBJECT_TEXT_ROWS`, and when a named row no longer answers such a text, so
+a regeneration that adds a row of this kind fails there until it is named. At
+this change the duration row is the only one. The transcript itself is not
+regenerated or edited, and the row's recorded text is unchanged.
