@@ -16,7 +16,7 @@
 
 import { floatMagnitude } from "./floats.js";
 import { hasPlainPrototype, ownData, setKey } from "./maps.js";
-import { enterContainer, type NestingReason } from "./nesting.js";
+import { enterContainer, type NestingReason, type PlaceCount, visitPlace } from "./nesting.js";
 
 /** The registered keys that mark an instance of each value class. */
 const FLOAT_KEY = Symbol.for("predicator.float");
@@ -338,8 +338,10 @@ export function typeName(value: Value): TypeName {
  *
  * `"integer_out_of_range"` is this package's own reason token, at its own
  * boundary: it is not an ISA reason and it adds no opcode and no wire-format
- * change. So are `"cyclic_value"`, for a value that contains itself, and
+ * change. So are `"cyclic_value"`, for a value that contains itself,
  * `"depth_limit_exceeded"`, for one nested past the depth limit this package
+ * declares, and `"place_budget_exceeded"`, for one with more places - counted
+ * once for each path that reaches them - than the budget this package
  * declares.
  */
 export type RefusalReason =
@@ -347,7 +349,8 @@ export type RefusalReason =
   | "non_finite_number"
   | "unsupported_host_value"
   | "cyclic_value"
-  | "depth_limit_exceeded";
+  | "depth_limit_exceeded"
+  | "place_budget_exceeded";
 
 /**
  * A refused normalization. The error category is the corpus's
@@ -382,7 +385,13 @@ function enter(container: object, depth: number, ancestors: Set<object>): void {
   if (fault !== undefined) throw new RefusalSignal(fault);
 }
 
-function normalize(value: unknown, depth: number, ancestors: Set<object>): Value {
+function normalize(
+  value: unknown,
+  depth: number,
+  ancestors: Set<object>,
+  places: PlaceCount,
+): Value {
+  if (visitPlace(places)) throw new RefusalSignal("place_budget_exceeded");
   if (value === undefined) return Undefined;
   if (value === Undefined) return Undefined;
 
@@ -401,13 +410,15 @@ function normalize(value: unknown, depth: number, ancestors: Set<object>): Value
     // normalized list, and a hole is not a member of the domain. Array.from
     // visits it as the language's absence, which normalizes to this
     // domain's absence like any other.
-    const out = Array.from(value, (member: unknown) => normalize(member, depth + 1, ancestors));
+    const out = Array.from(value, (member: unknown) =>
+      normalize(member, depth + 1, ancestors, places),
+    );
     ancestors.delete(value);
     return out;
   }
   if (typeof value === "object") {
     if (value === null) return null;
-    return normalizeObject(value, depth, ancestors);
+    return normalizeObject(value, depth, ancestors, places);
   }
 
   switch (typeof value) {
@@ -429,14 +440,19 @@ function normalizeNumber(value: number): Value {
   return value;
 }
 
-function normalizeObject(value: object, depth: number, ancestors: Set<object>): Value {
+function normalizeObject(
+  value: object,
+  depth: number,
+  ancestors: Set<object>,
+  places: PlaceCount,
+): Value {
   if (!hasPlainPrototype(value)) {
     throw new RefusalSignal("unsupported_host_value");
   }
   enter(value, depth, ancestors);
   const out: { [key: string]: Value } = {};
   for (const [key, member] of Object.entries(value)) {
-    setKey(out, key, normalize(member, depth + 1, ancestors));
+    setKey(out, key, normalize(member, depth + 1, ancestors, places));
   }
   ancestors.delete(value);
   return out;
@@ -469,7 +485,12 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  * past the depth limit this package declares is refused as
  * `"depth_limit_exceeded"`, so neither exhausts the call stack. A value
  * reached twice by two different paths is not a cycle and is normalized at
- * each place it appears.
+ * each place it appears, so the answer holds a copy of it at each place.
+ * Because that answer grows with the number of paths rather than with the
+ * number of containers, the walk counts the places it visits, once per path,
+ * and refuses a value with more places than the budget this package declares
+ * as `"place_budget_exceeded"` rather than building an answer that size. A
+ * value within the budget is normalized in full.
  *
  * What the walk cannot turn into a refusal is host code running inside it: a
  * getter or a proxy trap on the value that throws propagates its own error out
@@ -478,7 +499,7 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  */
 export function fromHost(value: unknown): Normalization {
   try {
-    return { ok: true, value: normalize(value, 1, new Set()) };
+    return { ok: true, value: normalize(value, 1, new Set(), { visited: 0 }) };
   } catch (error) {
     if (error instanceof RefusalSignal) {
       return { ok: false, errorType: "EvaluationError", reason: error.reason };

@@ -6,7 +6,10 @@
  * which the boundary walks check, and how deep a SOURCE may nest, which the
  * grammar and the emitter check. Each is documented on its own constant
  * below. The paragraphs that follow are about the value limit, which came
- * first and whose argument the source limit reuses.
+ * first and whose argument the source limit reuses. Beside the two limits is
+ * one budget, `PLACE_BUDGET`, which bounds how many places the two walks that
+ * build an answer at each place a value appears - normalization and the
+ * tagged encoder - may visit in one call.
  *
  * Walking a value - normalizing a context or a function's answered value,
  * encoding and decoding the tagged wire text, comparing two values or testing
@@ -31,7 +34,9 @@
  * See `docs/adr/0002-the-value-domain-and-the-host-boundary.md`, whose
  * amendment on nesting records the value limit and why it is declared, and
  * the amendment on nesting depth at the end of
- * `docs/adr/0004-the-compiler-surface.md` for the source limit.
+ * `docs/adr/0004-the-compiler-surface.md` for the source limit. The budget is
+ * recorded by the amendment on the visited-place budget in the first of
+ * those.
  */
 
 /**
@@ -83,6 +88,48 @@ export const DEPTH_LIMIT = 256;
  * `docs/adr/0004-the-compiler-surface.md`.
  */
 export const SOURCE_DEPTH_LIMIT = 256;
+
+/**
+ * How many places one normalization or one encode may visit before it
+ * refuses the value.
+ *
+ * A place is a position a value sits at: the value handed in, and every
+ * member of every list and map under it, counted once for each path that
+ * reaches it. Normalizing a context and writing tagged text both build an
+ * answer at each place - a value reached by two paths is copied, or written,
+ * at each place it appears - so a value built from a few dozen shared maps
+ * whose paths double with every level has more places than any answer could
+ * hold. Past this many places the walk stops and refuses the value with
+ * `"place_budget_exceeded"` rather than building an answer no caller can wait
+ * for.
+ *
+ * Why this number, by the argument the depth limit rests on: it is a bound
+ * declared by this package rather than one the host's memory or patience
+ * decides, so where the refusal falls is a property of the value. It is set
+ * far above what a host hands in as data - a list of ten thousand records of
+ * twenty fields each is about two hundred thousand places - and far below the
+ * sizes a shared structure reaches, where twenty levels of doubling already
+ * pass it. A value at exactly this many places answers normally; one more
+ * place is refused.
+ */
+export const PLACE_BUDGET = 1_000_000;
+
+/**
+ * The places one walk has visited so far. A walk makes one and hands it down,
+ * so every recursive step counts against the same budget.
+ */
+export interface PlaceCount {
+  visited: number;
+}
+
+/**
+ * Counts one more place, and answers whether the walk has now passed
+ * `PLACE_BUDGET`.
+ */
+export function visitPlace(count: PlaceCount): boolean {
+  count.visited += 1;
+  return count.visited > PLACE_BUDGET;
+}
 
 /**
  * Why a walk refused a value on its shape rather than its content: it contains

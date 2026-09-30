@@ -31,7 +31,7 @@ import { floatMagnitude, floatText } from "./floats.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
 import { isPlainMap, setKey } from "./maps.js";
-import { DEPTH_LIMIT, enterContainer } from "./nesting.js";
+import { DEPTH_LIMIT, enterContainer, type PlaceCount, visitPlace } from "./nesting.js";
 import { Duration, Float, PDate, PDateTime, toHost, Undefined, type Value } from "./values.js";
 
 /**
@@ -47,8 +47,10 @@ export type DecodeReason =
 
 /**
  * Why a value could not be encoded. `"cyclic_value"` is a value that contains
- * itself, and `"depth_limit_exceeded"` one whose text would nest past the
- * depth limit this package declares. `"invalid_tagged_value"` is a date or a
+ * itself, `"depth_limit_exceeded"` one whose text would nest past the depth
+ * limit this package declares, and `"place_budget_exceeded"` one with more
+ * places - counted once for each path that reaches them - than the budget
+ * this package declares. `"invalid_tagged_value"` is a date or a
  * datetime whose tag would not read back as the same value; it is also the
  * reason the decoder gives a tag it cannot read.
  */
@@ -59,7 +61,8 @@ export type EncodeReason =
   | "non_finite_number"
   | "unsupported_host_value"
   | "cyclic_value"
-  | "depth_limit_exceeded";
+  | "depth_limit_exceeded"
+  | "place_budget_exceeded";
 
 /** The result of decoding one text. `offset` is where in the text it went wrong. */
 export type DecodeResult =
@@ -446,6 +449,11 @@ export function decodeTagged(text: string): DecodeResult {
  * is counted in the text, where a tag's own braces are a level, so everything
  * this writes is text the decoder reads back. A value reached twice by two
  * different paths is not a cycle and is written at each place it appears.
+ * Because the text then grows with the number of paths rather than with the
+ * number of containers, the walk counts the places it visits, once per path,
+ * and refuses a value with more places than the budget this package declares
+ * as `"place_budget_exceeded"` rather than writing text that long. A value
+ * within the budget is written in full.
  *
  * A date or a datetime whose tag would not read back as the same value is
  * refused as `"invalid_tagged_value"`: the domain holds dates in years this
@@ -458,7 +466,7 @@ export function decodeTagged(text: string): DecodeResult {
  */
 export function encodeTagged(value: Value): EncodeResult {
   try {
-    return { ok: true, text: encodeValue(value, 1, new Set()) };
+    return { ok: true, text: encodeValue(value, 1, new Set(), { visited: 0 }) };
   } catch (error) {
     if (error instanceof EncodeSignal) {
       return { ok: false, reason: error.reason };
@@ -483,9 +491,16 @@ export function encodeTagged(value: Value): EncodeResult {
  *
  * `depth` is the level of the text this value's own bracket or brace would
  * open at, the outermost being level one; `ancestors` holds the lists and maps
- * on the path down to it.
+ * on the path down to it; `places` counts every place written so far in this
+ * call, against the place budget.
  */
-function encodeValue(value: Value | undefined, depth: number, ancestors: Set<object>): string {
+function encodeValue(
+  value: Value | undefined,
+  depth: number,
+  ancestors: Set<object>,
+  places: PlaceCount,
+): string {
+  if (visitPlace(places)) throw new EncodeSignal("place_budget_exceeded");
   if (value === Undefined) return tagAt(depth, 0, '{"$type":"undefined"}');
   if (value === null) return "null";
   if (value instanceof Float) return encodeFloat(value);
@@ -503,7 +518,7 @@ function encodeValue(value: Value | undefined, depth: number, ancestors: Set<obj
     // join then writes as nothing between two commas - text this module's own
     // decoder rejects as malformed.
     const members = Array.from(value, (member: Value | undefined) =>
-      encodeValue(member, depth + 1, ancestors),
+      encodeValue(member, depth + 1, ancestors, places),
     );
     ancestors.delete(value);
     return `[${members.join(",")}]`;
@@ -516,7 +531,7 @@ function encodeValue(value: Value | undefined, depth: number, ancestors: Set<obj
     case "number":
       return encodeInteger(value);
     case "object":
-      return encodeMap(value, depth, ancestors);
+      return encodeMap(value, depth, ancestors, places);
     default:
       throw new EncodeSignal("unsupported_host_value");
   }
@@ -611,12 +626,18 @@ function encodeDateTime(value: PDateTime): string {
   return text;
 }
 
-function encodeMap(value: object, depth: number, ancestors: Set<object>): string {
+function encodeMap(
+  value: object,
+  depth: number,
+  ancestors: Set<object>,
+  places: PlaceCount,
+): string {
   if (!isPlainMap(value)) throw new EncodeSignal("unsupported_host_value");
   if (Object.hasOwn(value, "$type")) throw new EncodeSignal("reserved_map_key");
   enter(value, depth, ancestors);
   const members = Object.entries(value).map(
-    ([key, member]) => `${JSON.stringify(key)}:${encodeValue(member, depth + 1, ancestors)}`,
+    ([key, member]) =>
+      `${JSON.stringify(key)}:${encodeValue(member, depth + 1, ancestors, places)}`,
   );
   ancestors.delete(value);
   return `{${members.join(",")}}`;

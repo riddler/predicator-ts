@@ -3221,3 +3221,115 @@ a thousand is `1.0e3` where it was `1000.0`, and ten to the twenty-first is
 `1.0e21` where it was `1e+21`. A host that indexes a map with the null value
 gets the absence where it got a `bracket_access` type mismatch. No exported
 signature changes, no reason token is added, and no opcode changes.
+
+## Amendment: a visited-place budget bounds the walks that answer at each place (2026-09-30)
+
+Status: proposed (2026-09-30)
+
+Recorded for `pts-77it`, ruled by the operator, 2026-09-29: a host that hands
+in a shared structure gets a copy at each place it appears, for the normalized
+answer and the wire text alike, and the work that costs is bounded by a budget
+of visited places per call that refuses with a new reason. This amendment is
+appended, and removes no line above. Code is cited as this change leaves it,
+on a branch cut from `1856f82`.
+
+What this amends. The amendment on cycles, nesting and the one depth limit
+rules that a value reached by two paths without being its own ancestor "is
+normalized, or written, at each place it appears". The amendment on the shape
+walk leaves normalization and the encode direction of the codec descending a
+shared container once per path, because remembering a container in either
+would change what it answers, and says that bound "is a separate decision and
+is not taken here". This amendment takes it. It adds one refusal and removes
+no rule: the sentence quoted above stays true of every value this package
+answers.
+
+### Copies stay
+
+**A shared structure is normalized, and written, at each place it appears.**
+`fromHost` in `src/values.ts` answers a copy of its own at each place a
+container appears, never one object at two places, and `encodeTagged` in
+`src/tagged.ts` writes the container's text at each place. So each answer is
+as large as the number of places in the value, and a value whose shared
+containers double its paths at every level has more places than any answer
+can hold.
+
+### A budget of visited places per call
+
+**`PLACE_BUDGET` in `src/nesting.ts`, of one million, bounds how many places
+one call of either walk visits.** A place is a position a value sits at: the
+value handed in, and every member of every list and map under it, a leaf as
+much as a container, counted once for each path that reaches it. `visitPlace`
+in `src/nesting.ts` counts one place against a count that one call makes and
+hands down; `normalize` in `src/values.ts` and `encodeValue` in
+`src/tagged.ts` each count every place as they come to it. A value
+of exactly the budget's places answers; one more place is refused.
+
+**The refusal carries a new reason, `"place_budget_exceeded"`**, a member of
+`RefusalReason` in `src/values.ts` and of `EncodeReason` in `src/tagged.ts`.
+`fromHost` answers it as its failing arm, and so it reaches every entry point
+that normalizes a context (`normalizeContext` in `src/context.ts`) as an
+`EvaluationError` with that reason, and a function's answered value (`fromHost`
+is what normalizes it) at the call's instruction. `encodeTagged` answers it as
+its failing arm, and `evaluateTagged` in `src/tagged.ts`, asked for the
+encoding, answers it for a result past the budget, which a program can build
+by storing, again and again, a list that holds a root twice under that same
+root.
+
+**A value within the budget answers exactly what it answered before.** The
+count reads nothing and builds nothing; it only refuses. Past the budget the
+walk stops at the first place over it, so a value that is past the budget and
+also holds a cycle, a level past the depth limit or a member the domain has no
+row for answers whichever fault the walk reaches first, in the order it has
+always walked.
+
+**Why this number.** The argument the depth limit rests on: a bound this
+package declares, rather than one the host's memory or patience decides, makes
+where the refusal falls a property of the value. The number is set far above
+what a host hands in as data and far below what a shared structure reaches. A
+list of ten thousand records of twenty fields each is 210,001 places. A value
+whose every level holds the same next level under two keys, over a last level
+of one map and one leaf, has three times two to the power of one less than its
+levels, less one: 786,431 places at nineteen levels, and 1,572,863 at twenty,
+which is past the budget.
+
+**Why a new reason.** The value neither contains itself nor nests past the
+depth limit, so neither reason this record declares describes it. The
+reference has no such refusal to match: at `v9.4.2` every match of `budget`
+under its `lib/` belongs to its loop budget, whose reason `"loop_budget_exceeded"`
+is the spelling this reason follows.
+
+### One thing a host can observe
+
+**A getter or a proxy trap on a shared container still runs once for each
+place it appears**, as it did, because normalization and the encoder read
+every place they build. What changes is that one call reads no more than the
+budget's worth of places before it answers.
+
+### What this does not reach
+
+**The projection, `toHost` in `src/values.ts`, and the JSON serializer,
+`serialize` in `src/functions/json.ts`, count no places.** Each still walks a
+shared container once per path. A context never holds a shared container,
+because `fromHost` copied it, but a program can build one, and neither walk is
+bounded by this budget.
+
+### What pins it
+
+The tests under "the place budget of the walks that answer at each place" in
+`test/nesting.test.ts`: "normalizes a container two paths share as a copy at
+each place" pins the copies; "answers a shared funnel within the budget in
+full on both sides" pins that a value of 393,215 places answers the text and
+the copy a walk with no budget builds; "answers a value of exactly the
+budget's places and refuses one more" pins the boundary on both sides; and
+"stops normalizing a context at the budget, having read no more members" and
+"stops writing tagged text at the budget, having read no more members" hand
+`evaluate` and `encodeTagged` a sixty-level shared value behind getters that
+count their reads, and assert the refusal and that no more members than the
+budget were read - the work done, not the time taken.
+
+Consequences. A host that hands in, or asks the codec to write, a value of
+more than a million places gets a failing arm with `"place_budget_exceeded"`
+where it got a copy or text after work that doubled with every shared level.
+A host that switches over `RefusalReason` or `EncodeReason` has one more
+member to handle. No exported function's signature changes, and no opcode
+changes.
