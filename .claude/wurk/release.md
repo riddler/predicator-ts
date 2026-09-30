@@ -135,8 +135,11 @@ itself. `package.json` declares `prepack`, which runs
 `scripts/publish-guard.mjs`. That script removes the build output and rebuilds
 it from the tree, then refuses unless three properties hold of what the build
 wrote: no emitted map carries embedded source text, every file those maps name
-as a source is one the `files` list ships, and every file the manifest's entry
-points name exists. A refusal exits non-zero, which stops the pack or the
+as a source is one the tarball will contain, and every file the manifest's
+entry points name exists and is one the tarball will contain. What the tarball
+will contain is npm's own answer (`npm pack --dry-run`), not a reading of the
+`files` list, so a pattern entry, a negation and a missing list all count the
+way npm counts them. A refusal exits non-zero, which stops the pack or the
 publish before a tarball exists.
 
 The middle property is the other half of the first, not a separate check. The

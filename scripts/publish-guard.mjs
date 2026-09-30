@@ -29,7 +29,8 @@
 //      property the shipped maps violated;
 //   3. the files those maps point at are files the tarball will contain;
 //   4. every file the manifest's entry points name exists in the output, so a
-//      build that half-succeeded cannot pass for a build.
+//      build that half-succeeded cannot pass for a build, and is a file the
+//      tarball will contain, so a build that is never shipped cannot either.
 //
 // Checks 2 and 3 are one decision read from both ends, not two checks that
 // happen to sit together. The build stopped embedding source text in its maps
@@ -47,6 +48,13 @@
 // entry point is covered with no edit: the top-level `main` and `types`, and
 // every string leaf of the `exports` map, whatever conditions it nests under.
 //
+// What the tarball will contain, for checks 3 and 4, is asked of the packaging
+// tool rather than worked out from the manifest's file list here: the list's
+// rules are the tool's, and a guard that models them by hand is making a claim
+// about the tool. Why, and how it is asked, is in
+// `scripts/lib/publish-checks.mjs`, which holds checks 2 to 4 so they can be
+// run against a throwaway package as well as this one.
+//
 // A refusal exits non-zero, which stops the pack or the publish before a
 // tarball exists.
 //
@@ -59,13 +67,12 @@
 // defect above stayed invisible.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkBuildOutput } from "./lib/publish-checks.mjs";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
-const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
-
 const failures = [];
 
 function die(message) {
@@ -114,106 +121,14 @@ if (!existsSync(outDir)) {
   die("the build wrote no output directory");
 }
 
-// 2. No emitted map carries embedded source content.
+// 2 to 4. What the build wrote, and what the tarball will carry of it.
 
-function filesUnder(dir) {
-  const found = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      found.push(...filesUnder(full));
-    } else {
-      found.push(full);
-    }
-  }
-  return found;
+const { checks, stop } = checkBuildOutput(packageRoot);
+for (const { label, ok } of checks) {
+  check(label, ok);
 }
-
-const maps = filesUnder(outDir).filter((file) => file.endsWith(".map"));
-
-if (maps.length === 0) {
-  die("the build emitted no maps, so the map check has nothing to read");
-}
-
-// The other half - that the files those maps point at are shipped - is read
-// from the same pass, so the two are never checked against different builds.
-const pointedAt = new Set();
-
-for (const map of maps) {
-  const where = relative(packageRoot, map);
-  const emitted = JSON.parse(readFileSync(map, "utf8"));
-  const embedded = emitted.sourcesContent;
-  const carries = Array.isArray(embedded) && embedded.some((text) => text != null);
-  check(`${where} carries no embedded source`, !carries);
-
-  for (const source of emitted.sources ?? []) {
-    pointedAt.add(relative(packageRoot, resolve(dirname(map), source)));
-  }
-}
-
-// 3. The files those maps point at are files the tarball will contain.
-//
-// A map with no source text is only readable because the files its `sources`
-// name travel beside it. What decides that is the manifest's `files` list, so
-// each path is tested against that list rather than against the disk alone: a
-// source that exists in the checkout but is not shipped is exactly the failure
-// this catches, and it leaves no trace in the build output.
-//
-// A `files` entry can be a directory, which ships everything under it, so a
-// path is shipped when the list names it or any of its ancestors. A manifest
-// with no `files` list at all ships everything the ignore rules leave, and
-// there is nothing here to check.
-
-const shipped = manifest.files;
-
-if (pointedAt.size === 0) {
-  die("the emitted maps name no sources, so the shipped-source check has nothing to read");
-}
-
-if (!Array.isArray(shipped)) {
-  console.log("publish-guard: ok   the manifest ships every file, so every map resolves");
-} else {
-  const listed = new Set(shipped.map((entry) => entry.replace(/^\.\//, "").replace(/\/$/, "")));
-  const shipsPath = (path) => {
-    const segments = path.split("/");
-    return segments.some((_, index) => listed.has(segments.slice(0, index + 1).join("/")));
-  };
-
-  for (const source of [...pointedAt].sort()) {
-    if (source.startsWith("..")) {
-      check(`the maps' source ${source} is inside the package`, false);
-      continue;
-    }
-    check(`${source} is shipped, so the maps that name it resolve`, shipsPath(source));
-  }
-}
-
-// 4. Every file the manifest's entry points name exists in the output.
-
-function entryPointPaths(node, found) {
-  if (typeof node === "string") {
-    found.add(node);
-  } else if (node && typeof node === "object") {
-    for (const value of Object.values(node)) {
-      entryPointPaths(value, found);
-    }
-  }
-  return found;
-}
-
-const named = entryPointPaths(manifest.exports, new Set());
-for (const field of [manifest.main, manifest.types]) {
-  if (typeof field === "string") {
-    named.add(field);
-  }
-}
-
-if (named.size === 0) {
-  die("the manifest names no entry point, so the entry-point check has nothing to read");
-}
-
-for (const entry of [...named].sort()) {
-  check(`${entry} exists in the output`, existsSync(join(packageRoot, entry)));
+if (stop !== null) {
+  die(stop);
 }
 
 if (failures.length > 0) {
