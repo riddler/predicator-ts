@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { describeFault, jsonFault } from "../src/functions/json.js";
 import { evaluate, execute, executeValue, type Program } from "../src/index.js";
-import { DEPTH_LIMIT, nestingFault } from "../src/nesting.js";
+import { DEPTH_LIMIT, nestingFault, PLACE_BUDGET } from "../src/nesting.js";
 import { decodeTagged, encodeTagged, evaluateTagged } from "../src/tagged.js";
 import { Duration, fromHost, PDate, type Value } from "../src/values.js";
 
@@ -850,6 +850,101 @@ describe("the shape walk over a value built from shared containers", () => {
   it("answers a lit operand built from shared maps", () => {
     const funnel = budgetedFunnel(LEVELS, LEVELS * 8) as Value;
     expect(execute([["lit", funnel]])).toEqual({ ok: true, context: {} });
+  });
+});
+
+/**
+ * The shared funnel with each step's two members behind a getter that counts
+ * the reads. Past `cap` reads a getter answers a leaf instead of the next
+ * step, so a walk that visits every place still finishes, having read a little
+ * over `cap` members, rather than running until the suite gives up. What the
+ * assertions read is the count, and how long the machine takes is not.
+ */
+function countedFunnel(
+  levels: number,
+  cap: number,
+): { readonly funnel: Record<string, unknown>; readonly reads: () => number } {
+  let read = 0;
+  const counted = (member: unknown): unknown => {
+    read += 1;
+    return read > cap ? "abandoned" : member;
+  };
+  let step: Record<string, unknown> = { step: "done" };
+  for (let level = 1; level < levels; level += 1) {
+    const next = step;
+    step = {
+      get skipped(): unknown {
+        return counted(next);
+      },
+      get taken(): unknown {
+        return counted(next);
+      },
+    };
+  }
+  return { funnel: step, reads: () => read };
+}
+
+/** A flat list of variant weights that is `places` places: itself and its members. */
+function flatPlaces(places: number): number[] {
+  return new Array<number>(places - 1).fill(50);
+}
+
+describe("the place budget of the walks that answer at each place", () => {
+  // Deep enough that the places, which double at every level, pass the budget
+  // many times over.
+  const LEVELS = 60;
+  // Far past the budget, so a walk without it reads to here and finishes.
+  const CAP = PLACE_BUDGET * 2;
+
+  // Copies stay: a container two paths share is normalized at each place, as
+  // a copy of its own. Sabotage: answering the host's own map from
+  // normalizeObject rather than the copy it built answers one object at both
+  // places. It was run and reverted.
+  it("normalizes a container two paths share as a copy at each place", () => {
+    const card = { brand: "visa", last4: "4242" };
+    const normalized = fromHost({ primary: card, backup: card });
+    expect(normalized).toEqual({ ok: true, value: { primary: card, backup: card } });
+    const value = (normalized.ok ? normalized.value : {}) as Record<string, unknown>;
+    expect(value.primary).not.toBe(value.backup);
+    expect(value.primary).not.toBe(card);
+  });
+
+  // A value within the budget answers in full, the copy and the text the same
+  // as a walk with no budget would build. Sabotage: lowering the budget below
+  // this funnel's places refuses it on both sides. It was run and reverted.
+  it("answers a shared funnel within the budget in full on both sides", () => {
+    // Eighteen levels are 393,215 places: each level is its map and twice the
+    // places of the level below, and the last is a map and its one leaf.
+    const funnel = sharedFunnel(18);
+    expect(fromHost(funnel)).toEqual({ ok: true, value: JSON.parse(JSON.stringify(funnel)) });
+    expect(encodeTagged(funnel as Value)).toEqual({ ok: true, text: JSON.stringify(funnel) });
+  });
+
+  // Sabotage: refusing at the budget rather than past it, `>=` for `>` in
+  // visitPlace, refuses the value at the budget on both sides. It was run and
+  // reverted.
+  it("answers a value of exactly the budget's places and refuses one more", () => {
+    expect(fromHost(flatPlaces(PLACE_BUDGET)).ok).toBe(true);
+    expect(encodeTagged(flatPlaces(PLACE_BUDGET)).ok).toBe(true);
+    expect(reasonOf(fromHost(flatPlaces(PLACE_BUDGET + 1)))).toBe("place_budget_exceeded");
+    expect(reasonOf(encodeTagged(flatPlaces(PLACE_BUDGET + 1)))).toBe("place_budget_exceeded");
+  });
+
+  // Sabotage: dropping the place count from normalize lets the walk read to
+  // the funnel's cap and answer the context. It was run and reverted.
+  it("stops normalizing a context at the budget, having read no more members", () => {
+    const counted = countedFunnel(LEVELS, CAP);
+    const refused = evaluate([["lit", true]], { funnel: counted.funnel });
+    expect(reasonOf(refused)).toBe("place_budget_exceeded");
+    expect(counted.reads()).toBeLessThanOrEqual(PLACE_BUDGET);
+  });
+
+  // Sabotage: dropping the place count from encodeValue lets the walk read to
+  // the funnel's cap and write the text. It was run and reverted.
+  it("stops writing tagged text at the budget, having read no more members", () => {
+    const counted = countedFunnel(LEVELS, CAP);
+    expect(reasonOf(encodeTagged(counted.funnel as Value))).toBe("place_budget_exceeded");
+    expect(counted.reads()).toBeLessThanOrEqual(PLACE_BUDGET);
   });
 });
 

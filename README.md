@@ -435,7 +435,12 @@ is held to the same limit, and so is a value the program builds for itself: a
 comparison or a membership test whose operand is nested past the limit, a store
 that would nest the context past it, and a result nested past it are each
 refused at that point rather than walked or handed over. A value reached by two
-paths without a cycle - one card object under two keys, say - is not refused.
+paths without a cycle - one card object under two keys, say - is not refused:
+it is normalized at each place it appears, as a copy of its own. Because that
+copy grows with the paths rather than with the objects, the places are counted,
+once for each path that reaches them, and a context of more than a million
+places is refused with `place_budget_exceeded` rather than copied; a place is
+the context itself and every member of every list and map under it.
 
 ```ts
 import { evaluate } from "@riddler/predicator";
@@ -679,7 +684,10 @@ refused by `encodeTagged` with `cyclic_value`, and both directions refuse
 nesting past the same declared limit of 256 levels with
 `depth_limit_exceeded` - a decode at the offset of the first bracket or brace
 past it. In the text every bracket and brace counts, a tag's own included, so
-whatever `encodeTagged` writes, `decodeTagged` reads back. A getter or a proxy
+whatever `encodeTagged` writes, `decodeTagged` reads back. A value reached by
+two paths is written at each place it appears, and `encodeTagged` refuses a
+value of more than a million places, counted as at `evaluate`, with
+`place_budget_exceeded`. A getter or a proxy
 trap on a value handed to `encodeTagged` is host code running inside the walk,
 and an error it throws propagates unchanged, as it does at `evaluate`.
 

@@ -1,0 +1,3 @@
+### Changed
+
+- A context, a value a registered function answers, or a value handed to `encodeTagged` (or to `evaluateTagged` as a result asked for as the encoding) of more than 1,000,000 places is refused with the new reason `place_budget_exceeded`, a member of `RefusalReason` and of `EncodeReason`, where it was copied or written at each place however long that took. A place is the value and every member of every list and map under it, counted once for each path that reaches it, so a structure whose shared maps double its paths at every level passes the budget at twenty levels. A shared value within the budget is normalized and written at each place it appears, exactly as before.
