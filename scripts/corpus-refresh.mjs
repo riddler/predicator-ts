@@ -34,9 +34,21 @@
 // hash and the check rejects the tree on its next run. So once the copied
 // tier files are shown to hash to the manifest's value, every regular file
 // in `conformance/corpus/` that the manifest does not list is deleted, each
-// deletion printed. That directory is the one the check scans for unlisted
-// files, and it is the only one pruned; the check stays the backstop for
-// anything this leaves.
+// deletion printed.
+//
+// A SCHEMA THE TAG DOES NOT CARRY IS REMOVED TOO, for the same reason and
+// with more need: the check scans `conformance/corpus/` for unlisted files
+// but reads nothing under `conformance/schema/`, so a schema the new tag
+// dropped would stay vendored with nothing to notice it. Once every schema
+// the tag carries has been written, every regular file in
+// `conformance/schema/` that is not one of them is deleted, each deletion
+// printed. A schema the tag carries is never deleted: it is the set just
+// written, and it is the set the pruning skips.
+//
+// Only regular files are pruned, in either directory. A directory or a link
+// is not something this script writes, so it is not something it deletes;
+// the check still rejects one under `conformance/corpus/`, and a person
+// removes it. A refresh stopped by a hash mismatch prunes nothing.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -142,27 +154,42 @@ if (observed !== manifest.corpus_hash) {
   );
 }
 
+/**
+ * Deletes every regular file in `conformance/<directory>/` whose path is not
+ * in `kept`, printing each deletion with `why`. Anything that is not a
+ * regular file is left where it is.
+ */
+function pruneUnlisted(directory, kept, why) {
+  const root = join(conformanceRoot, directory);
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const relativePath = `${directory}/${entry.name}`;
+    if (!entry.isFile() || kept.has(relativePath)) continue;
+    unlinkSync(join(root, entry.name));
+    console.log(`corpus:refresh: removed conformance/${relativePath}, ${why}`);
+  }
+}
+
 // Only after the hash holds, so a refresh whose tier files do not hash to the
 // manifest's value stops having deleted nothing.
-const listed = new Set(tiers.map((tier) => tier.file));
-const corpusRoot = join(conformanceRoot, "corpus");
-for (const entry of readdirSync(corpusRoot, { withFileTypes: true })) {
-  const relativePath = `corpus/${entry.name}`;
-  if (!entry.isFile() || listed.has(relativePath)) continue;
-  unlinkSync(join(corpusRoot, entry.name));
-  console.log(
-    `corpus:refresh: removed conformance/${relativePath}, which the manifest at ${tag} does not list`,
-  );
-}
+pruneUnlisted(
+  "corpus",
+  new Set(tiers.map((tier) => tier.file)),
+  `which the manifest at ${tag} does not list`,
+);
 
 const schemaPaths = gitText(from, ["ls-tree", "--name-only", tag, "conformance/schema/"])
   .split("\n")
   .filter((line) => line.endsWith(".json"))
   .sort();
 if (schemaPaths.length === 0) die(`no schemas under conformance/schema/ at ${tag}`);
-for (const path of schemaPaths) {
-  writeVendored(path.replace(/^conformance\//, ""), git(from, ["show", `${tag}:${path}`]));
+const vendoredSchemas = schemaPaths.map((path) => path.replace(/^conformance\//, ""));
+for (const [index, path] of schemaPaths.entries()) {
+  writeVendored(vendoredSchemas[index], git(from, ["show", `${tag}:${path}`]));
 }
+
+// Only after every schema the tag carries is written, so the set kept is the
+// set on disk.
+pruneUnlisted("schema", new Set(vendoredSchemas), `which the tag ${tag} does not carry`);
 
 // The five keys the conformance record fixes, written in that order. The
 // hash and the version are read out of the copied manifest rather than
