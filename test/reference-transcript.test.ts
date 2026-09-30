@@ -1,18 +1,20 @@
 // The reference transcript, diffed against this package.
 //
 // `conformance/transcript/transcript.json` holds rows in the shape of a corpus
-// case, each carrying the answer the reference gave when it ran that row at
-// the tag `conformance/transcript/SOURCE.json` records. The rows cover where
-// this package states how its answer compares with the reference's and no
-// vendored case reaches: how a float is written as text, the unit a string
-// position is counted in, what trimming removes, which spellings of a UTC
-// offset the datetime cast reads, what `JSON.stringify` answers for a value
-// with no JSON form, whether a sign before a whole date or datetime text is
-// read, what an integer key finds against a map, what an arithmetic result
-// past the safe integer range answers, and whether two reads of the clock in
-// one evaluation answer one instant. The file is written by
-// `scripts/reference-transcript.mjs` and by nothing else; the suite never
-// runs the reference, it reads what the reference answered.
+// case, each carrying the answer the reference gave when it ran that row at the
+// tag `conformance/transcript/SOURCE.json` records. The rows cover where this
+// package states how its answer compares with the reference's and no vendored
+// case reaches: how a float is written as text through the string cast,
+// `JSON.stringify` and a concatenation and whether that text reads back through
+// the float cast, the unit a string position is counted in, what trimming
+// removes, which spellings of a UTC offset the datetime cast reads, what
+// `JSON.stringify` answers for a value with no JSON form, whether a sign before
+// a whole date or datetime text is read, what an integer key and a null key
+// find against a map and a null key against a duration, what an arithmetic
+// result past the safe integer range answers, and whether two reads of the
+// clock in one evaluation answer one instant. The file is written by
+// `scripts/reference-transcript.mjs` and by nothing else; the suite never runs
+// the reference, it reads what the reference answered.
 //
 // EVERY ROW IS ONE OF TWO KINDS. A row not named in `DECLARED` below must
 // agree: this package's answer is the reference's. A row named there is a
@@ -60,27 +62,11 @@ interface Declared {
   readonly declaredBy: string;
 }
 
-// The float renderings. The reference writes a float through its host
-// language's shortest form, which chooses an exponent by significant digits
-// against decimal exponent and always writes a fraction digit and no plus
-// sign; this package writes the host's own spelling. Each value is asked of
-// the string cast and of `JSON.stringify`, which answer the same text on both
-// sides, so one entry here declares both rows.
-const FLOAT_ROWS: readonly (readonly [label: string, reference: string, ours: string])[] = [
-  ["1000", "1.0e3", "1000.0"],
-  ["10000", "1.0e4", "10000.0"],
-  ["1e15", "1.0e15", "1000000000000000.0"],
-  ["1e16", "1.0e16", "10000000000000000.0"],
-  ["1e20", "1.0e20", "100000000000000000000.0"],
-  ["1e21", "1.0e21", "1e+21"],
-  ["neg-1e21", "-1.0e21", "-1e+21"],
-  ["1e22", "1.0e22", "1e+22"],
-  ["1e-5", "1.0e-5", "0.00001"],
-  ["1e-6", "1.0e-6", "0.000001"],
-  ["1e-7", "1.0e-7", "1e-7"],
-  ["largest", "1.7976931348623157e308", "1.7976931348623157e+308"],
-  ["smallest", "5.0e-324", "5e-324"],
-];
+// The float renderings are not declared: this package writes a float by the
+// reference's rule (`floatSpelling` in src/floats.ts), so every `float-cast/`,
+// `float-json/`, `float-concat/` and `float-cast-back/` row must agree. So must the null-key rows
+// under `map-key/`: the null value misses as a key at a map and at a duration
+// on both sides (`isMapKey` in src/evaluator.ts).
 
 /** An instant on the day the `datetime-offset/` rows are written on, in UTC. */
 function utc(hour: number, minute: number): PDateTime {
@@ -88,13 +74,6 @@ function utc(hour: number, minute: number): PDateTime {
 }
 
 const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
-  ...FLOAT_ROWS.flatMap(([label, reference, ours]) => [
-    [`float-cast/${label}`, { reference, ours, declaredBy: "floatText in src/floats.ts" }] as const,
-    [
-      `float-json/${label}`,
-      { reference, ours, declaredBy: "the header of src/functions/json.ts" },
-    ] as const,
-  ]),
   // The unit of a string position: the reference counts and slices in
   // graphemes and indexes in UTF-8 bytes, and this package does all three in
   // code points.

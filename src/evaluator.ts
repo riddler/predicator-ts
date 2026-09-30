@@ -1038,22 +1038,20 @@ function durationField(target: Duration, name: string): Value {
  * Whether a value may index a map at all.
  *
  * Section 5 of the reference's instruction-set document tells a sibling with
- * no atom type to admit a string, an integer, a boolean and its own absence,
- * and that written instruction is what this implements. The reference itself
- * reaches the same clause through a single test for its host language's atom
- * type, and ITS null value is one of those atoms, so the reference admits a
- * null key and looks it up like any other key, where this refuses it. That is a
- * deliberate divergence in favour of the written instruction over the behaviour
- * the host language happens to give the reference, not a consequence of the
- * domains differing. No conformance case pins either answer, so the question is
- * open and unpinned here.
+ * no atom type to admit a string, an integer, a boolean and its own absence.
+ * The reference itself reaches the same clause through a single test for its
+ * host language's atom type, and ITS null value is one of those atoms, so the
+ * reference admits a null key and misses on it. This admits the null value
+ * too, and so answers what the reference answers: `docs/adr/0002`, the
+ * amendment on the null map key and the float spelling, records the choice,
+ * and the transcript row `map-key/null-against-map` in
+ * `conformance/transcript/` carries the reference's answer.
  *
  * Everything outside that set - a float, a list, a map, a date, an instant, a
- * duration, the null value - is a key this opcode refuses rather than one it
- * misses on.
+ * duration - is a key this opcode refuses rather than one it misses on.
  */
 function isMapKey(key: Value): boolean {
-  if (key === Undefined) return true;
+  if (key === Undefined || key === null) return true;
   return typeof key === "string" || isIntegral(key) || typeof key === "boolean";
 }
 
@@ -1670,13 +1668,11 @@ class Machine {
    * end or below zero misses and answers the absence, while a key of any other
    * type - a string, a boolean, an absence, a float - is a type mismatch. A
    * map takes a wider set of key types, and a key it does not hold is an
-   * ordinary miss; a key outside that set is a type mismatch. A duration is
-   * indexed as the eight-key map its shape is, under the map's key rules with
-   * one exception: the null value as a key misses at a duration, as it does at
-   * the reference's duration and as it did here before a duration had fields. A
-   * target that is neither map, duration nor list answers the absence whatever
-   * the key, which is why the target is dispatched on before the key is
-   * judged.
+   * ordinary miss; a key outside that set is a type mismatch. The null value
+   * is in that set and misses. A duration is indexed as the eight-key map its
+   * shape is, under the map's key rules. A target that is neither map,
+   * duration nor list answers the absence whatever the key, which is why the
+   * target is dispatched on before the key is judged.
    *
    * An INTEGER key against a map finds what that key's decimal spelling holds.
    * A map here is a plain object whose own enumerable keys are strings, so the
@@ -1710,10 +1706,6 @@ class Machine {
       if (!isIntegral(key)) return typeMismatch("bracket_access", "integer", key, at);
       const member = key >= 0 && key < target.length ? target[key] : undefined;
       this.stack.push(member === undefined ? Undefined : member);
-      return { ok: true, next: at + 1 };
-    }
-    if (target instanceof Duration && key === null) {
-      this.stack.push(Undefined);
       return { ok: true, next: at + 1 };
     }
     if (isPlainMap(target) || target instanceof Duration) {

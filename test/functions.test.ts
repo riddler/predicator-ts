@@ -343,23 +343,25 @@ describe("serializing to JSON", () => {
     expect(answered(call("JSON.stringify", [float(-7)]))).toBe("-7.0");
   });
 
-  // An integral float large enough that the host renders it in exponential
-  // notation is where a decimal point appended to the NUMBER's integrality
-  // rather than to its TEXT stops producing JSON at all. Both sides of the
-  // boundary are asserted, and so is a value below one, whose rendering carries
-  // an exponent without being integral.
+  // An integral float written in exponent form carries its point in the
+  // mantissa, as the reference writes it, and a point appended after the
+  // exponent would stop the text being JSON at all. Integral values written
+  // with an exponent are asserted, and so is a value below one, whose
+  // spelling carries an exponent without being integral, and an integral
+  // value written plain beside them. The spellings are the reference's, run
+  // at predicator-ex `v9.4.2`.
   //
-  // Sabotage: testing the number rather than its rendering turns red every
-  // assertion whose value is BOTH integral and rendered with an exponent,
-  // which excludes the integral value this package still writes in full and
-  // the non-integral value it writes with an exponent. It was run and
-  // reverted.
+  // Sabotage: appending a `.0` to the exponent form when the number is
+  // integral turns red every assertion whose value is BOTH integral and
+  // written with an exponent. It was run and reverted.
   it("never appends a decimal point to an exponent", () => {
-    expect(answered(call("JSON.stringify", [float(1e20)]))).toBe("100000000000000000000.0");
-    expect(answered(call("JSON.stringify", [float(1e21)]))).toBe("1e+21");
-    expect(answered(call("JSON.stringify", [float(-1e21)]))).toBe("-1e+21");
-    expect(answered(call("JSON.stringify", [float(2.5 ** 70)]))).toBe("7.174648137343064e+27");
-    expect(answered(call("JSON.stringify", [float(1e-7)]))).toBe("1e-7");
+    expect(answered(call("JSON.stringify", [float(1234)]))).toBe("1234.0");
+    expect(answered(call("JSON.stringify", [float(1000)]))).toBe("1.0e3");
+    expect(answered(call("JSON.stringify", [float(1e20)]))).toBe("1.0e20");
+    expect(answered(call("JSON.stringify", [float(1e21)]))).toBe("1.0e21");
+    expect(answered(call("JSON.stringify", [float(-1e21)]))).toBe("-1.0e21");
+    expect(answered(call("JSON.stringify", [float(2.5 ** 70)]))).toBe("7.174648137343064e27");
+    expect(answered(call("JSON.stringify", [float(1e-7)]))).toBe("1.0e-7");
   });
 
   // What the assertion above is really protecting is that the text is JSON, so
@@ -566,11 +568,12 @@ describe("locating a fault in a JSON text", () => {
 // have been in, so a pin beside a declaration is not a substitute for writing
 // the declaration carefully.
 //
-// For the declarations this block pins - the float rendering, the unit of a
-// string position, and trimming - the reference's side is a transcript rather
-// than a reading: `conformance/transcript/` holds what the reference answered,
-// run at the vendored tag, and `test/reference-transcript.test.ts` diffs both
-// sides row by row.
+// For the declarations this block pins - the unit of a string position, and
+// trimming - the reference's side is a transcript rather than a reading:
+// `conformance/transcript/` holds what the reference answered, run at the
+// vendored tag, and `test/reference-transcript.test.ts` diffs both sides row
+// by row. The float rendering was one of them until this package took the
+// reference's spelling; `test/floats.test.ts` pins that spelling now.
 //
 // Declarations pinned elsewhere are not repeated here: the memoized clock, the
 // refusal to serialize a value JSON has no form for, the refusal of a leading
@@ -582,44 +585,6 @@ describe("locating a fault in a JSON text", () => {
 // strings, and what a write under an integer key leaves behind, which needs
 // the statement entry point a row does not use.
 describe("the declared divergences, on the side that can be executed", () => {
-  // The float rendering. The reference chooses between full and exponential
-  // notation per value rather than by magnitude, so it has no boundary to
-  // assert against; what is pinned here is THIS package's rule, which is a
-  // magnitude threshold, and how it spells what it writes.
-  //
-  // Sabotage: two mutations, each run and reverted. Testing the number rather
-  // than its rendering turns red every assertion whose value is integral and
-  // carries an exponent. Appending the suffix unconditionally turns red every
-  // assertion whose rendering already carries a point or an exponent.
-  it("writes a float the way the declaration says it does", () => {
-    const rendered = (n: number) => answered(call("JSON.stringify", [float(n)]));
-    // Well past the magnitudes where the reference has already started writing
-    // exponents, this package is still writing every digit out.
-    expect(rendered(1e16)).toBe("10000000000000000.0");
-    expect(rendered(1e20)).toBe("100000000000000000000.0");
-    // This package's own upper switch, one order of magnitude further up, and
-    // the plus sign the reference does not write.
-    expect(rendered(1e21)).toBe("1e+21");
-    expect(rendered(-1e21)).toBe("-1e+21");
-    // Two neighbouring small magnitudes that fall on OPPOSITE SIDES of the
-    // reference's choice, which is why both of them are here. The reference
-    // writes the first out in full, character for character what this package
-    // writes (the transcript row `float-json/1e-4`); it writes the second with
-    // an exponent (the row `float-json/1e-5`), where this package still
-    // writes it out. Neither of the two says anything about the other, and
-    // that is what having no threshold means. Both assertions below are this
-    // package's own rendering, which writes both of them in full.
-    expect(rendered(1e-4)).toBe("0.0001");
-    expect(rendered(1e-5)).toBe("0.00001");
-    // This package's own lower switch, and the two mantissa shapes: a single
-    // digit, where the reference writes a fraction digit and this does not,
-    // and two or more.
-    expect(rendered(1e-6)).toBe("0.000001");
-    expect(rendered(1e-7)).toBe("1e-7");
-    expect(rendered(1.5e-7)).toBe("1.5e-7");
-    expect(rendered(3.25e-8)).toBe("3.25e-8");
-  });
-
   // The unit of a string position. The reference counts graphemes and reports
   // an index as a byte offset; this counts and indexes in code points. A
   // combining mark separates a code point from a grapheme, and a two-byte

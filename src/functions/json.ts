@@ -23,50 +23,16 @@
  * the contract, so the keys are sorted. Sorting is by code unit, which is the
  * host's own default order and depends on no locale data.
  *
- * A FLOAT'S RENDERING IS A DECLARED DIVERGENCE of its own, and the first thing
- * to say about it is that IT IS NOT A MAGNITUDE THRESHOLD. The reference hands
- * a float to its language's own encoder and this package uses the host's, and
- * the two part company in two ways, of which only the first is simple.
- *
- * The first is structural. The reference's short form always writes at least
- * one fraction digit and never writes a plus sign, so it spells a single-digit
- * mantissa where this package spells none, and spells a positive exponent bare
- * where this package spells it signed.
- *
- * The second is the choice between writing a number out in full and writing it
- * with an exponent, AND THE TWO SIDES DO NOT MAKE THAT CHOICE THE SAME WAY.
- * This package's rule is a magnitude threshold: an exponent at or above ten to
- * the twenty-first and below ten to the minus sixth, every digit written out
- * in between. The reference's rule is not a threshold at all - the choice
- * follows from how many significant digits a value carries against its decimal
- * exponent rather than from its size - so it can flip between one value and
- * the next. A thousand comes out with an exponent and a thousand and one comes
- * out in full.
- *
- * SO THERE IS NO BOUNDARY TO QUOTE HERE, and an earlier version of this
- * paragraph that quoted one was wrong by more than a dozen orders of
- * magnitude. Disagreement starts among ordinary four-digit values rather than
- * out at the ends of the range, and a value's neighbours say nothing about it.
- *
- * WHAT A CONSUMER CAN RELY ON is narrow, and narrow and true beats tidy and
- * false: DO NOT COMPARE A SERIALIZED FLOAT AS TEXT ACROSS THE TWO
- * IMPLEMENTATIONS. Compare the numbers instead. Both spellings are valid JSON
- * and both read back as the same number, so it is only ever the text that
- * differs. Some values do render identically on both sides; this paragraph
- * does not say which, and no rule should be inferred from the ones that do.
- * No conformance case serializes a float at all.
- *
- * THE REFERENCE HALF OF THIS IS A TRANSCRIPT, NOT A READING. The reference
- * cannot run here, so its renderings were taken by running it at the vendored
- * tag, and they are vendored in `conformance/transcript/` as the rows whose
- * ids begin `float-json/`. `test/reference-transcript.test.ts` diffs this
- * package's answer against each of those rows, and declares every row where
- * the two differ with both answers, so it fails when either side moves. The
- * thousand and the thousand and one above are the rows `float-json/1000` and
- * `float-json/1001`. Treat this paragraph as a warning rather than as a table:
- * how the reference renders a value the transcript does not carry is still
- * something to go and render, and the transcript's generator is where a row
- * is added.
+ * A FLOAT IS WRITTEN AS THE REFERENCE WRITES IT, through `floatText` in
+ * `../floats.ts`, which the string cast and the tagged encoder call too.
+ * `floatSpelling` there states the rule; it is the reference's, and it is not
+ * a magnitude threshold: below two to the fifty-third the shorter of the plain
+ * and exponent forms is written, so a thousand comes out as `1.0e3` and a
+ * thousand and one as `1001.0`, and a value's neighbours say nothing about it.
+ * The reference's renderings are vendored in `conformance/transcript/` as the
+ * rows whose ids begin `float-json/`, and `test/reference-transcript.test.ts`
+ * holds this package's answer to each of them; every one agrees. No vendored
+ * conformance case serializes a float.
  */
 
 import type { HostFunction } from "../evaluator.js";
