@@ -61,8 +61,8 @@ jobs:
       - name: Install dependencies
         run: mise exec -- pnpm install --frozen-lockfile
 
-      # The gate is the whole job: typecheck, lint, the suite with coverage
-      # against the manifest's floor, the corpus check, and the build.
+      # The gate is the whole job: every stage of package.json's `gate`
+      # script, which lists them in one place so this comment does not.
       #
       # Same reasoning as the toolchain step, applied to the gate itself: the
       # command is read out of .claude/wurk.json rather than written here, so

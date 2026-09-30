@@ -146,20 +146,30 @@ question to raise rather than a guess to encode.
 ## Build & Test
 
 ```bash
-pnpm run gate:loop   # inner loop: typecheck, lint, the suite
-pnpm run gate        # full gate: + engine neutrality, coverage floor, corpus check, build
-pnpm run test        # just the suite
-pnpm run format      # rewrite formatting (the gate only checks it)
+mise exec -- pnpm run gate:loop   # inner loop: typecheck, lint, the suite
+mise exec -- pnpm run gate        # full gate: every stage of package.json's `gate` script
+mise exec -- pnpm run test        # just the suite
+mise exec -- pnpm run format      # rewrite formatting (the gate only checks it)
 ```
 
-Full `pnpm run gate` must be green before any commit. The lint stage runs
-`biome check`, which checks formatting rather than rewriting it: drift fails
-the gate and nothing is fixed silently, so run `pnpm run format` yourself
-before committing.
+The first two lines are the manifest's commands (`gate.loop` and `gate.full`
+in `.claude/wurk.json`), and CI runs `gate.full` as written there. The
+`mise exec --` prefix runs each command on the node and pnpm that `mise.toml`
+pins. Without it, `pnpm run gate` runs on whatever node the PATH resolves,
+which need not be the pinned one; the full gate runs `node --version` as its
+first command, so its output shows which node it ran on. The full gate's
+stages are listed in one place, package.json's `gate` script, and are not
+repeated here.
+
+Full `mise exec -- pnpm run gate` must be green before any commit. The lint
+stage runs `biome check`, which checks formatting rather than rewriting it:
+drift fails the gate and nothing is fixed silently, so run
+`mise exec -- pnpm run format` yourself before committing.
 
 ### This repo's own gate rules
 
-- The full gate is `pnpm run gate`; the inner loop is `pnpm run gate:loop`.
+- The full gate is `mise exec -- pnpm run gate`; the inner loop is
+  `mise exec -- pnpm run gate:loop`.
   Only the full command is the advancement gate: a `gate:loop` run, like any
   scoped run, is never evidence for a claim that the gate is green. It measures
   no coverage, checks no corpus, and builds nothing.
@@ -293,7 +303,15 @@ before committing.
   narrowing the rule.
 - **Sabotage every new test that asserts `src/` behavior**: break the code it
   covers, confirm the test goes red, revert, and note the mutation in one line
-  above the test.
+  above the test. `scripts/sabotage.mjs` does the break, run and restore; its
+  header has the usage (one mutation by `--file`, `--find` and `--replace`,
+  several by `--spec`), and it runs as
+  `mise exec -- node scripts/sabotage.mjs <options>`. It first runs the suite
+  with nothing broken, restores each file from a copy taken before the change,
+  and reads a run as caught or survived only on positive evidence that the
+  suite executed - anything less is an invalid run, and its exit status keeps
+  "did not run" apart from "ran and passed". It is not a gate stage: running
+  it is the author's step.
 - **Process artifacts stay out of shipped prose.** Bead ids, plan phase and
   step numbers, plan filenames and workflow jargon do not appear in `src/`
   comments, in `scripts/` comments, in the README, or in published docs.
