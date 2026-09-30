@@ -383,3 +383,37 @@ global object that is not in the DOM global list are not caught by this rule.
 `test/engine-neutrality.test.ts` pins the spellings this note adds to what
 fires, and lookalikes of them that stay quiet, in the block for a DOM global
 reached another way.
+
+## Note: a reference directive under the source directory (2026-09-30)
+
+Recorded for pts-cgq. The note above on what the source is typechecked
+against says that any member from a later edition than the library admits
+fails the typecheck of the source program. A triple-slash reference
+directive written in a source file widened that program from inside the
+file, and the source typecheck still passed: probed at `94b4934`, a source
+file whose first line named the ES2022 library read a later array member
+and the source typecheck exited 0, and the same held for the directive's
+types form naming Node's declarations and for its path form naming a
+declaration file outside the source directory. This note records where that
+is now refused. It changes nothing the Decision says, and it adds a rule to
+the engine-neutrality stage without narrowing any rule already there. Code
+is cited as this change leaves it, on a branch cut from `b1aa0ee`.
+
+**What the stage refuses.** The rule `reference-directive` in the stage's
+rule table (`rules` in `scripts/engine-neutrality.mjs`) fires on a line that
+opens, after any space, with three slashes, any space, and the directive's
+tag name, in any case, whichever attribute follows. The compiler reads the
+tag name in any case, so the rule does too.
+
+**What stays quiet.** The same text in a string, inside a block comment, or
+after a fourth slash is not a directive, and the rule leaves it alone, as it
+does prose that names the directive without writing it.
+
+**Still not caught.** A declaration merged into a global interface in a
+source file restores a later member's type with no directive, and neither
+the source typecheck nor the stage refuses it (probed at `94b4934` with the
+same array member).
+
+`test/engine-neutrality.test.ts` pins the directive's spellings that fire,
+and lookalikes of them that stay quiet, in the block for a reference
+directive in shipped source.
