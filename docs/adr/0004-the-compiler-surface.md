@@ -1260,3 +1260,59 @@ token" in `test/lexer.test.ts` pins the first three spellings and the unsigned
 zero year beside them, and cites this note. The fourth spelling reaches
 `readDate` as the text `-0000-01-01`, which "refuses a signed year, which the
 reference reads" in `test/cast.test.ts` pins for the cast.
+
+## Note: how deep the vendored corpus nests is a reading of its pinned tag, not a promise about a later one (2026-09-30)
+
+Recorded for `pts-2et6`. This note says what a sentence already on this
+record was about, and decides nothing, so it carries no Status line, and it
+removes no line above. Code is cited as read at `20e97c6`; the corpus is
+cited as vendored at that commit.
+
+**The clause this note withdraws.** In the note on chain length and the row
+that holds the divergence, its section headed "A row holds the divergence,
+and it runs" says the deepest expression in the vendored corpus nests four levels,
+"so no case there reaches the bound and no later refresh of the corpus will."
+The first half is a measurement of the corpus it was read against. The second
+is a prediction about a corpus an upstream controls, refreshed on a schedule
+this package does not set, from a project that declares no such bound; nothing
+in this package makes it true. It is withdrawn. The sentence stands as a
+statement about the corpus it was read against, and says nothing about a
+later tag.
+
+**The same reading, at the tag vendored now.** The vendored corpus is
+predicator-ex `v9.4.2` (`conformance/SOURCE.json`). Read on 2026-09-30 at
+`20e97c6`, its nine tier files hold two hundred and sixty-two cases, of which
+two hundred and fifteen carry a source, and a parse of every one of those
+answers a tree. The deepest tree nests four levels, among them the case
+`casts/undefined-propagates-through-chained-casts`. Compiling every
+source-bearing case against a lowered source limit, the deepest count any of
+them reaches against the bound is three. Both numbers are what the
+`v9.4.1` corpus gave, and each is a reading of `v9.4.2`, to be taken again
+when a later tag is vendored.
+
+**What notices a later tag that nests deeper.** Not a sentence in this record.
+A refresh is a deliberate, reviewed change (`conformance/README.md`, "The
+commands"), and a case in it that nests past `SOURCE_DEPTH_LIMIT` in
+`src/nesting.ts` would be refused by this package and answered `fail` on the
+compiler surface in the run that follows; a claim over that case's tier then
+wants an entry it cannot have (`completenessProblems` in
+`test/conformance/registry.test.ts`). The refresh also obliges the compile
+transcript to be regenerated at the new tag, and the entry in `DECLARED` in
+`test/conformance/compile-divergences.ts` pins both answers to the row
+`compile/nesting/parentheses-past-the-source-depth-bound`, so the row fails if
+the reference's answer to that source moves.
+
+**Where the same clause stood, and what replaced it.** The doc comment on
+`DECLARED` in `test/conformance/compile-divergences.ts` and the comment above
+the row's source in `scripts/lib/reference-compile.exs` carried the same
+prediction. Both now state the reading at `v9.4.2` with its date, and say that
+a later tag may carry a deeper case.
+
+Three statements nearby are NOT withdrawn and are named so a reader does not
+go looking. The amendment on nesting depth says, in its section headed "The
+decision", that the deepest expression in the vendored corpus nests four
+levels, counted by walking the syntax tree, and in its Consequences that no
+case in the vendored corpus reaches the bound; the note on this record's
+acceptance says the deepest nests four levels as a tree and costs three
+against the bound. Each is a reading of the corpus vendored when it was
+written, each predicts nothing, and each still holds at `v9.4.2`.

@@ -174,11 +174,13 @@ compile_sources = [
   # This package declares how deep a source may nest and refuses one past
   # that depth; the reference declares nothing and compiles it. Every other
   # difference between the two is held by a row that runs, and until this
-  # row there was none for this one - the deepest expression in the vendored
-  # corpus nests four levels, two orders of magnitude short of the bound, so
-  # no vendored case can reach it and no refresh of the corpus will. The
-  # difference was held by prose alone, which is the same class of thing as
-  # an assertion that cannot fail.
+  # row there was none for this one - no case in the vendored corpus reaches
+  # the bound. Read at the pinned tag, v9.4.2, on 2026-09-30, the deepest
+  # source-bearing case nests four levels, two orders of magnitude short of
+  # it. That is a reading of the corpus as pinned, not a promise about a
+  # later tag, which may carry a deeper case and is read again when it is
+  # vendored. The difference was held by prose alone, which is the same
+  # class of thing as an assertion that cannot fail.
   #
   # WHY PARENTHESES. Nesting is what is pinned here, not length. A written
   # parenthesis opens a level in the reference's own descent and in this
