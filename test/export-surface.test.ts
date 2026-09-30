@@ -12,7 +12,11 @@
 // consumer, a CommonJS consumer and a type checker each resolve their own
 // target. Reading one condition would pin one consumer's surface and leave
 // the others free to point somewhere else, so every leaf of the tree is
-// collected and asserted to resolve to the same source module. That rule
+// collected and asserted to resolve to the same source module, each through
+// the build its conditions ask for: `require` the CommonJS one, `import` the
+// ESM one, `types` declarations and every other leaf code. A null leaf, the
+// shape Node reads as a blocked subpath, is collected and reported as
+// blocked rather than thrown on, so it never stops the file. That rule
 // needs no list: a condition added later is a new leaf and is checked the
 // moment it appears. The cost is deliberate - a subpath that one day wants a
 // condition served by a different module turns this red, and the red is the
@@ -33,29 +37,44 @@ import { describe, expect, it } from "vitest";
 
 const root = new URL("../", import.meta.url);
 
-/** A subpath's target, or a nested set of conditions each with their own. */
-type Conditions = string | { [condition: string]: Conditions };
+/**
+ * A subpath's target, a nested set of conditions each with their own, or
+ * null - the shape Node reads as a blocked subpath.
+ */
+type Conditions = string | null | { [condition: string]: Conditions };
 
 const manifest = JSON.parse(readFileSync(new URL("package.json", root), "utf8")) as {
+  type?: string;
   exports: Record<string, Conditions>;
 };
 const expected = JSON.parse(
   readFileSync(new URL("test/export-surface.json", root), "utf8"),
 ) as Record<string, string[]>;
 
-/** One resolvable target, named by the conditions that reach it. */
+/**
+ * One place a condition tree ends, named by the conditions that reach it: a
+ * target, or `blocked` for a null. A value that is neither is kept as its JSON
+ * spelling, which no built target matches, so the entry below reports it.
+ */
 interface Leaf {
   readonly condition: string;
-  readonly target: string;
+  readonly target: string | typeof blocked;
+  readonly trail: readonly string[];
 }
 
-/** Every target a condition tree can resolve to, deepest condition last. */
+/** The leaf a null target leaves, reported by the entry and never thrown on. */
+const blocked = Symbol("blocked");
+
+/**
+ * Every place a condition tree can end, deepest condition last. Collection
+ * never throws: the leaves are built at module scope, and a throw here would
+ * stop the whole file before any entry could say what it found.
+ */
 function leavesOf(node: Conditions, trail: readonly string[] = []): Leaf[] {
   const condition = trail.length === 0 ? "the bare target" : trail.join(".");
-  if (typeof node === "string") return [{ condition, target: node }];
-  if (node === null || typeof node !== "object") {
-    throw new Error(`exports ${condition} is neither a target nor a set of conditions`);
-  }
+  if (typeof node === "string") return [{ condition, target: node, trail }];
+  if (node === null) return [{ condition, target: blocked, trail }];
+  if (typeof node !== "object") return [{ condition, target: JSON.stringify(node), trail }];
   return Object.entries(node).flatMap(([name, child]) => leavesOf(child, [...trail, name]));
 }
 
@@ -76,6 +95,43 @@ function stemOf(target: string): string | null {
   return stem === "" ? null : stem;
 }
 
+/** Which build of a module a target is: its declarations or its code, and its module format. */
+interface Build {
+  readonly declarations: boolean;
+  readonly format: "esm" | "cjs";
+}
+
+/** The format a plain `.js` or `.d.ts` file has in this package. */
+const plainFormat = manifest.type === "module" ? "esm" : "cjs";
+
+/** The build a target this package builds is, read from its suffix. */
+function buildOf(target: string): Build | null {
+  if (target.endsWith(".d.cts")) return { declarations: true, format: "cjs" };
+  if (target.endsWith(".d.mts")) return { declarations: true, format: "esm" };
+  if (target.endsWith(".d.ts")) return { declarations: true, format: plainFormat };
+  if (target.endsWith(".cjs")) return { declarations: false, format: "cjs" };
+  if (target.endsWith(".mjs")) return { declarations: false, format: "esm" };
+  if (target.endsWith(".js")) return { declarations: false, format: plainFormat };
+  return null;
+}
+
+/**
+ * What a condition trail asks of its target, in words, or null when it asks
+ * for the build the target is. `require` asks for the CommonJS build and
+ * `import` for the ESM one; `types` asks for declarations and every other
+ * leaf for code. A trail that names neither `require` nor `import` asks
+ * nothing of the format.
+ */
+function wrongBuild(trail: readonly string[], build: Build): string | null {
+  const wantsDeclarations = trail.includes("types");
+  const format = trail.includes("require") ? "cjs" : trail.includes("import") ? "esm" : null;
+  const fits =
+    build.declarations === wantsDeclarations && (format === null || format === build.format);
+  if (fits) return null;
+  const kind = wantsDeclarations ? "declarations" : "code";
+  return format === null ? kind : `${format === "cjs" ? "CommonJS" : "ESM"} ${kind}`;
+}
+
 const subpaths = Object.keys(manifest.exports).sort();
 const leaves = new Map(
   Object.entries(manifest.exports).map(([subpath, tree]) => [subpath, leavesOf(tree)] as const),
@@ -93,7 +149,7 @@ function sourceFor(stem: string): string {
  */
 function sourceOf(subpath: string): string | null {
   const first = (leaves.get(subpath) as Leaf[])[0];
-  const stem = first === undefined ? null : stemOf(first.target);
+  const stem = first === undefined || first.target === blocked ? null : stemOf(first.target);
   if (stem === null) return null;
   const path = sourceFor(stem);
   return existsSync(path) ? path : null;
@@ -141,6 +197,14 @@ describe("the declared export surface", () => {
     }
   });
 
+  // Sabotage for the null and build arms, each made in a copy of package.json
+  // and reverted from that copy: setting `require.default` of `./tagged` to
+  // null reported that condition as blocked, with every other entry in the
+  // file still run; pointing `require.default` of `.` at `./dist/index.js`,
+  // the ESM build of the right module, reported the wrong build; pointing
+  // `import.types` of `.` at `./dist/index.js` reported code where
+  // declarations belong. Each was run and each turned this entry red.
+  //
   // Sabotage, one mutation per arm, each made in a copy of package.json and
   // reverted from that copy: pointing `require.default` of `.` at
   // `./dist/tagged.cjs` reported the two stems it found; emptying `./tagged`'s
@@ -154,13 +218,26 @@ describe("the declared export surface", () => {
       found.length,
       `exports ${subpath} resolves to no target at all, so nothing below pins it`,
     ).toBeGreaterThan(0);
+    expect(
+      found.filter((leaf) => leaf.target === blocked).map((leaf) => leaf.condition),
+      `exports ${subpath} is blocked - a null target - for the conditions listed, so a ` +
+        "consumer resolving through them cannot import it and no names below are theirs; " +
+        "if the block is meant, teach this entry about it in the same change",
+    ).toEqual([]);
     const stems = found.map((leaf) => {
-      const stem = stemOf(leaf.target);
+      const target = leaf.target as string;
+      const stem = stemOf(target);
       expect(
         stem,
-        `exports ${subpath} condition ${leaf.condition} points at ${leaf.target}, ` +
+        `exports ${subpath} condition ${leaf.condition} points at ${target}, ` +
           "which this package does not build and this test cannot map to a source",
       ).not.toBeNull();
+      const wants = wrongBuild(leaf.trail, buildOf(target) as Build);
+      expect(
+        wants,
+        `exports ${subpath} condition ${leaf.condition} points at ${target}, a build of ` +
+          "the right module but not the one the condition asks for, named as the received value",
+      ).toBeNull();
       return stem as string;
     });
     expect(
