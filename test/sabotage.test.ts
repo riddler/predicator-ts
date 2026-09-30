@@ -23,7 +23,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Classification, Report, Run } from "../scripts/lib/sabotage.mjs";
 import { classifyRun, INVALID, runSuite, withMutation } from "../scripts/lib/sabotage.mjs";
 
@@ -382,6 +382,13 @@ describe("a run that does not return normally", () => {
     driver = join(project, "interrupt-driver.mjs");
     // The driver blocks in a child process exactly as a real run blocks in the
     // runner, so the signal arrives at the same point a keyboard interrupt does.
+    // The blocking child writes the ready marker itself, so the marker means
+    // the child is alive and in the group the signal is sent to. A marker
+    // written by the driver before it starts the child leaves a window where
+    // the signal reaches the driver alone, and the driver then blocks for the
+    // child's whole timer - a hang whose odds grow with how loaded the machine
+    // is, not a failure of what the test covers.
+    const blocking = `require("node:fs").writeFileSync(${JSON.stringify(ready)}, "ready"); setTimeout(() => {}, 60000);`;
     writeFileSync(
       driver,
       [
@@ -398,15 +405,46 @@ describe("a run that does not return normally", () => {
         `  writeFileSync(${JSON.stringify(ready)}, "ready");`,
         "} else {",
         "withMutation(mutation, () => {",
-        `  writeFileSync(${JSON.stringify(ready)}, "ready");`,
         '  if (how === "exit") process.exit(3);',
-        '  return spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);',
+        `  return spawnSync(process.execPath, ["-e", ${JSON.stringify(blocking)}]);`,
         "});",
         "}",
         "",
       ].join("\n"),
     );
   });
+
+  // A case that fails or times out must not leave its run behind: a driver
+  // still alive would put its mutation back, or leave it in place, under the
+  // next case's feet. Whatever a case started is killed outright and awaited
+  // before the next one begins.
+  let current: ReturnType<typeof start> | null = null;
+
+  afterEach(async () => {
+    const run = current;
+    current = null;
+    if (run === null) return;
+    try {
+      process.kill(-(run.child.pid as number), "SIGKILL");
+    } catch {
+      // The group is already gone.
+    }
+    await run.ended;
+  });
+
+  // The run ends promptly once the signal lands; a run that does not end is
+  // reported as that, well inside the case's own budget, rather than as a
+  // timeout that says nothing about why.
+  function endsWithin(run: ReturnType<typeof start>, limitMs: number): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`the run did not end within ${limitMs}ms of the signal`)),
+        limitMs,
+      );
+    });
+    return Promise.race([run.ended, late]).finally(() => clearTimeout(timer));
+  }
 
   function start(how: string) {
     rmSync(ready, { force: true });
@@ -422,7 +460,9 @@ describe("a run that does not return normally", () => {
       printed += String(chunk);
     });
     const ended = new Promise<void>((resolve) => child.on("exit", () => resolve()));
-    return { child, ended, printed: () => printed };
+    const run = { child, ended, printed: () => printed };
+    current = run;
+    return run;
   }
 
   // This pins the restore, not the re-raise: in this blocking shape the handler body never runs.
@@ -432,7 +472,7 @@ describe("a run that does not return normally", () => {
     await waitFor(() => existsSync(ready), 30_000);
     expect(readFileSync(target, "utf8")).toContain(CAUGHT.replace);
     process.kill(-(run.child.pid as number), "SIGINT");
-    await run.ended;
+    await endsWithin(run, 20_000);
     expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
   }, 60_000);
 
@@ -476,7 +516,7 @@ describe("a run that does not return normally", () => {
     expect(readFileSync(kept, "utf8")).toBe(CARD_SOURCE);
     expect(run.printed()).toContain(`cp -f '${kept}' '${target}'`);
     process.kill(-(run.child.pid as number), "SIGKILL");
-    await run.ended;
+    await endsWithin(run, 10_000);
     expect(readFileSync(target, "utf8")).toContain(CAUGHT.replace);
     writeFileSync(target, readFileSync(kept));
     expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
