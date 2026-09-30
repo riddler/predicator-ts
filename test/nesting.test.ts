@@ -163,13 +163,15 @@ describe("evaluate", () => {
 
   // The machine reads an object of a class this package did not define as a
   // map, and walks it as one when it compares it or hands it back, so the
-  // literal's nesting check walks it too.
+  // literal's nesting check walks it too. The depth and the cycle are two
+  // tests, because one mutation does not turn both red.
   //
   // Sabotage: making the nesting walk descend only an object whose prototype
-  // is the plain one falsifies the rule that the walk counts as a map every
-  // object the machine reads as one; the cyclic operand then exhausts the
-  // stack in the comparison. It was run and reverted.
-  it("refuses a class-built literal operand past the limit, or cyclic", () => {
+  // is the plain one leaves this green, because the literal's range walk
+  // refuses the same depth at the same instruction; making that change and
+  // also dropping the range walk's depth test answers the value. Both were
+  // run and reverted.
+  it("refuses a class-built literal operand past the limit", () => {
     class Visitor {
       self: unknown = 1;
     }
@@ -180,14 +182,29 @@ describe("evaluate", () => {
       deep = visitor;
     }
     const past = evaluate([["lit", deep as Value]]);
-    expect(reasonOf(past)).toBe("depth_limit_exceeded");
+    expect(past.ok).toBe(false);
+    if (past.ok) return;
+    expect(past.error.reason).toBe("depth_limit_exceeded");
+    expect(past.error.position).toBe(0);
+  });
+
+  // Sabotage: making the nesting walk descend only an object whose prototype
+  // is the plain one lets the cyclic operand through the literal's check,
+  // and the comparison then exhausts the stack, which the first assertion
+  // reports. It was run and reverted.
+  it("refuses a class-built cyclic literal operand before a comparison walks it", () => {
+    class Visitor {
+      self: unknown = 1;
+    }
     const cyclic = new Visitor();
     cyclic.self = cyclic;
-    const compared = evaluate([
+    const program: Program = [
       ["lit", cyclic as unknown as Value],
       ["lit", cyclic as unknown as Value],
       ["compare", "EQ"],
-    ]);
+    ];
+    expect(() => evaluate(program)).not.toThrow();
+    const compared = evaluate(program);
     expect(compared.ok).toBe(false);
     if (compared.ok) return;
     expect(compared.error.reason).toBe("cyclic_value");
@@ -195,15 +212,25 @@ describe("evaluate", () => {
   });
 
   // The result path back to the host, where the value was built by a host
-  // function. Sabotage: skipping the nesting guard in the value boundary lets
-  // the answered value exhaust the stack. It was run and reverted.
+  // function. The boundary refuses the answer at the call, so the refusal
+  // carries the call's position; the result check would refuse the same
+  // value with the same reason but no position.
+  //
+  // Sabotage: removing the depth test from the value boundary's enter step,
+  // keeping its cycle test, lets the answer one level past the limit through
+  // the call, and the result check refuses it with no position, which the
+  // position assertion reports. It was run and reverted.
   it("refuses a host function's answer past the limit and answers one at it", () => {
     const run = (depth: number) =>
       evaluate([["call", "fraud_signals", 0]], undefined, {
         functions: { fraud_signals: () => nested(depth) as Value },
       });
     expect(run(DEPTH_LIMIT)).toEqual({ ok: true, value: nested(DEPTH_LIMIT) });
-    expect(reasonOf(run(DEPTH_LIMIT + 1))).toBe("depth_limit_exceeded");
+    const past = run(DEPTH_LIMIT + 1);
+    expect(past.ok).toBe(false);
+    if (past.ok) return;
+    expect(past.error.reason).toBe("depth_limit_exceeded");
+    expect(past.error.position).toBe(0);
     const cyclic = evaluate([["call", "visitor", 0]], undefined, {
       functions: { visitor: () => selfCycle() as Value },
     });
