@@ -157,8 +157,8 @@ const prosePreviouslyTripping: readonly string[] = [
   // The corollary's two spellings of a sentence about the same name: with a
   // word after the name, and with the name as the last word. The capitalised
   // constructor's dot arm once accepted a bare trailing dot, so the second
-  // line fired where the same sentence ending in any other forbidden name
-  // did not. Its fire side is the dotted-member line in the list below.
+  // line fired where the same sentence ending in any other anchored forbidden
+  // name did not. Its fire side is the dotted-member line in the list below.
   "// No BigInt value is ever constructed here.",
   "// The value space contains no BigInt.",
 ];
@@ -427,6 +427,7 @@ const domGlobalSpellings: readonly (readonly [string, string])[] = [
 // is what the member lookbehind keeps quiet, and prose with space after a dot.
 const domGlobalLookalikes: readonly (readonly [string, string])[] = [
   ["a field named self on an options object", "const a = form.self.document.title;"],
+  ["a word ending in self", "const a = myself.document.title;"],
   ["an optional-chained field named for a DOM global", "const a = wizard?.document.title;"],
   ["an optional-chained field of an options object", "const a = velocity?.window?.minutes;"],
   ["a field with space before the dot", "const a = patron.window .minutes;"],
@@ -450,13 +451,42 @@ describe("a DOM global reached another way", () => {
 
   // Sabotage: in scripts/engine-neutrality.mjs, dropping the `(?<![.\w$])`
   // lookbehind in front of `self` in `globalObjectMember` turns the self field
-  // line red, dropping it from the DOM rule turns every field line red,
-  // and allowing space after the dot in the DOM rule's anchor turns the prose
-  // line red.
+  // line and the word ending in self red, dropping it from the DOM rule turns
+  // every field line red, and allowing space after the dot in the DOM rule's
+  // anchor turns the prose line red.
   it.each(domGlobalLookalikes)("leaves %s alone", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(output, line).toContain("clean");
     expect(status, line).toBe(0);
+  });
+});
+
+// A called global's name used as a definition. The call rules stay quiet on a
+// method of that name called on some other object - the member-call lines in
+// the ordinary module code above - but a definition writes the bare name and
+// its parenthesis, so each line below fires the call rule for its name and
+// nothing else, once. This is an over-refusal the call rules accept.
+const calledGlobalDefinitions: readonly (readonly [string, string, string])[] = [
+  ["a method definition", "  alert(message) {", "dom-global-call"],
+  ["a private method definition", "  #alert(message) {", "dom-global-call"],
+  ["a call to a private method", "this.#alert(message);", "dom-global-call"],
+  ["a function declaration", "function setImmediate(run) {", "node-global-call"],
+  [
+    "a method on an object literal",
+    "const holds = { clearImmediate(handle) { return handle; } };",
+    "node-global-call",
+  ],
+];
+
+describe("a called global's name used as a definition", () => {
+  // Sabotage: in scripts/engine-neutrality.mjs, adding `#` to the lookbehind
+  // of `calledAsBareGlobal` turns the two private method lines red; adding
+  // `\s` to it turns the method definition, the function declaration and the
+  // object literal lines red.
+  it.each(calledGlobalDefinitions)("fires on %s", (_name, line, id) => {
+    const { status, output } = scanLine(root, line);
+    expect(status, line).toBe(1);
+    expect(firedRules(output), line).toEqual([id]);
   });
 });
 
@@ -698,7 +728,10 @@ describe("the scanned roots come from the build's entry list", () => {
   });
 
   // Sabotage: deleting any one refusal in `entryRoots` in
-  // scripts/engine-neutrality.mjs turns its case red. Each case asserts its
+  // scripts/engine-neutrality.mjs turns its case red, and the case of an
+  // entry directory holding no source file is the per-root empty guard in
+  // `run`, not a refusal in `entryRoots`: deleting that guard turns it red,
+  // with the directory test at the end of this file. Each case asserts its
   // own refusal's message, because without the refusal the stage either
   // passes or fails on something else. The pattern case names a file that
   // exists under the pattern's own spelling, so only the pattern refusal can
