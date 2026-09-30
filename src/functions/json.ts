@@ -105,8 +105,19 @@ import { builtin, isString, refuse } from "./support.js";
  * No conformance case serializes a value outside the JSON shapes, so this
  * package's half is pinned on the side that can be executed: the suite asserts
  * the refusal, and that it names the member of the domain it refused.
+ *
+ * A VALUE NESTED PAST `DEPTH_LIMIT` IS REFUSED with the reason
+ * `"depth_limit_exceeded"`, the reason the parse builtin below gives a text of
+ * the same shape. `level` is the level the value sits at, the outermost list
+ * or map counting as one, the same count as for a value at the boundary, so a
+ * value at the limit is written in full and one level deeper is refused at the
+ * list or map that breaks it. No host value reaches here that deep, since the
+ * value boundary refuses one first; a program reaches it by wrapping a value
+ * in lists or maps. Refusing there also bounds this walk's own recursion,
+ * which otherwise descends once per level and exhausts the call stack, with
+ * the engine's own overflow message as the reason.
  */
-function serialize(value: Value): string {
+function serialize(value: Value, level = 1): string {
   if (value === null) return "null";
   if (value === Undefined) refuse("JSON.stringify has no JSON form for an absence");
   // An integral float keeps its point, as the reference's serializer keeps it:
@@ -115,10 +126,16 @@ function serialize(value: Value): string {
   if (value instanceof Float) return floatText(value);
   if (typeof value === "number" || typeof value === "boolean") return `${value}`;
   if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(serialize).join(",")}]`;
+  if (Array.isArray(value)) {
+    if (level > DEPTH_LIMIT) refuse("depth_limit_exceeded");
+    return `[${value.map((member) => serialize(member, level + 1)).join(",")}]`;
+  }
   if (isPlainMap(value)) {
+    if (level > DEPTH_LIMIT) refuse("depth_limit_exceeded");
     const keys = Object.keys(value).sort();
-    const members = keys.map((key) => `${JSON.stringify(key)}:${serialize(value[key] ?? null)}`);
+    const members = keys.map(
+      (key) => `${JSON.stringify(key)}:${serialize(value[key] ?? null, level + 1)}`,
+    );
     return `{${members.join(",")}}`;
   }
   refuse(`JSON.stringify has no JSON form for a ${typeName(value)}`);

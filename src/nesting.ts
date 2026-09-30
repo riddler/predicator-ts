@@ -20,8 +20,8 @@
  * checks a literal, a store, the operands of a comparison or a membership test
  * and a result against it before anything walks them; a value past the limit
  * or with a cycle is answered as a failing arm with a named reason rather than
- * left to the stack. The projection itself and the JSON serializer's own walk
- * do not count against it, and the JSON parser's fault locator does; the
+ * left to the stack. The projection itself does not count against it, and the
+ * JSON parser's fault locator and the JSON serializer's own walk do; the
  * record below says why.
  *
  * This module is internal: neither entry point re-exports it. A walk that

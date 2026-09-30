@@ -615,6 +615,85 @@ describe("the JSON parse builtin", () => {
   });
 });
 
+describe("the JSON serialize builtin", () => {
+  // No host value reaches the serializer past the limit, since the value
+  // boundary refuses one first; a program reaches it by wrapping a value it
+  // was handed in lists or maps, so each case below builds its argument that
+  // way and then calls the builtin on it. Each shape is built so that the
+  // container at the limit, or past it, is the innermost one: a list for the
+  // list cases and a map for the map cases.
+
+  /** Runs `program`, then serializes what it left on the stack. */
+  function serialized(program: Program) {
+    return evaluate([...program, ["call", "JSON.stringify", 1]]);
+  }
+
+  /** A loan's renewal chain, `depth` maps deep, the innermost holding a status. */
+  function renewals(depth: number): unknown {
+    let value: unknown = "due";
+    for (let level = 0; level < depth; level += 1) value = { renewal: value };
+    return value;
+  }
+
+  /** The same chain as JSON text. */
+  function renewalsText(depth: number): string {
+    return `${'{"renewal":'.repeat(depth)}"due"${"}".repeat(depth)}`;
+  }
+
+  /** Wraps `inner` in one more renewal map, built by the program itself. */
+  const renewedOnce = (inner: unknown): Program => [
+    ["object_new"],
+    ["lit", inner as Value],
+    ["object_set", "renewal"],
+  ];
+
+  // Sabotage: two mutations, each run and reverted. Refusing a list one level
+  // early (testing its level against the limit less one) turns the list
+  // assertion red, and refusing a map one level early turns the map one red.
+  it("serializes a value at the limit, a list or a map", () => {
+    expect(serialized([["lit", nested(DEPTH_LIMIT) as Value]])).toEqual({
+      ok: true,
+      value: nestedText(DEPTH_LIMIT),
+    });
+    expect(serialized([["lit", renewals(DEPTH_LIMIT) as Value]])).toEqual({
+      ok: true,
+      value: renewalsText(DEPTH_LIMIT),
+    });
+  });
+
+  // The refusal carries the reason the parse builtin gives a text of the same
+  // shape, as its message too, at the call's own instruction.
+  //
+  // Sabotage: two mutations, each run and reverted. Removing the level test
+  // for a list lets one list level past through, and the call answers the
+  // text; removing it for a map does the same for the map assertion.
+  it("refuses a value one level past the limit by name", () => {
+    const listed = serialized([
+      ["lit", nested(DEPTH_LIMIT) as Value],
+      ["make_list", 1],
+    ]);
+    expect(listed.ok).toBe(false);
+    if (listed.ok) return;
+    expect(listed.error.reason).toBe("depth_limit_exceeded");
+    expect(listed.error.message).toBe("depth_limit_exceeded");
+    expect(listed.error.position).toBe(2);
+    const mapped = serialized(renewedOnce(renewals(DEPTH_LIMIT)));
+    expect(mapped.ok).toBe(false);
+    if (mapped.ok) return;
+    expect(mapped.error.reason).toBe("depth_limit_exceeded");
+    expect(mapped.error.message).toBe("depth_limit_exceeded");
+  });
+
+  // Sabotage: removing the level test for a list lets the serializer recurse
+  // until the stack runs out, and the reason becomes the engine's
+  // stack-overflow message. It was run and reverted.
+  it("refuses a value far past the limit rather than exhausting the stack", () => {
+    const wraps: Program = Array.from({ length: 20_000 }, () => ["make_list", 1]);
+    const program: Program = [["lit", nested(DEPTH_LIMIT) as Value], ...wraps];
+    expect(reasonOf(serialized(program))).toBe("depth_limit_exceeded");
+  });
+});
+
 /**
  * A signup funnel `levels` deep whose every step holds the SAME next step
  * under two keys, so the value holds one map per level while the number of
