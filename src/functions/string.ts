@@ -38,8 +38,8 @@
  * rows whose ids begin `string-unit/` and `trim/`.
  * `test/reference-transcript.test.ts` diffs this package's answer against
  * each of those rows, and declares every row where the two differ with both
- * answers, so it fails when either side moves. The grapheme counts are the rows
- * `string-unit/len-combining`, `string-unit/len-crlf` and
+ * answers, so it fails when either side moves. The differing grapheme counts
+ * are the rows `string-unit/len-combining`, `string-unit/len-crlf` and
  * `string-unit/len-flag`, the grapheme slice the rows beginning
  * `string-unit/slice-`, the byte offset the rows beginning
  * `string-unit/index-after-`, and the two trimming directions the rows

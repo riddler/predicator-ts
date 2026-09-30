@@ -336,12 +336,10 @@ export function typeName(value: Value): TypeName {
 /**
  * Why a host value was refused at the boundary.
  *
- * `"integer_out_of_range"` is this package's own reason token, at its own
- * boundary: it is not an ISA reason and it adds no opcode and no wire-format
- * change. So are `"cyclic_value"`, for a value that contains itself,
- * `"depth_limit_exceeded"`, for one nested past the depth limit this package
- * declares, and `"place_budget_exceeded"`, for one with more places - counted
- * once for each path that reaches them - than the budget this package
+ * Every member of this union is this package's own reason token, at its own
+ * boundary: none is an ISA reason, and none adds an opcode or a wire-format
+ * change. A limit a member names - the depth limit, the budget of places,
+ * each place counted once for each path that reaches it - is one this package
  * declares.
  */
 export type RefusalReason =

@@ -228,8 +228,8 @@ describe("a literal integer outside the safe range", () => {
   //
   // Sabotage: removing the range check from the machine's lit method falsifies
   // the rule that a literal admits no integer outside the safe range, and turns
-  // this test red, the literal answering ok with the number. It was run and
-  // reverted.
+  // this test red, the program answering ok with the comparison's boolean
+  // instead of the refusal. It was run and reverted.
   it("is refused with the boundary's reason, on either side of zero", () => {
     const beyond = Number.MAX_SAFE_INTEGER + 1;
     for (const limit of [beyond, -beyond, 2 ** 60]) {
