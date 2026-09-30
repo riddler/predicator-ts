@@ -244,6 +244,10 @@ describe("date and datetime literals", () => {
   // reference answers a date token for the first row, a datetime token for the
   // second and a date token for the third.
   //
+  // ADR-0004's note headed "a signed date or datetime literal body is
+  // refused, as the text readers refuse it" records the refusal, why, and the
+  // reference's answers at v9.4.2.
+  //
   // Sabotage: letting the calendar and instant readers admit a leading sign
   // answers tokens instead of refusals and turns the first three rows red. It
   // was run and reverted.
