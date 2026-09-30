@@ -1117,16 +1117,19 @@ recognize loses its backslash, as the compile row
 `compile/escape/unknown-stands-for-its-character` shows. The uppercase numeric
 escape is no longer an instance of it.
 
-## Note: `decompile` refuses a tree past the source depth bound, as a value (2026-09-30)
+## Amendment: `decompile` refuses a tree past the source depth bound, as a value (2026-09-30)
+
+Status: proposed (2026-09-30)
 
 Recorded for `pts-w6r1`, under the ruling that the rendering walk counts its
 descent against the declared source limit and refuses as a value with the
-existing depth reason (ruled by the operator, 2026-09-29). This note states
-what is now true of the record above and decides nothing further, so it
-carries no Status line. It removes no line above. `src/emitter.ts` and
-`src/parser.ts` are cited as read at `728da34`, the commit this note is
-written on top of; `src/decompile.ts` is cited as the change carrying this
-note leaves it.
+existing depth reason (ruled by the operator, 2026-09-29). This entry
+amends two things the record decides: the `decompile` Typespec, whose
+return widens from a string to a result, and what the rendering direction
+answers, which now includes a refusal of a tree past the source depth
+bound. It removes no line above. `src/emitter.ts` and `src/parser.ts` are
+cited as read at `94b4934`, on a branch cut from `94b4934`;
+`src/decompile.ts` is cited as the change carrying this entry leaves it.
 
 ### What changed
 
