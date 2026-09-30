@@ -404,6 +404,57 @@ describe("prose and plausible identifiers do not fire the check", () => {
   );
 });
 
+// A DOM global reached through the global object, or written with an anchor
+// the formatter does not produce, is still the DOM global. Each line fires the
+// DOM rule and nothing else, once.
+const domGlobalSpellings: readonly (readonly [string, string])[] = [
+  ["a member of self", "const a = self.document.cookie;"],
+  ["an optional-chained member of globalThis", "const a = globalThis?.window.innerWidth;"],
+  ["an optional-chained member of self", "const a = self?.document.title;"],
+  ["a member of globalThis with space before the dot", "const a = globalThis .document.title;"],
+  ["an optional-chaining dot", "const a = window?.innerWidth;"],
+  ["an optional-chaining index", "const a = window?.[key];"],
+  ["space before the dot", "const a = window .innerWidth;"],
+  ["a dollar sign after the dot", "const a = window.$loans;"],
+];
+
+// The other side: the same spellings on a field of some other object, which
+// is what the member lookbehind keeps quiet, and prose with space after a dot.
+const domGlobalLookalikes: readonly (readonly [string, string])[] = [
+  ["a field named self on an options object", "const a = form.self.document.title;"],
+  ["an optional-chained field named for a DOM global", "const a = wizard?.document.title;"],
+  ["an optional-chained field of an options object", "const a = velocity?.window?.minutes;"],
+  ["a field with space before the dot", "const a = patron.window .minutes;"],
+  ["prose with space after the dot", "// Renewals within the window. Documents are due."],
+];
+
+describe("a DOM global reached another way", () => {
+  // Sabotage: in scripts/engine-neutrality.mjs, dropping `self` from
+  // `globalObjectMember` turns the two self lines red; dropping its `\??`
+  // turns the optional-chained globalThis line red; dropping its `\s*` turns
+  // the space-before-the-dot globalThis line red; dropping the `\??` from the
+  // DOM rule's dotted anchor turns the optional-chaining dot line red; dropping
+  // the `\s*\?\.\[` arm turns the optional-chaining index line red; dropping
+  // the `\s*` from the dotted anchor turns the space-before-the-dot line red;
+  // and narrowing `[\w$]` after the dot to `\w` turns the dollar sign line red.
+  it.each(domGlobalSpellings)("fires on %s", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(status, line).toBe(1);
+    expect(firedRules(output), line).toEqual(["dom-global"]);
+  });
+
+  // Sabotage: in scripts/engine-neutrality.mjs, dropping the `(?<![.\w$])`
+  // lookbehind in front of `self` in `globalObjectMember` turns the self field
+  // line red, dropping it from the DOM rule turns every field line red,
+  // and allowing space after the dot in the DOM rule's anchor turns the prose
+  // line red.
+  it.each(domGlobalLookalikes)("leaves %s alone", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(output, line).toContain("clean");
+    expect(status, line).toBe(0);
+  });
+});
+
 describe("every rule catches what it documents", () => {
   // Sabotage: weakening any pattern in scripts/engine-neutrality.mjs so that
   // it no longer matches its own `violation` line turns this red - that is the
