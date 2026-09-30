@@ -1361,13 +1361,16 @@ describe("indexing", () => {
   });
 
   // The reference at v9.4.2 answers `loan_period["days"]` 21, a miss for an
-  // integer, a boolean and a null key, and refuses a float, a list and a date
-  // key. The null key misses here too, where a map refuses it.
+  // integer, a boolean and a null key, and refuses a float, a list, a date, a
+  // datetime, a duration and a map key. The null key misses here as it does at
+  // a map.
   //
   // Sabotage: leaving a duration out of the map branch of `bracket_access`
-  // turns the first assertion red, answering the absence; dropping the null-key
-  // exception turns the null assertion red, answering a type mismatch. Both
-  // were run and reverted.
+  // turns the first assertion red, answering the absence; leaving the null
+  // value out of the map's key set turns the null assertion red, answering a
+  // type mismatch; admitting a datetime, a duration or a map key at the map
+  // branch turns the refused-key loop red on that key. Each was run and
+  // reverted.
   it("indexes a duration under a map's key rules", () => {
     const context = { loan_period: new Duration({ days: 21 }) };
     const index = (key: Value) =>
@@ -1376,7 +1379,14 @@ describe("indexing", () => {
     expect(index(1)).toEqual({ ok: true, value: Undefined });
     expect(index(true)).toEqual({ ok: true, value: Undefined });
     expect(index(null)).toEqual({ ok: true, value: Undefined });
-    for (const key of [float(1.5), [1], new PDate(2026, 9, 1)]) {
+    for (const key of [
+      float(1.5),
+      [1],
+      new PDate(2026, 9, 1),
+      new PDateTime(Date.UTC(2026, 8, 1, 10, 0, 0) / 1000, 0),
+      new Duration({ days: 2 }),
+      {},
+    ]) {
       const refused = index(key);
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
@@ -1402,10 +1412,17 @@ describe("indexing", () => {
     ).toEqual({ ok: true, value: 3 });
   });
 
-  // Sabotage: admitting every key type at a map turns the second half red,
-  // answering a miss where the refusal belongs. It was run and reverted.
+  // A null key misses at a map, as the reference answers at v9.4.2 (the
+  // transcript row `map-key/null-against-map`), and is refused at a list,
+  // where the reference refuses it too.
+  //
+  // Sabotage: admitting every key type at a map turns the float assertion red,
+  // answering a miss where the refusal belongs; leaving the null value out of
+  // the map's key set turns the null assertion red, answering a type mismatch;
+  // admitting it at a list as well turns the list assertion red. Each was run
+  // and reverted.
   it("takes a wider set of keys at a map than a list does, and misses on them", () => {
-    const context = { card: { brand: "visa" } };
+    const context = { card: { brand: "visa" }, charges: [1, 2] };
     expect(evaluateToValue([["load", "card"], ["lit", 1], ["bracket_access"]], context)).toEqual({
       ok: true,
       value: Undefined,
@@ -1413,12 +1430,27 @@ describe("indexing", () => {
     expect(evaluateToValue([["load", "card"], ["lit", true], ["bracket_access"]], context)).toEqual(
       { ok: true, value: Undefined },
     );
+    expect(evaluateToValue([["load", "card"], ["lit", null], ["bracket_access"]], context)).toEqual(
+      { ok: true, value: Undefined },
+    );
 
-    const nullKey = evaluateToValue([["load", "card"], ["lit", null], ["bracket_access"]], context);
-    expect(nullKey.ok).toBe(false);
-    if (nullKey.ok) return;
-    expect(nullKey.error.type).toBe("TypeMismatchError");
-    expect(nullKey.error.reason).toBe("bracket_access");
+    const floatKey = evaluateToValue(
+      [["load", "card"], ["lit", float(1.5)], ["bracket_access"]],
+      context,
+    );
+    expect(floatKey.ok).toBe(false);
+    if (floatKey.ok) return;
+    expect(floatKey.error.type).toBe("TypeMismatchError");
+    expect(floatKey.error.reason).toBe("bracket_access");
+
+    const nullIndex = evaluateToValue(
+      [["load", "charges"], ["lit", null], ["bracket_access"]],
+      context,
+    );
+    expect(nullIndex.ok).toBe(false);
+    if (nullIndex.ok) return;
+    expect(nullIndex.error.type).toBe("TypeMismatchError");
+    expect(nullIndex.error.reason).toBe("bracket_access");
   });
 
   // The absence splits between the two targets: it is one of the key types a

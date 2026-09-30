@@ -20,18 +20,20 @@
 #
 # WHAT IT COVERS is where this package states how its answer compares with the
 # reference's and no vendored case reaches: how a float is written as text,
-# through the string cast and through `JSON.stringify`; the unit a string
-# position is counted in, through the length, index and slice builtins; the
-# set of characters trimming removes; which spellings of a UTC offset the
-# datetime cast reads; what `JSON.stringify` answers for a value with no JSON
-# form; whether a sign before a whole date or datetime text is read; what an
-# integer key finds against a map; what an arithmetic result past this
-# package's safe integer range answers; and whether two reads of the clock in
-# one evaluation answer one instant. The values are chosen to show the
-# reference's own behaviour rather than to agree with this package's: a
-# rendering is a function of significant digits against decimal exponent
-# there, so neighbouring values that land on opposite sides of it are both
-# here.
+# through the string cast, through `JSON.stringify` and through a concatenation,
+# and whether that text reads back through the float cast; the unit a string
+# position is counted in, through the length, index and slice builtins; the set
+# of characters trimming removes; which spellings of a UTC offset the datetime
+# cast reads; what `JSON.stringify` answers for a value with no JSON form;
+# whether a sign before a whole date or datetime text is read; what an integer
+# key and a null key find against a map, and a null key against a duration; what
+# an arithmetic result past this package's safe integer range answers; and
+# whether two reads of the clock in one evaluation answer one instant. The
+# values are chosen to show the reference's own behaviour rather than to agree
+# with this package's: below two to the fifty-third a float is written in
+# whichever of the plain and exponent forms is shorter, the plain one on a tie,
+# and from there up in exponent form, so neighbouring values that land on
+# opposite sides of each choice are both here.
 #
 # ONE ROW RECORDS A PROPERTY OF THE RUN RATHER THAN OF THE TAG. The `clock/`
 # row asks the reference whether two reads of its clock inside one expression
@@ -55,21 +57,31 @@ floats = [
   {"neg-1.5", -1.5},
   {"10", 10.0},
   {"100", 100.0},
+  {"999", 999.0},
   {"1000", 1000.0},
   {"1001", 1001.0},
+  {"1234", 1234.0},
+  {"1500", 1500.0},
   {"10000", 10000.0},
   {"12345", 12345.0},
+  {"120000", 120_000.0},
   {"123456789", 123_456_789.0},
+  {"1e14", 1.0e14},
   {"1e15", 1.0e15},
+  {"2-pow-53-less-1", 9_007_199_254_740_991.0},
+  {"2-pow-53", 9_007_199_254_740_992.0},
   {"1e16", 1.0e16},
   {"1e20", 1.0e20},
   {"1e21", 1.0e21},
   {"neg-1e21", -1.0e21},
   {"1e22", 1.0e22},
+  {"1.5e300", 1.5e300},
   {"0.1", 0.1},
   {"0.1-plus-0.2", 0.1 + 0.2},
   {"0.001", 0.001},
+  {"0.001234", 0.001234},
   {"1e-4", 1.0e-4},
+  {"1.2e-4", 1.2e-4},
   {"1e-5", 1.0e-5},
   {"1e-6", 1.0e-6},
   {"1e-7", 1.0e-7},
@@ -81,8 +93,24 @@ floats = [
 
 float_cases =
   for {label, value} <- floats,
-      {kind, source} <- [{"float-cast", "amount::string"}, {"float-json", "JSON.stringify(amount)"}] do
+      {kind, source} <- [
+        {"float-cast", "amount::string"},
+        {"float-json", "JSON.stringify(amount)"},
+        {"float-concat", "'' + amount"}
+      ] do
     %{"id" => "#{kind}/#{label}", "source" => source, "context" => %{"amount" => value}}
+  end
+
+# A float's text read back through the float cast. The cast reads plain digits
+# and no exponent form, so a float written with an exponent does not read
+# back, and one written plain does; one of each is asked.
+float_cast_back_cases =
+  for {label, value} <- [{"1000", 1000.0}, {"1234", 1234.0}] do
+    %{
+      "id" => "float-cast-back/#{label}",
+      "source" => "(amount::string)::float",
+      "context" => %{"amount" => value}
+    }
   end
 
 # A letter and a combining acute accent: two code points, one grapheme.
@@ -229,7 +257,8 @@ leading_sign_cases =
 # value here. The reference's maps hold the two spellings as two keys, so what
 # it answers is asked. The boolean row is the control beside it: a map whose
 # key is the text of a boolean, asked for by the boolean, which neither side
-# finds.
+# finds. The null rows ask what the null value finds as a key: at a map, and
+# at a duration the program built, which the reference indexes as a map.
 map_key_cases = [
   %{
     "id" => "map-key/integer-against-string-spelling",
@@ -240,7 +269,13 @@ map_key_cases = [
     "id" => "map-key/boolean-against-string-spelling",
     "source" => "tiers[true]",
     "context" => %{"tiers" => %{"true" => "gold", "name" => "visa"}}
-  }
+  },
+  %{
+    "id" => "map-key/null-against-map",
+    "source" => "tiers[null]",
+    "context" => %{"tiers" => %{"null" => "gold", "name" => "visa"}}
+  },
+  %{"id" => "map-key/null-against-a-built-duration", "source" => "(3d)[null]", "context" => %{}}
 ]
 
 # A FIELD OF A DURATION THE PROGRAM BUILT. This package reads a duration as
@@ -289,6 +324,7 @@ clock_cases = [
 
 authored =
   float_cases ++
+    float_cast_back_cases ++
     string_cases ++
     offset_cases ++
     json_form_cases ++

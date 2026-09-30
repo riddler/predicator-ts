@@ -3090,3 +3090,134 @@ as a list and as a map, and the value far past it.
 **What this leaves as it was.** The projection, `toHost` in `src/values.ts`,
 still walks without the limit, as the nesting amendment above says. Nothing
 the serializer writes for a value at or under the limit changes.
+
+## Amendment: the null map key and the float spelling match the reference (2026-09-30)
+
+Status: proposed (2026-09-30)
+
+Recorded for `pts-9f5` and `pts-18v`, ruled by the operator, 2026-09-29: match
+the reference on both questions. This amendment is appended, and removes no
+line above. Code is cited as this change leaves it, on a branch cut from
+`94b4934`. Every run of the reference below was made at predicator-ex
+`v9.4.2` in a detached export (Elixir 1.18.3, OTP 27).
+
+What this amends. Four passages above. The closing section of the amendment
+headed "one spelling of a float, negative zero included" says the digits are
+the host's, that the reference writes many floats otherwise, and that the
+divergence "is not decided here"; this amendment decides it. The same
+amendment's paragraph "A float is written in one place" describes the rule as
+the host's own spelling with a `.0` appended; read its rule as superseded by
+the one below, and its list of the places that call it as standing. The note
+headed "which declared divergences the reference transcript now carries" names
+the `float-cast/` and `float-json/` rows as declared; they are declared no
+longer, because they agree. And the amendment headed "a duration's fields are
+read as its map's" says the map branch refuses a null key, and lists the keys
+newly refused at a duration as a float, a list and a date; both are corrected
+below.
+
+### A float is written as the reference writes it
+
+**Every place this package writes a float writes the reference's spelling.**
+`floatSpelling` in `src/floats.ts` holds the rule, and `floatText` in the same
+file delegates to it. The string cast (`numberText` in `src/cast.ts`), a
+concatenation (`applyAdd` in `src/evaluator.ts`, which calls `numberText`),
+the JSON serializer (`serialize` in `src/functions/json.ts`) and the tagged
+encoder (`encodeFloat` in `src/tagged.ts`) write through `floatText`, and the
+grammar names a decimal literal in a refusal through `floatSpelling`
+(`formatToken` in `src/parser.ts`).
+
+**The rule.** The reference's string cast writes a float with its host
+language's `Float.to_string/1` (`Predicator.Cast.cast/2`), and its
+concatenation and its JSON serializer write the same text, run for every value
+below. That function is the runtime's shortest form, documented there as:
+"When the float is inside the range (-2^53, 2^53), the notation that yields
+the smallest number of characters is used (scientific notation or normal
+decimal notation). Floats outside the range (-2^53, 2^53) are always formatted
+using scientific notation" (the power written here as `^`). So a float is
+written with the shortest digits that read back as the same number; at a
+magnitude of 2^53 or more in the exponent form; below it in whichever of the
+plain and exponent forms is shorter, and in the plain form when the two are the
+same length. The plain form carries a point, and `.0` when the number is
+integral. The exponent form is one digit, a point, at least one further digit,
+`e` and the exponent, with a minus sign when the exponent is negative and no
+sign otherwise. A negative number writes a minus before either form. Zero is
+`0.0` and negative zero `-0.0`, as the amendment above decided.
+
+The tie rule is read from runs rather than from the documentation, which does
+not state it: the reference writes `100.0`, where `1.0e2` is the same length,
+and `0.0001`, where `1.0e-4` is the same length. Either side of each choice
+it writes `1.0e3`, `1234.0`, `1.5e3`, `1.0e-5`, `0.001234`, `1.2e-4`,
+`9007199254740991.0` (2^53 - 1) and `9.007199254740992e15` (2^53).
+
+**Why.** The ruling above, and the standing practice of this package on a
+question the corpus leaves open: match the reference. Before this change the
+spelling was the host's, and the two differed at ordinary values, a thousand
+among them, as well as at the ends of the range.
+
+**One consequence follows from the float cast, and it is the reference's
+too.** The `::float` cast reads plain digits and no exponent form
+(`FLOAT_TEXT` in `src/cast.ts`), so a float the string cast now writes in
+exponent form does not read back through it: `(amount::string)::float`
+answers the absence for a thousand and `1234.0` for `1234.0`, on both sides.
+
+### The null value as a map key misses
+
+**`bracket_access` at a map answers the absence for a null key.** `isMapKey`
+in `src/evaluator.ts` admits the null value beside a string, an integer, a
+boolean and the absence, and `bracketAccess` in the same file finds nothing
+under it, since a map here has string keys only. At a list a null key is still
+a `bracket_access` type mismatch; the reference refuses it too, with its own
+message, and this package keeps its own.
+
+**Why.** The reference reaches the clause through a test for its host
+language's atom type, and its null value is one of those atoms, so it admits a
+null key and misses: `tiers[null]` answers the absence there against a map
+that holds the string key `"null"`, and `{}[null]` answers the absence.
+Section 5 of the reference's `docs/isa.md` lists the key types a sibling with
+no atom type admits without naming null; this package followed that list and refused the
+key, and the choice rested on a comment in `src/` with no case pinning either
+answer. It now answers what the reference answers.
+
+**The duration branch loses its exception.** A duration is indexed under the
+map's key rules, and the null key is now one of the keys those rules admit, so
+`bracketAccess` no longer treats it apart: it answers the absence at a
+duration as it did before. Read the sentence of the duration amendment that
+says the map branch refuses a null key as superseded. The same amendment lists
+the keys newly refused at a duration as a float, a list or a date key; a
+datetime, a duration and a map key are refused there too, and were before this
+change, as the reference refuses each at a duration and at a map at `v9.4.2`.
+
+### What pins it
+
+The rows whose ids begin `float-cast/`, `float-json/`, `float-concat/` and
+`float-cast-back/`, and the rows `map-key/null-against-map` and
+`map-key/null-against-a-built-duration`, in
+`conformance/transcript/transcript.json`, regenerated at `v9.4.2`; none is
+declared in `test/reference-transcript.test.ts`, so each must agree. "the one
+spelling of a float" in `test/floats.test.ts` asks the string cast, a
+concatenation in each order, `JSON.stringify` and the tagged encoder for one
+table of floats and their spellings, the reference's for every row, and asks
+the grammar's refusal for each non-negative row. "takes a wider set of keys at
+a map than a list does, and misses on them" and "indexes a duration under a
+map's key rules" in `test/evaluator.test.ts` pin the null key at a map, a
+list and a duration, and the refused keys at a duration.
+
+### What this does not decide
+
+**No conformance case pins either answer.** The corpus at `v9.4.2` carries no
+case for either question. If a later tag adds one and it answers otherwise,
+this record takes a further entry and the corpus refresh that carries the case
+re-runs the claim.
+
+**`decompile` is not a place this package writes a float as a value.** It
+writes a float literal as source, in plain digits, because the grammar reads
+no exponent form, as the reference's own source writer does; it keeps its own
+rule and this amendment does not touch it.
+
+Consequences. A host that reads a float written as text - by the string cast,
+a concatenation, `JSON.stringify`, the tagged encoder or a refusal message -
+sees the reference's spelling where some values were spelled otherwise before:
+a thousand is `1.0e3` where it was `1000.0`, and ten to the twenty-first is
+`1.0e21` where it was `1e+21`. A host that indexes a map with the null value
+gets the absence where it got a `bracket_access` type mismatch. No exported
+signature changes, no reason token is added, and no opcode changes.

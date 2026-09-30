@@ -4,7 +4,9 @@
  * This module is internal: neither entry point re-exports it. The string cast,
  * the concatenation `add` performs, the tagged encoder and the JSON serializer
  * each write a float through `floatText` rather than keeping a copy of the
- * rule, so that the package spells a float one way wherever it writes one.
+ * rule, and the grammar names a decimal literal in a refusal through
+ * `floatSpelling`, so that the package spells a float one way wherever it
+ * writes one.
  */
 
 import { ownData } from "./maps.js";
@@ -13,25 +15,15 @@ import type { Float } from "./values.js";
 /**
  * Writes a float so that the text still says it was a float.
  *
- * The spelling starts from the host's own, with the sign of negative zero
- * written rather than dropped, as the reference writes it. A `.0` is appended
- * when that spelling carries neither a point nor an exponent: an integral
- * float's host spelling is bare digits, which would read as an integer.
+ * The spelling is the reference's: `floatSpelling` below states the rule. A
+ * float is written with a point, or in exponent form with a fraction digit, so
+ * the text never reads as an integer, and the sign of negative zero is
+ * written rather than dropped.
  *
- * THE TEST IS ON THE SPELLING AND NOT ON THE NUMBER. Past a large enough
- * magnitude, and below a small enough one, the host writes a float in exponent
- * form, so a number can be integral while its spelling already ends in an
- * exponent, and a point glued onto that would make text no JSON parser reads
- * back.
- *
- * THE DIGITS ARE THE HOST'S, AND THE REFERENCE'S DIFFER. Apart from the two
- * departures above - the sign of negative zero written, and a `.0` appended to
- * a spelling with neither a point nor an exponent - this spelling is the
- * host's own, and the reference writes many floats otherwise. What the reference writes through the string cast and
- * through `JSON.stringify` is vendored in `conformance/transcript/`, the rows
- * whose ids begin `float-cast/` and `float-json/`, and
- * `test/reference-transcript.test.ts` declares each row where this spelling
- * differs, with both answers.
+ * What the reference writes through the string cast, `JSON.stringify` and a
+ * concatenation is vendored in `conformance/transcript/`, the rows whose ids
+ * begin `float-cast/`, `float-json/` and `float-concat/`, and every one of them
+ * agrees with this spelling.
  */
 export function floatText(value: Float): string {
   return floatSpelling(floatMagnitude(value));
@@ -70,10 +62,76 @@ export function floatMagnitude(value: Float): number {
  * It is the one caller that has a bare number rather than a `Float`, which is
  * why the rule sits here and `floatText` delegates to it rather than the other
  * way around.
+ *
+ * THE RULE IS THE REFERENCE'S. The reference writes a float with its host
+ * language's shortest form, which that language's runtime documents this way
+ * (the power written here as `^`):
+ * "When the float is inside the range (-2^53, 2^53), the notation that yields
+ * the smallest number of characters is used (scientific notation or normal
+ * decimal notation). Floats outside the range (-2^53, 2^53) are always
+ * formatted using scientific notation". So this writes the shortest digits
+ * that read back as the same number, then:
+ *
+ * - at a magnitude of 2^53 or more, the exponent form;
+ * - below it, whichever of the plain and exponent forms is shorter, and the
+ *   plain form when the two are the same length.
+ *
+ * The plain form carries a point, and a `.0` when the number is integral:
+ * `1234.0`, `0.001`. The exponent form is one digit, a point, at least one
+ * further digit, an `e`, and the exponent with a minus sign when it is
+ * negative and no sign otherwise: `1.0e3`, `1.5e-7`. A negative number writes
+ * a minus in front of either form, which leaves the comparison of their
+ * lengths as it was. Zero is `0.0`, and negative zero `-0.0`.
+ *
+ * The digits come from the host's own shortest spelling, which reads back as
+ * the same number with as few digits as that allows, as the reference's does;
+ * only where the point and the exponent go is this rule's.
+ *
+ * A number that is not finite has no spelling in the reference and is kept to
+ * the host's with a `.0` appended, as it was written before this rule; no
+ * float this package builds carries one, and the tagged encoder refuses one
+ * before it gets here.
  */
 export function floatSpelling(n: number): string {
-  const spelling = Object.is(n, -0) ? "-0" : String(n);
-  return POINT_OR_EXPONENT.test(spelling) ? spelling : `${spelling}.0`;
+  if (!Number.isFinite(n)) return `${String(n)}.0`;
+  if (n === 0) return Object.is(n, -0) ? "-0.0" : "0.0";
+  const sign = n < 0 ? "-" : "";
+  const magnitude = Math.abs(n);
+  const { digits, exponent } = shortestDigits(magnitude);
+  const scientific = `${digits[0]}.${digits.length > 1 ? digits.slice(1) : "0"}e${exponent}`;
+  if (magnitude >= EXPONENT_ONLY_FROM) return sign + scientific;
+  const plain = plainForm(digits, exponent);
+  return sign + (scientific.length < plain.length ? scientific : plain);
 }
 
-const POINT_OR_EXPONENT = /[.eE]/;
+/** The magnitude from which a float is written in exponent form only: 2^53. */
+const EXPONENT_ONLY_FROM = 2 ** 53;
+
+/**
+ * The significant digits of a positive finite number's shortest spelling,
+ * with no leading or trailing zero, and the decimal exponent of the first of
+ * them: `1500` is the digits `15` at exponent 3, `0.00012` the digits `12` at
+ * exponent -4.
+ */
+function shortestDigits(magnitude: number): { digits: string; exponent: number } {
+  const host = String(magnitude);
+  const marker = host.indexOf("e");
+  if (marker !== -1) {
+    const mantissa = host.slice(0, marker).replace(".", "");
+    return { digits: mantissa.replace(/0+$/, ""), exponent: Number(host.slice(marker + 1)) };
+  }
+  const point = host.indexOf(".");
+  const whole = point === -1 ? host : host.slice(0, point);
+  const all = point === -1 ? host : whole + host.slice(point + 1);
+  const leading = all.length - all.replace(/^0+/, "").length;
+  const digits = all.slice(leading).replace(/0+$/, "");
+  return { digits, exponent: whole.length - leading - 1 };
+}
+
+/** Writes significant digits at a decimal exponent in plain form, with a point. */
+function plainForm(digits: string, exponent: number): string {
+  if (exponent < 0) return `0.${"0".repeat(-exponent - 1)}${digits}`;
+  const width = exponent + 1;
+  if (digits.length <= width) return `${digits}${"0".repeat(width - digits.length)}.0`;
+  return `${digits.slice(0, width)}.${digits.slice(width)}`;
+}

@@ -319,10 +319,12 @@ describe("encodeTagged", () => {
     expect(encoded(1)).toBe("1");
   });
 
-  // Sabotage: appending ".0" without testing the spelling turns this red - an
-  // exponent spelling would become "1e+21.0", which is not JSON.
+  // Sabotage: appending ".0" to the exponent form when the number is integral
+  // turns this red - the spelling would become "1.0e21.0", which is not JSON.
+  // It was run and reverted.
   it("leaves an exponent spelling alone", () => {
-    expect(encoded(float(1e21))).toBe("1e+21");
+    expect(encoded(float(1000))).toBe("1.0e3");
+    expect(encoded(float(1e21))).toBe("1.0e21");
   });
 
   // Sabotage: writing a fraction when the sub-second component is zero, or
