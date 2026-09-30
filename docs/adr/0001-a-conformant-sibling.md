@@ -344,3 +344,42 @@ stays free to be revised by regenerating the corpus, which this record reads
 as the same standing. If predicator-ex means the clause to bar a sibling from
 offering its copy to its own consumers, that is a question to raise there,
 and this note does not settle it.
+
+## Note: a DOM global reached through the global object or an optional chain (2026-09-30)
+
+Recorded for pts-6ng. The note above on what the engine-neutrality stage
+scans says, in its paragraph on a field named for a DOM global, when the DOM
+rule fires, and that other ways of reaching a DOM global through the global
+object are not caught. The member lookbehind that paragraph describes also
+quieted a DOM global written as a member of `self` or after `globalThis?.`,
+and the rule's anchor let an optional-chaining dot, a space before the dot
+and a dollar sign after it through. This note records where the rule now
+fires. It changes nothing the Decision says, and it widens what the rule
+catches without narrowing anything it caught before. Code is cited as read at
+`4516160`.
+
+**What the DOM rule fires on.** The rule (`usedAsBareOrGlobalObjectMember`,
+which replaces `usedAsBareOrGlobalThisMember`) fires on a name in the DOM
+global list followed by an anchor: a dot or an optional-chaining dot, with
+any space before it, followed directly by a word character or a dollar sign;
+an optional-chaining dot, with any space before it, followed directly by an
+opening bracket; or an opening bracket directly after the name. It fires when
+the character before the name is not a dot, a word character or a dollar
+sign, or when the name is written as a member of `globalThis`, or of a `self`
+whose own preceding character is none of those three, through a dot or an
+optional-chaining dot with any space before it (`globalObjectMember`).
+
+**What stays quiet.** A field named for a DOM global on some other object
+stays quiet, through a dot or an optional-chaining dot, as does a field named
+`self` on some other object. Space after the dot still does not count as an
+anchor, so an English sentence with a DOM global's name before its full stop
+stays quiet. The Node rule (`usedAsBareGlobal`) is unchanged by this note.
+
+**Still not caught.** A computed access through the global object
+(`globalThis["window"]`), a `self` reached as a member of `globalThis`, a
+member chain the formatter splits across lines, and a browser alias of the
+global object that is not in the DOM global list are not caught by this rule.
+
+`test/engine-neutrality.test.ts` pins the spellings this note adds to what
+fires, and lookalikes of them that stay quiet, in the block for a DOM global
+reached another way.
