@@ -2966,7 +2966,7 @@ nothing about the Status line on the statement-mode note.
 
 ## Amendment: a duration's fields are read as its map's (2026-09-30)
 
-Status: proposed (2026-09-30)
+Status: accepted (2026-09-30; proposed 2026-09-30)
 
 Recorded for `pts-lwa4`, the refresh of the vendored corpus to predicator-ex
 `v9.4.2`. This amendment is appended, and removes no line above. Code is cited
@@ -3050,7 +3050,7 @@ added, and no opcode and no wire-format change follow.
 
 ## Amendment: the JSON serializer counts against the limit (2026-09-30)
 
-Status: proposed (2026-09-30)
+Status: accepted (2026-09-30; proposed 2026-09-30)
 
 Recorded for `pts-8di`, ruled by the operator, 2026-09-29: the JSON serializer
 refuses a value nested past the depth limit with the depth token. This
@@ -3093,7 +3093,7 @@ the serializer writes for a value at or under the limit changes.
 
 ## Amendment: the null map key and the float spelling match the reference (2026-09-30)
 
-Status: proposed (2026-09-30)
+Status: accepted (2026-09-30; proposed 2026-09-30)
 
 Recorded for `pts-9f5` and `pts-18v`, ruled by the operator, 2026-09-29: match
 the reference on both questions. This amendment is appended, and removes no
@@ -3224,7 +3224,7 @@ signature changes, no reason token is added, and no opcode changes.
 
 ## Amendment: a visited-place budget bounds the walks that answer at each place (2026-09-30)
 
-Status: proposed (2026-09-30)
+Status: accepted (2026-09-30; proposed 2026-09-30)
 
 Recorded for `pts-77it`, ruled by the operator, 2026-09-29: a host that hands
 in a shared structure gets a copy at each place it appears, for the normalized
@@ -3333,3 +3333,67 @@ where it got a copy or text after work that doubled with every shared level.
 A host that switches over `RefusalReason` or `EncodeReason` has one more
 member to handle. No exported function's signature changes, and no opcode
 changes.
+
+## Note: the acceptance of the four entries of 2026-09-30 (2026-09-30)
+
+Recorded for `pts-vkhm`. This note records that four amendments above moved
+from proposed to accepted together: on a duration's fields, on the JSON
+serializer and the limit, on the null map key and the float spelling, and on
+the visited-place budget. The conductor moved them under the flip standard of
+the campaign consent the operator adopted, 2026-09-29. It decides nothing, so
+it carries no Status line, and it removes no line. With it, no entry in this
+record reads proposed.
+
+**All four shipped in `@riddler/predicator` 0.3.0.** That version is on npm,
+built from the commit tagged `v0.3.0` (`1ddd46b`). Each amendment's own change
+is in the tag: `728da34` (request 126) for the duration amendment, `2b0b3f4`
+(request 128) for the serializer, `64a6eb5` (request 135) for the null key and
+the float spelling, and `db75944` (request 141) for the place budget. Every
+claim was re-checked at `1ddd46b`, re-located by anchor, and every claim about
+the reference was run in a detached export of predicator-ex `v9.4.2` under
+Elixir 1.18.3 and OTP 27, rather than read.
+
+**The duration amendment.** `durationField` in `src/evaluator.ts` answers the
+eight unit names and misses on any other, and `readMember` calls it for a
+duration; `bracketAccess` sends a duration to its map branch. The three tests
+it names are in `test/evaluator.test.ts`, both `duration-field/` rows are in
+the transcript and declared, and the two corpus cases are claimed on the
+evaluator surface. Run at the tag, the reference answered every value the
+amendment quotes, for the supplied duration and for the built one, and
+refused `#2026-09-01# + loan_period` with a type mismatch. Two of its
+sentences are superseded by the null-key amendment after it, as that
+amendment says: the map branch now admits a null key, and the keys refused at
+a duration include a datetime, a duration and a map. Each of those was run at
+the tag too. They are read as that amendment reads them, and do not hold this
+one.
+
+**The serializer amendment.** `serialize` in `src/functions/json.ts` imports
+`DEPTH_LIMIT`, counts the outermost list or map as level one, and refuses past
+it with `"depth_limit_exceeded"` as both reason and message. The tests under
+"the JSON serialize builtin" in `test/nesting.test.ts` pin a value at the
+limit, one level past it as a list and as a map, and a value twenty thousand
+levels past it.
+
+**The null key and the float spelling.** `floatSpelling` and `floatText` are in
+`src/floats.ts`, and each writer the amendment names reaches them as it says:
+`numberText` in `src/cast.ts`, `applyAdd` in `src/evaluator.ts`, `serialize`,
+`encodeFloat` in `src/tagged.ts` and `formatToken` in `src/parser.ts`.
+`isMapKey` admits the null value. The `float-cast/`, `float-json/`,
+`float-concat/` and `float-cast-back/` rows and both `map-key/null-` rows are
+in the transcript, and none is declared. Run at the tag, the reference's string
+cast and concatenation wrote every spelling the amendment lists, its
+serializer wrote `1.0e3` for a thousand, `(amount::string)::float` answered the
+absence for a thousand and `1234.0` for `1234.0`, and `tiers[null]` and
+`{}[null]` answered the absence while a list refused a null key. The quoted
+sentence on the shortest form is the runtime's own documentation of the
+`short` option that `Float.to_string/1` calls, as read under OTP 27.
+
+**The place budget.** `PLACE_BUDGET` in `src/nesting.ts` is one million and
+`visitPlace` counts against it; `normalize` in `src/values.ts` and
+`encodeValue` in `src/tagged.ts` are its only callers, so `toHost` and the
+serializer count no places. `"place_budget_exceeded"` is a member of
+`RefusalReason` and of `EncodeReason`. The five tests the amendment names are
+under "the place budget of the walks that answer at each place" in
+`test/nesting.test.ts`. The place counts it gives add up as stated, and at the
+tag every match of `budget` under the reference's `lib/` belongs to its loop
+budget.

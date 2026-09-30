@@ -857,7 +857,7 @@ regenerated or edited, and the row's recorded text is unchanged.
 
 ## Amendment: a token transcript at the tag, its sources enumerated from the scanner's suite (2026-09-30)
 
-Status: proposed (2026-09-30)
+Status: accepted (2026-09-30; proposed 2026-09-30)
 
 Recorded for `pts-6gi8`. This amendment is appended, and removes no line above.
 A file this change does not touch is cited as read at commit `b7996e1`; a file
@@ -969,3 +969,28 @@ suite on every change rather than asserted once. The cost is that adding a
 source to the scanner's suite now obliges a regeneration, which needs an
 export of the tag and the reference's toolchain, and that a refresh of the
 corpus obliges a regeneration of three transcripts rather than two.
+
+## Note: the token-transcript amendment's acceptance (2026-09-30)
+
+Recorded for `pts-vkhm`. This note records that the amendment headed "a token
+transcript at the tag, its sources enumerated from the scanner's suite" moved
+from proposed to accepted. The conductor moved it under the flip standard of
+the campaign consent the operator adopted, 2026-09-29. It decides nothing, so
+it carries no Status line, and it removes no line.
+
+**It shipped in `@riddler/predicator` 0.3.0.** That version is on npm, built
+from the commit tagged `v0.3.0` (`1ddd46b`), and the amendment's own change,
+`6a53337` (request 148), is in the tag. Every claim was re-checked at
+`1ddd46b`, re-located by anchor, and a claim about the reference was run
+rather than read.
+
+**What was checked.** `conformance/transcript/tokens-SOURCE.json` records the
+fields the amendment lists, `sources_from` among them, and its counts: 111
+rows, 95 token streams and 16 refusals. The sha256 of `tokens.json` is the one
+it records. `enumerateSources` in `scripts/lib/lexer-sources.mjs` states the
+rule the amendment gives; the test it names is in
+`test/reference-tokens.test.ts`, whose `DECLARED` table names the three signed
+date and datetime sources and no other. The Elixir half calls the four
+reference functions named. `scripts/reference-tokens.mjs`, run again on a
+detached export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27,
+wrote the vendored `tokens.json` byte for byte.

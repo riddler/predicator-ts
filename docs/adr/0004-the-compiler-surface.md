@@ -1119,7 +1119,7 @@ escape is no longer an instance of it.
 
 ## Amendment: `decompile` refuses a tree past the source depth bound, as a value (2026-09-30)
 
-Status: proposed (2026-09-30)
+Status: accepted (2026-09-30; proposed 2026-09-30)
 
 Recorded for `pts-w6r1`, under the ruling that the rendering walk counts its
 descent against the declared source limit and refuses as a value with the
@@ -1316,3 +1316,28 @@ case in the vendored corpus reaches the bound; the note on this record's
 acceptance says the deepest nests four levels as a tree and costs three
 against the bound. Each is a reading of the corpus vendored when it was
 written, each predicts nothing, and each still holds at `v9.4.2`.
+
+## Note: the acceptance of the amendment on `decompile` past the source depth bound (2026-09-30)
+
+Recorded for `pts-vkhm`. This note records that the amendment headed
+"`decompile` refuses a tree past the source depth bound, as a value" moved
+from proposed to accepted. The conductor moved it under the flip standard of
+the campaign consent the operator adopted, 2026-09-29. It decides nothing, so
+it carries no Status line, and it removes no line. With it, no entry in this
+record reads proposed.
+
+**It shipped in `@riddler/predicator` 0.3.0.** That version is on npm, built
+from the commit tagged `v0.3.0` (`1ddd46b`), and the amendment's own change,
+`b1aa0ee` (request 129), is in the tag. Every claim was re-checked at
+`1ddd46b`, re-located by anchor.
+
+**What was checked.** `decompile` in `src/decompile.ts` answers the result the
+amendment quotes, and the type behind it is not exported from the package's
+entry; `render` refuses a node past `SOURCE_DEPTH_LIMIT` with
+`nesting_depth_exceeded`, and `renderChain` walks a chain's spine in a loop.
+`visit` and `visitChain` in `src/emitter.ts` and `descend` in `src/parser.ts`
+still count their own descent. The three statements the amendment names as
+falsified are where it says, and `decompile` answered a bare string at
+`64a6e9d`. Run in a detached export of predicator-ex `v9.4.2` under Elixir
+1.18.3 and OTP 27, the reference compiled a source of three hundred nested
+parentheses and rendered its tree, as the amendment says.
