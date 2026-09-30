@@ -854,3 +854,118 @@ file fails when a row whose recorded answer decodes to a map is not named in
 a regeneration that adds a row of this kind fails there until it is named. At
 this change the duration row is the only one. The transcript itself is not
 regenerated or edited, and the row's recorded text is unchanged.
+
+## Amendment: a token transcript at the tag, its sources enumerated from the scanner's suite (2026-09-30)
+
+Status: proposed (2026-09-30)
+
+Recorded for `pts-6gi8`. This amendment is appended, and removes no line above.
+A file this change does not touch is cited as read at commit `b7996e1`; a file
+it adds is cited as this change leaves it; the reference is cited as run at
+its tag `v9.4.2`.
+
+What this amends. The two transcripts above record what the reference answers
+when it runs a source to a value, and what it compiles, refuses and renders.
+Neither records a token stream, so the scanner's agreement with the
+reference's lexer rested on a differential that was run once, outside the
+repository, and described in prose: nobody could run it again from a
+checkout. This amendment adds a third transcript beside the first two,
+generated at the same tag, covering what the reference's lexer answers for the
+scanner suite's own sources.
+
+**The third transcript is `conformance/transcript/tokens.json`, with
+`conformance/transcript/tokens-SOURCE.json` beside it.** The second file
+records what `compile-SOURCE.json` records - the upstream repository, the tag,
+the commit `conformance/SOURCE.json` names for that tag, the corpus hash, the
+toolchain the reference ran on, the instruction-set version the reference
+reported, the counts of rows, the command that wrote the file and the file's
+sha256 - and one field more, `sources_from`, naming the suite its sources
+were enumerated from.
+
+**Its sources are enumerated, not authored.** The amendment that added the
+first transcript decides that this repository writes the questions, row by
+row, in the generator's Elixir half, and the second transcript follows that.
+This one does not: its sources are the ones a stated rule reaches in
+`test/lexer.test.ts`, and the rule is `enumerateSources` in
+`scripts/lib/lexer-sources.mjs`. It reaches a string literal written as the
+whole argument of one of the suite's three helpers over `tokenize`, the first
+string of each row of a table the suite walks into them, and each string of
+an array of strings a loop walks; a source built by an expression, a source
+handed straight to `tokenize`, and a source generated inside a test are not
+reached. The rule is what the transcript's row count is, and it is not a
+census of every string the suite scans.
+
+**The suite holds the transcript to the rule.** "carries exactly the sources
+the rule reaches in the scanner's suite", in `test/reference-tokens.test.ts`,
+fails when the set of the transcript's sources is not the set the same rule
+reaches in the suite as it stands. So a source the scanner's suite gains is
+followed by a regeneration, as a refresh of the corpus is.
+
+**A row carries a token's type, line, column and length, and nothing it
+cannot compare.** For a string token it also carries the quote and the
+exclusive end, the two members the reference's string token holds past its
+value. A refusal row carries the message, the position and the span. A
+token's value is not carried, because the two implementations spell values
+differently, and a refusal's reason is not carried, because the reference has
+no counterpart for it; `test/lexer.test.ts` asserts both directly. The
+Elixir half, `scripts/lib/reference-tokens.exs`, says the same.
+
+**The generator is `scripts/reference-tokens.mjs`, and it is the only thing
+that writes the file.** It is run by a person, its diff is read like any
+other, and no build step, test or gate stage runs the reference or rewrites
+the file. It refuses what the first two generators refuse: an export whose
+`mix.exs` declares a version other than the tag's, a tag other than the one
+`conformance/SOURCE.json` records, and an export whose corpus hash is not the
+vendored one. Its Elixir half calls four functions of the reference:
+`Predicator.Lexer.tokenize/1` for each source,
+`Predicator.Conformance.JSON.encode_lines/1`, which writes `tokens.json`,
+`Predicator.Conformance.JSON.encode_canonical/1`, which writes the
+`toolchain.json` the run leaves beside it, and `Predicator.isa_version/0`,
+read into that file. A raise, or a refusal message that is not valid UTF-8,
+is reported as a problem with the source, and the run then writes nothing.
+
+**Its hash rule, its declarations and its standing are the first
+transcript's.** The suite checks that `tokens.json`'s sha256 is the one
+`tokens-SOURCE.json` records and that that file's tag, commit and corpus hash
+are `conformance/SOURCE.json`'s. It diffs every row: a row the test's
+`DECLARED` table does not name must agree, and a row it names carries both
+answers and fails when either moves or when the two come to agree. The table
+is keyed by the row's source, since a row carries no id. The transcript is
+outside the hash rule of the corpus and outside the registry, and a row that
+agrees is not a claim of conformance.
+
+What was observed, on 2026-09-30, by running it: the script, run on an export
+of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27, wrote the transcript
+this change vendors, and a second run wrote the same bytes. Applied to the
+suite at this change, the rule reaches 111 sources; the reference answered a
+token stream for 95 and refused 16. This package's answer agrees with the
+reference's on 108 of the 111 rows, strings' quotes and ends included. The
+other 3 are declared: `#-0001-01-01#`, `#-0001-01-01T00:00:00Z#` and
+`#+2024-01-15#`, for which the reference answers a date or a datetime token
+and this package refuses. That divergence is the one the comment on
+`takeDate` in `src/lexer.ts` declares and ADR-0004's note headed "a signed
+date or datetime literal body is refused, as the text readers refuse it"
+records.
+
+That note says that no transcript row can carry the reference's answer for a
+minus. It reads that sentence of the tagged wire form a value is carried
+through, and it holds of the two transcripts whose rows carry a value. A token
+row carries no value, so this transcript does carry the reference's accept
+for a minus, as a token's type and extent. Nothing in that note changes.
+
+### What this does not decide
+
+**The token value stays outside the differential.** Whether this package's
+token values agree with the reference's is asserted source by source in
+`test/lexer.test.ts` and not diffed here; a row that carried one would need a
+spelling of each value both sides write, which neither has today.
+
+**The sources the rule does not reach stay unchecked against the reference.**
+The generated sources of the property row, the long property chain and the
+joined escapes are among them.
+
+Consequences. The scanner's agreement with the reference is re-run by the
+suite on every change rather than asserted once. The cost is that adding a
+source to the scanner's suite now obliges a regeneration, which needs an
+export of the tag and the reference's toolchain, and that a refresh of the
+corpus obliges a regeneration of three transcripts rather than two.

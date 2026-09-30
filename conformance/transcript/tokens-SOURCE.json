@@ -1,0 +1,17 @@
+{
+  "repo": "riddler/predicator-ex",
+  "tag": "v9.4.2",
+  "sha": "d8067df4deac1306f8eb2a9276a92be64abed7d5",
+  "corpus_hash": "sha256:bb60ec82faba2e82ef1e7abaac8d26257db2a77cd4ce0c083b683c5bc063fd43",
+  "elixir": "1.18.3",
+  "otp": "27",
+  "isa_version": 6,
+  "sources_from": "test/lexer.test.ts",
+  "counts": {
+    "refusal": 16,
+    "rows": 111,
+    "tokens": 95
+  },
+  "generator": "node scripts/reference-tokens.mjs --from <export of riddler/predicator-ex at v9.4.2> --tag v9.4.2",
+  "transcript_hash": "sha256:dabfb98bc23e1536c51bcec8eff7836befe673891c135827720c3d2694f6179c"
+}
