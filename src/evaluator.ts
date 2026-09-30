@@ -56,6 +56,7 @@ import {
   type WriteRefusal,
   writePath,
 } from "./context.js";
+import { DURATION_UNIT_TABLE } from "./duration-units.js";
 import {
   EvaluationError,
   type ParseError,
@@ -826,38 +827,17 @@ type DurationKey = (typeof DURATION_KEYS)[number];
  * Every unit spelling the `duration` opcode accepts, and the key each names.
  *
  * Section 5 of the reference's instruction-set document lists the spellings,
- * short and long, and this table is that list. The value side is typed against
- * the key list above rather than restating it, so a key that moved there would
- * stop this table from compiling instead of letting the two drift apart.
+ * short and long, and this map is that list, read off the one unit table
+ * every duration reader shares: each row's literal suffix and its longer
+ * names. The value side is typed against the key list above rather than
+ * restating it, so a key that moved there would stop this map from compiling
+ * instead of letting the two drift apart.
  */
-const DURATION_UNITS: ReadonlyMap<string, DurationKey> = new Map<string, DurationKey>([
-  ["y", "years"],
-  ["year", "years"],
-  ["years", "years"],
-  ["mo", "months"],
-  ["month", "months"],
-  ["months", "months"],
-  ["w", "weeks"],
-  ["week", "weeks"],
-  ["weeks", "weeks"],
-  ["d", "days"],
-  ["day", "days"],
-  ["days", "days"],
-  ["h", "hours"],
-  ["hour", "hours"],
-  ["hours", "hours"],
-  ["m", "minutes"],
-  ["min", "minutes"],
-  ["minute", "minutes"],
-  ["minutes", "minutes"],
-  ["s", "seconds"],
-  ["sec", "seconds"],
-  ["second", "seconds"],
-  ["seconds", "seconds"],
-  ["ms", "milliseconds"],
-  ["millisecond", "milliseconds"],
-  ["milliseconds", "milliseconds"],
-]);
+const DURATION_UNITS: ReadonlyMap<string, DurationKey> = new Map<string, DurationKey>(
+  DURATION_UNIT_TABLE.flatMap((row) =>
+    [row.suffix, ...row.names].map((spelling): [string, DurationKey] => [spelling, row.key]),
+  ),
+);
 
 /** Which way each direction the `relative_date` opcode accepts moves time. */
 const RELATIVE_DIRECTIONS: ReadonlyMap<string, 1 | -1> = new Map<string, 1 | -1>([

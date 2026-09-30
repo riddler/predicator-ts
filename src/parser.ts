@@ -58,6 +58,7 @@ import type {
   ObjectKeyStyle,
   RelativeDirection,
 } from "./ast.js";
+import { DURATION_UNIT_TABLE } from "./duration-units.js";
 import { ParseError, type ParseReason, type Position, type Span } from "./errors.js";
 import { floatSpelling } from "./floats.js";
 import { CAST_TYPE_NAMES, type CastType } from "./instructions.js";
@@ -1124,33 +1125,25 @@ function expandComponents(
   return { ok: true, value: pairs };
 }
 
-/** The exact whole milliseconds one of each unit is worth. */
-const UNIT_MILLISECONDS: ReadonlyMap<string, number> = new Map([
-  ["ms", 1],
-  ["s", 1_000],
-  ["m", 60_000],
-  ["h", 3_600_000],
-  ["d", 86_400_000],
-  ["w", 604_800_000],
-  ["mo", 2_592_000_000],
-  ["y", 31_536_000_000],
-]);
+/**
+ * The exact whole milliseconds one of each unit is worth, read off the one
+ * unit table every duration reader shares.
+ */
+const UNIT_MILLISECONDS: ReadonlyMap<string, number> = new Map(
+  DURATION_UNIT_TABLE.map((row) => [row.suffix, row.millis]),
+);
 
 /**
- * The units a remainder decomposes into, largest first.
+ * The units a remainder decomposes into, largest first, from the same table.
  *
  * A remainder never goes back into weeks, months or years: those three carry
  * the language's own month and year approximations, and re-introducing one
  * into a remainder that an approximation produced would be circular. So half a
  * year is a hundred and eighty-two days and twelve hours, not twenty-six weeks.
  */
-const REMAINDER_LADDER: readonly (readonly [string, number])[] = [
-  ["d", 86_400_000],
-  ["h", 3_600_000],
-  ["m", 60_000],
-  ["s", 1_000],
-  ["ms", 1],
-];
+const REMAINDER_LADDER: readonly (readonly [string, number])[] = DURATION_UNIT_TABLE.filter(
+  (row) => row.remainder,
+).map((row) => [row.suffix, row.millis] as const);
 
 /**
  * The most decimal places a fraction can carry and still be exact.

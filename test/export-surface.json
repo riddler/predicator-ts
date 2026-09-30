@@ -19,6 +19,7 @@
     "Normalization",
     "PDate",
     "PDateTime",
+    "ParseDurationResult",
     "ParseError",
     "ParseReason",
     "ParseResult",
@@ -48,6 +49,7 @@
     "isInteger",
     "isaVersion",
     "parse",
+    "parseDuration",
     "toHost",
     "typeName"
   ],
