@@ -3047,3 +3047,46 @@ a date key gets a `bracket_access` type mismatch where it got the absence
 before, as the reference answers at `v9.4.2`; a null key still answers the
 absence. No exported signature changes, no reason token is
 added, and no opcode and no wire-format change follow.
+
+## Amendment: the JSON serializer counts against the limit (2026-09-30)
+
+Status: proposed (2026-09-30)
+
+Recorded for `pts-8di`, ruled by the operator, 2026-09-29: the JSON serializer
+refuses a value nested past the depth limit with the depth token. This
+amendment is appended, and removes no line above.
+
+What this amends. Under "What does not count against it", the nesting
+amendment above says the two JSON builtins walk their own argument without the
+limit, and the amendment on the parse builtin's fault locator says that is
+still true of the serializer, `JSON.stringify`, and names this bead as the open
+issue. Neither is true of the serializer now. Read both sentences as
+superseded by this amendment; of the two JSON builtins, neither walks its
+argument without the limit.
+
+**The serializer counts against `DEPTH_LIMIT`.** `serialize` in
+`src/functions/json.ts` counts the lists and maps around the value it is
+writing with the outermost as level one, the same count as for a value at the
+boundary, and refuses at the first list or map past the limit. A value at the
+limit is written in full.
+
+**That refusal carries the reason `"depth_limit_exceeded"`**, the reason the
+parse builtin gives a text of the same shape, as both its reason and its
+message, at the call's own instruction. The constant is the one this record
+declares, imported rather than restated, and the token is the one already
+listed as a reason a builtin's failing arm can carry.
+
+**Why the serializer counts.** No host value reaches it past the limit, since
+the value boundary refuses one first, but a program does by wrapping a value
+it was handed in lists or maps. Before this change such a value, nested past
+the limit, serialized; nested far past it, the serializer's recursion
+exhausted the stack and the builtin answered the engine's stack-overflow
+message as its reason. Checked on 2026-09-30 on one machine under node
+26.0.0, before this change: a value wrapped twenty thousand levels past the
+limit answered that message. The suite's tests under "the JSON serialize
+builtin" in `test/nesting.test.ts` pin a value at the limit, one level past it
+as a list and as a map, and the value far past it.
+
+**What this leaves as it was.** The projection, `toHost` in `src/values.ts`,
+still walks without the limit, as the nesting amendment above says. Nothing
+the serializer writes for a value at or under the limit changes.
