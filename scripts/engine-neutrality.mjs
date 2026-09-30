@@ -284,7 +284,12 @@ const usedAsBareOrGlobalObjectMember = (alternation) =>
 
 // A called global: the opening parenthesis with no space before it, which is
 // what the formatter writes and what prose rarely does, behind the same
-// lookbehind, so a method of that name on some other object stays quiet.
+// lookbehind, so a method of that name called on some other object stays
+// quiet. A DEFINITION of that name is not quiet: a method or a private method
+// declared with it, a call to such a private method, and a function declared
+// with it all write the bare name and its parenthesis, and all fire. That
+// over-refusal is accepted; the name is a browser or Node global's, so
+// shipped source has no reason to reuse it.
 const calledAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})\(`;
 
 const rules = [
