@@ -432,6 +432,24 @@ const rules = [
     violation: "const a = BigInt(2);",
   },
   {
+    id: "reference-directive",
+    // The source typecheck holds `src/` to the target's library and to no
+    // host's type declarations, and a triple-slash reference directive in a
+    // source file widens that from inside the file: the library form brings
+    // back a later edition's members, the types form a host's globals, and
+    // the path form any declaration file it names. The source typecheck then
+    // passes code that ships a member the target engine may not have. The
+    // anchor is the directive itself, three slashes opening the line and the
+    // tag name after them, matched in any case because the compiler reads
+    // the tag name in any case. The same text in a string, in a block
+    // comment or after a fourth slash is not a directive and stays quiet.
+    pattern: /^\s*\/\/\/\s*<reference\b/gi,
+    why: "shipped source may not widen the library or the type declarations it is checked against; a member the target lacks would then typecheck and ship",
+    documentedBy:
+      "This module writes no triple-slash directive, so it is checked against no library or type declarations beyond the ones the source typecheck names.",
+    violation: '/// <reference lib="es2022" />',
+  },
+  {
     id: "locale-sensitive",
     // The hazard is not the identifier `Intl`, it is any comparison or
     // rendering whose answer depends on the engine's locale data. String
