@@ -1671,7 +1671,9 @@ class Machine {
    * type - a string, a boolean, an absence, a float - is a type mismatch. A
    * map takes a wider set of key types, and a key it does not hold is an
    * ordinary miss; a key outside that set is a type mismatch. A duration is
-   * indexed as the eight-key map its shape is, under the map's key rules. A
+   * indexed as the eight-key map its shape is, under the map's key rules with
+   * one exception: the null value as a key misses at a duration, as it does at
+   * the reference's duration and as it did here before a duration had fields. A
    * target that is neither map, duration nor list answers the absence whatever
    * the key, which is why the target is dispatched on before the key is
    * judged.
@@ -1708,6 +1710,10 @@ class Machine {
       if (!isIntegral(key)) return typeMismatch("bracket_access", "integer", key, at);
       const member = key >= 0 && key < target.length ? target[key] : undefined;
       this.stack.push(member === undefined ? Undefined : member);
+      return { ok: true, next: at + 1 };
+    }
+    if (target instanceof Duration && key === null) {
+      this.stack.push(Undefined);
       return { ok: true, next: at + 1 };
     }
     if (isPlainMap(target) || target instanceof Duration) {
