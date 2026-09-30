@@ -34,6 +34,7 @@
  */
 
 import type { HostFunction } from "../evaluator.js";
+import { floatMagnitude } from "../floats.js";
 import { Float, float, type Value } from "../values.js";
 
 /** Refuses with the text the evaluation error's reason carries verbatim. */
@@ -87,7 +88,7 @@ export function isNumeric(value: Value | undefined): value is number | Float {
 
 /** The number a numeric value carries, whichever member it is. */
 export function numberOf(value: number | Float): number {
-  return value instanceof Float ? value.valueOf() : value;
+  return value instanceof Float ? floatMagnitude(value) : value;
 }
 
 /**
