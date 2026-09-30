@@ -3,10 +3,12 @@
 #   mise install        provision the toolchain below
 #
 # The two keys below pin the toolchain, and this file is what provisions it
-# everywhere the gate runs. The gate commands in .claude/wurk.json run
-# through `mise exec --`, and CI installs mise and provisions from this same
-# file, so a local gate and the CI gate run on the one node and pnpm named
-# here rather than on whatever a PATH happens to hold.
+# for every gate run made through the manifest's commands. The gate commands
+# in .claude/wurk.json run through `mise exec --`, and CI installs mise,
+# provisions from this same file and runs `gate.full` as written there, so a
+# local gate run that way and the CI gate run on the one node and pnpm named
+# here rather than on whatever a PATH happens to hold. A bare `pnpm run gate`
+# does not go through mise and runs on the PATH's node, pinned or not.
 #
 # Node 24 is the active LTS line; `engines.node` in package.json admits >=20
 # because the published package has to run on a consumer's older runtime,
