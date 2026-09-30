@@ -571,10 +571,11 @@ function spell(value: number): string {
  * `floatText` spells the field the class's `instanceof` test read, so that the
  * text decodes as a float, sign included. Every float this package builds
  * carries a finite field, because the constructor refuses anything else. The
- * test asks that field to be a number and not to be finite, though, so an
- * object a host built to the shape it admits can carry `NaN` or an infinity,
- * and this encoding has no text for either: the check the constructor makes is
- * made again here, over whatever the test admitted.
+ * test asks that field to be a number and does not ask it to be finite, and
+ * `NaN` and an infinity are numbers, so an object a host built to the shape
+ * the test admits can carry either, and this encoding has no text for either:
+ * the check the constructor makes is made again here, over whatever the test
+ * admitted.
  */
 function encodeFloat(value: Float): string {
   if (!Number.isFinite(floatMagnitude(value))) throw new EncodeSignal("non_finite_number");
@@ -663,7 +664,8 @@ function encodeDuration(value: Duration): string {
  * It extends the main entry point's options with the one request that entry
  * point does not accept, so every other option means the same thing at both
  * and is stated once. A host calling both passes one options object to both,
- * because the smaller type lost nothing in the split.
+ * because the smaller type lost only that request in the split: it lost none
+ * of the options the two entry points share.
  */
 export interface TaggedEvaluateOptions extends EvaluateOptions {
   /**

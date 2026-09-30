@@ -232,8 +232,9 @@ describe("the numeric bounds of this domain, which the matrix answers softly", (
 
   // The same reading applied to the other numeric bound: the domain has no
   // non-finite float, so a text naming a magnitude past what a float holds is
-  // a text no value of the target type can be produced from. This one is the
-  // extension beyond the record's own text, and the guard is load bearing -
+  // a text no value of the target type can be produced from. ADR-0002 states
+  // it, in the amendment headed "the cast exemption reaches the non-finite
+  // bound", and the guard is load bearing -
   // without it the float constructor throws and a host error escapes the
   // evaluator, which is the answer the totality rule forbids most emphatically.
   //
