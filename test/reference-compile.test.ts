@@ -344,7 +344,12 @@ describe("what the reference renders, this package renders", () => {
       true,
     );
     if (!parsed.ok) return;
-    const ours = decompile(parsed.ast, row.options);
+    const rendered = decompile(parsed.ast, row.options);
+    expect(rendered.ok, `${id}: the reference rendered this tree and this package refused it`).toBe(
+      true,
+    );
+    if (!rendered.ok) return;
+    const ours = rendered.source;
     const declared = declaredOf(id);
     if (declared === undefined) {
       expect(ours, `${id}: this package and the reference render differently`).toBe(row.rendered);

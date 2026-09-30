@@ -27,8 +27,18 @@
  *   so a rendering can read back as a different expression. The reference
  *   documents that and this matches it rather than improving on it.
  *
- * Nothing here reaches for a Node built-in, and the rendering is a plain
- * recursive walk: no source text is ever evaluated on the way back.
+ * One refusal is this package's and not the reference's: the depth bound.
+ * The walk counts the levels it is inside against `SOURCE_DEPTH_LIMIT`, the
+ * same declared limit the grammar and the emitter count against, and refuses
+ * a tree that nests past it as a value rather than leaving the host's stack
+ * to decide. It counts exactly what the emitter counts - a node it descends
+ * into is a level, and a chain's left spine is walked in a loop at the one
+ * level its root opened - so a tree `parse` answers is refused here for its
+ * depth exactly when `compile` refuses the same source for its depth, with
+ * the same refusal.
+ *
+ * Nothing here reaches for a Node built-in, and no source text is ever
+ * evaluated on the way back.
  */
 
 import type {
@@ -39,7 +49,9 @@ import type {
   ObjectKey,
   UnaryOperator,
 } from "./ast.js";
+import { ParseError } from "./errors.js";
 import { formatDate, formatDateTime } from "./iso.js";
+import { SOURCE_DEPTH_LIMIT } from "./nesting.js";
 
 /**
  * The brand that makes the tree handle below its own type and nobody else's.
@@ -140,6 +152,19 @@ const SPACING_TEXT = {
 } as const;
 
 /**
+ * A rendering, or the one refusal that stopped it.
+ *
+ * The failing arm is the `ParseError` `compile` answers, with the reason
+ * `nesting_depth_exceeded`: the only thing that stops a rendering is a tree
+ * nesting past the declared source limit, and a tree `parse` answers is
+ * refused here exactly when `compile` refuses the same source for its depth,
+ * with the same reason, message, position and span.
+ */
+type DecompileResult =
+  | { readonly ok: true; readonly source: string }
+  | { readonly ok: false; readonly error: ParseError };
+
+/**
  * Renders a syntax tree back to expression source.
  *
  * The defaults are the reference's: `minimal` parentheses and `normal`
@@ -151,16 +176,266 @@ const SPACING_TEXT = {
  * appear among the tables below, whose renderings are pinned against runs at
  * the vendored tag. No combination is promised to round trip; the round-trip
  * check below exercises the defaults only.
+ *
+ * A tree that nests past `SOURCE_DEPTH_LIMIT` is refused as a value, never
+ * thrown: the walk counts its descent the way the emitter counts its own, so
+ * `decompile(parse(source).ast)` refuses exactly the sources `compile`
+ * refuses for their depth, on the failing arm and with the same refusal. The
+ * reference renders such a tree; this is the same divergence from it that
+ * `compile` declares, reached through the rendering direction.
  */
-export function decompile(ast: Ast, options: DecompileOptions = {}): string {
-  const mode: Parentheses = options.parentheses ?? "minimal";
-  const spacing = SPACING_TEXT[options.spacing ?? "normal"];
-  // The handle is the tree, and this is one of the two places the package
-  // reads it back as one. The other is where `parse` seals it.
-  return render(ast as unknown as Node, mode, spacing);
+export function decompile(ast: Ast, options: DecompileOptions = {}): DecompileResult {
+  const renderer = new Renderer(
+    options.parentheses ?? "minimal",
+    SPACING_TEXT[options.spacing ?? "normal"],
+  );
+  try {
+    // The handle is the tree, and this is one of the two places the package
+    // reads it back as one. The other is where `parse` seals it.
+    return { ok: true, source: renderer.render(ast as unknown as Node) };
+  } catch (signal) {
+    if (signal instanceof RenderSignal) return { ok: false, error: signal.error };
+    throw signal;
+  }
 }
 
-function render(node: Node, mode: Parentheses, spacing: string): string {
+/**
+ * The refusal, carried out of the walk.
+ *
+ * It never leaves this module: `decompile` catches it and answers the failing
+ * arm. It is a signal rather than a returned fault because every level of the
+ * walk builds a string out of its children's, and threading a failing arm
+ * through each of those joins would say nothing the one catch does not.
+ */
+class RenderSignal extends Error {
+  readonly error: ParseError;
+
+  constructor(error: ParseError) {
+    super(error.message);
+    this.error = error;
+  }
+}
+
+/**
+ * One rendering's walk, with the options it was asked for and the count of
+ * levels it is inside.
+ *
+ * The count is the emitter's, level for level, which is what makes the two
+ * refuse the same trees. A node the walk descends into opens a level; a
+ * chain's left spine is collected in a loop and costs only the level its root
+ * opened, and everything hanging off the spine - a right operand, an index's
+ * key - opens its own. The one place the two walks could have differed is a
+ * list of literals: the emitter folds it into one instruction without
+ * descending into its elements, so this walk writes those elements without
+ * counting them either.
+ */
+class Renderer {
+  private readonly mode: Parentheses;
+  private readonly spacing: string;
+  private depth = 0;
+
+  constructor(mode: Parentheses, spacing: string) {
+    this.mode = mode;
+    this.spacing = spacing;
+  }
+
+  /**
+   * Renders one node, one level deeper, or refuses because the tree nests
+   * past `SOURCE_DEPTH_LIMIT`.
+   *
+   * The count comes back down in a `finally`, so a refusal unwinding through
+   * a level restores it as an ordinary return does.
+   */
+  render(node: Node): string {
+    if (this.depth >= SOURCE_DEPTH_LIMIT) {
+      throw new RenderSignal(
+        new ParseError(
+          "nesting_depth_exceeded",
+          `Expression nests past the depth limit of ${SOURCE_DEPTH_LIMIT} levels, the whole expression counting as the first`,
+          node.position,
+          node.span,
+        ),
+      );
+    }
+    this.depth += 1;
+    try {
+      return this.renderNode(node);
+    } finally {
+      this.depth -= 1;
+    }
+  }
+
+  private renderNode(node: Node): string {
+    const { mode, spacing } = this;
+    switch (node.kind) {
+      case "integer":
+      case "float":
+      case "boolean":
+      case "null":
+      case "undefined":
+      case "string":
+      case "date":
+      case "datetime":
+        return literal(node);
+      case "identifier":
+        return node.name;
+      case "property_access":
+      case "bracket_access":
+      case "cast":
+      case "comparison":
+      case "membership":
+      case "arithmetic":
+      case "logical_and":
+      case "logical_or":
+        return this.renderChain(node);
+      case "logical_not": {
+        const operand = wrap(
+          this.render(node.operand),
+          node.operand,
+          LOGICAL_NOT,
+          true,
+          "left",
+          mode,
+        );
+        const written = `NOT${spacing}${operand}`;
+        return mode === "explicit" ? `(${written})` : written;
+      }
+      case "unary": {
+        const operand = wrap(this.render(node.operand), node.operand, UNARY, true, "left", mode);
+        return `${UNARY_TEXT[node.operator]}${operand}`;
+      }
+      case "list": {
+        const elements = node.elements.every(isLiteralNode)
+          ? node.elements.map(literal)
+          : node.elements.map((element) => this.render(element));
+        return `[${elements.join(", ")}]`;
+      }
+      case "function_call":
+        return `${node.name}(${node.args.map((argument) => this.render(argument)).join(", ")})`;
+      case "object": {
+        if (node.entries.length === 0) return "{}";
+        const entries = node.entries.map(
+          (entry) => `${objectKey(entry.key)}: ${this.render(entry.value)}`,
+        );
+        return `{${entries.join(", ")}}`;
+      }
+      case "duration":
+        return node.units.map((unit) => `${unit.value}${unit.unit}`).join("");
+      case "relative_date": {
+        const duration = this.render(node.duration);
+        switch (node.direction) {
+          case "ago":
+            return `${duration} ago`;
+          case "future":
+            return `${duration} from now`;
+          case "next":
+            return `next ${duration}`;
+          case "last":
+            return `last ${duration}`;
+        }
+      }
+    }
+  }
+
+  /**
+   * Renders a whole chain at one level, by descending its spine in a LOOP.
+   *
+   * The spine is collected outermost-first, the innermost operand is rendered
+   * through `render` like any other child, and each link is then written
+   * around the text built so far, from the inside out. That is the text the
+   * recursive walk wrote, because a link's text always wraps the text of the
+   * child it leans on, and it is the order the emitter visits in, so the two
+   * meet a node past the limit at the same node.
+   */
+  private renderChain(root: ChainNode): string {
+    const spine: ChainNode[] = [root];
+    let innermost: Node = leaning(root);
+    while (isChainNode(innermost)) {
+      spine.push(innermost);
+      innermost = leaning(innermost);
+    }
+
+    let text = this.render(innermost);
+    for (let link = spine.length - 1; link >= 0; link -= 1) {
+      text = this.renderLink(spine[link] as ChainNode, text);
+    }
+    return text;
+  }
+
+  /** Writes one link around the text of the child it leans on. */
+  private renderLink(node: ChainNode, leaned: string): string {
+    switch (node.kind) {
+      case "property_access":
+        return `${leaned}.${node.property}`;
+      case "bracket_access":
+        return `${leaned}[${this.render(node.key)}]`;
+      case "cast":
+        return `${wrap(leaned, node.expression, PRIMARY, true, "left", this.mode)}::${node.typeName}`;
+      case "comparison":
+        return this.infix(node, leaned, COMPARISON_TEXT[node.operator], COMPARISON, false);
+      case "membership":
+        return this.infix(node, leaned, MEMBERSHIP_TEXT[node.operator], COMPARISON, false);
+      case "arithmetic":
+        return this.infix(
+          node,
+          leaned,
+          ARITHMETIC_TEXT[node.operator],
+          arithmeticLevel(node.operator),
+          true,
+        );
+      case "logical_and":
+        return this.infix(node, leaned, "AND", LOGICAL_AND, true);
+      case "logical_or":
+        return this.infix(node, leaned, "OR", LOGICAL_OR, true);
+    }
+  }
+
+  /**
+   * Writes `left <operator> right` around the left operand's text, wrapping
+   * whatever the mode calls for.
+   */
+  private infix(
+    node: Extract<ChainNode, { left: Node; right: Node }>,
+    left: string,
+    operator: string,
+    level: number,
+    leftAssociative: boolean,
+  ): string {
+    const { mode, spacing } = this;
+    const rendered =
+      wrap(left, node.left, level, leftAssociative, "left", mode) +
+      spacing +
+      operator +
+      spacing +
+      wrap(this.render(node.right), node.right, level, leftAssociative, "right", mode);
+    return mode === "explicit" ? `(${rendered})` : rendered;
+  }
+}
+
+/** The literal node kinds, which are the kinds a list of literals holds. */
+type LiteralNode = Extract<
+  Node,
+  { kind: "integer" | "float" | "string" | "boolean" | "null" | "undefined" | "date" | "datetime" }
+>;
+
+function isLiteralNode(node: Node): node is LiteralNode {
+  switch (node.kind) {
+    case "integer":
+    case "float":
+    case "string":
+    case "boolean":
+    case "null":
+    case "undefined":
+    case "date":
+    case "datetime":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** A literal's source text. It has no children, so it descends nowhere. */
+function literal(node: LiteralNode): string {
   switch (node.kind) {
     case "integer":
       return String(node.value);
@@ -178,128 +453,57 @@ function render(node: Node, mode: Parentheses, spacing: string): string {
       return `#${formatDate(node.value)}#`;
     case "datetime":
       return `#${formatDateTime(node.value)}#`;
-    case "identifier":
-      return node.name;
-    case "comparison":
-      return infix(
-        node.left,
-        node.right,
-        COMPARISON_TEXT[node.operator],
-        COMPARISON,
-        false,
-        mode,
-        spacing,
-      );
-    case "membership":
-      return infix(
-        node.left,
-        node.right,
-        MEMBERSHIP_TEXT[node.operator],
-        COMPARISON,
-        false,
-        mode,
-        spacing,
-      );
-    case "arithmetic": {
-      const level = arithmeticLevel(node.operator);
-      return infix(
-        node.left,
-        node.right,
-        ARITHMETIC_TEXT[node.operator],
-        level,
-        true,
-        mode,
-        spacing,
-      );
-    }
-    case "logical_and":
-      return infix(node.left, node.right, "AND", LOGICAL_AND, true, mode, spacing);
-    case "logical_or":
-      return infix(node.left, node.right, "OR", LOGICAL_OR, true, mode, spacing);
-    case "logical_not": {
-      const operand = wrap(
-        render(node.operand, mode, spacing),
-        node.operand,
-        LOGICAL_NOT,
-        true,
-        "left",
-        mode,
-      );
-      const written = `NOT${spacing}${operand}`;
-      return mode === "explicit" ? `(${written})` : written;
-    }
-    case "unary": {
-      const operand = wrap(
-        render(node.operand, mode, spacing),
-        node.operand,
-        UNARY,
-        true,
-        "left",
-        mode,
-      );
-      return `${UNARY_TEXT[node.operator]}${operand}`;
-    }
-    case "cast": {
-      const expression = wrap(
-        render(node.expression, mode, spacing),
-        node.expression,
-        PRIMARY,
-        true,
-        "left",
-        mode,
-      );
-      return `${expression}::${node.typeName}`;
-    }
-    case "bracket_access":
-      return `${render(node.object, mode, spacing)}[${render(node.key, mode, spacing)}]`;
-    case "property_access":
-      return `${render(node.object, mode, spacing)}.${node.property}`;
-    case "list":
-      return `[${node.elements.map((element) => render(element, mode, spacing)).join(", ")}]`;
-    case "function_call":
-      return `${node.name}(${node.args.map((argument) => render(argument, mode, spacing)).join(", ")})`;
-    case "object": {
-      if (node.entries.length === 0) return "{}";
-      const entries = node.entries.map(
-        (entry) => `${objectKey(entry.key)}: ${render(entry.value, mode, spacing)}`,
-      );
-      return `{${entries.join(", ")}}`;
-    }
-    case "duration":
-      return node.units.map((unit) => `${unit.value}${unit.unit}`).join("");
-    case "relative_date": {
-      const duration = render(node.duration, mode, spacing);
-      switch (node.direction) {
-        case "ago":
-          return `${duration} ago`;
-        case "future":
-          return `${duration} from now`;
-        case "next":
-          return `next ${duration}`;
-        case "last":
-          return `last ${duration}`;
-      }
-    }
   }
 }
 
-/** Renders `left <operator> right`, wrapping whatever the mode calls for. */
-function infix(
-  left: Node,
-  right: Node,
-  operator: string,
-  level: number,
-  leftAssociative: boolean,
-  mode: Parentheses,
-  spacing: string,
-): string {
-  const rendered =
-    wrap(render(left, mode, spacing), left, level, leftAssociative, "left", mode) +
-    spacing +
-    operator +
-    spacing +
-    wrap(render(right, mode, spacing), right, level, leftAssociative, "right", mode);
-  return mode === "explicit" ? `(${rendered})` : rendered;
+/**
+ * A node that leans on one designated child, which is what a flat chain in
+ * the source builds: the three postfix kinds lean on the thing they are
+ * applied to, and the five infix kinds on their left operand. They are the
+ * emitter's chain kinds, for the emitter's reasons.
+ */
+type ChainNode = Extract<
+  Node,
+  {
+    kind:
+      | "property_access"
+      | "bracket_access"
+      | "cast"
+      | "comparison"
+      | "arithmetic"
+      | "membership"
+      | "logical_and"
+      | "logical_or";
+  }
+>;
+
+function isChainNode(node: Node): node is ChainNode {
+  switch (node.kind) {
+    case "property_access":
+    case "bracket_access":
+    case "cast":
+    case "comparison":
+    case "arithmetic":
+    case "membership":
+    case "logical_and":
+    case "logical_or":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** The child a chain node leans on, which is the next link down its spine. */
+function leaning(node: ChainNode): Node {
+  switch (node.kind) {
+    case "property_access":
+    case "bracket_access":
+      return node.object;
+    case "cast":
+      return node.expression;
+    default:
+      return node.left;
+  }
 }
 
 /**

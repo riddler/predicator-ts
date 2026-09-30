@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
+import type { Node } from "../src/ast.js";
 import { emit } from "../src/emitter.js";
-import { compile, compileWithPositions, compileWithSpans, evaluate } from "../src/index.js";
+import {
+  type Ast,
+  compile,
+  compileWithPositions,
+  compileWithSpans,
+  decompile,
+  evaluate,
+  parse as parseSource,
+} from "../src/index.js";
 import { tokenize } from "../src/lexer.js";
 import { SOURCE_DEPTH_LIMIT } from "../src/nesting.js";
 import { parse } from "../src/parser.js";
@@ -360,6 +369,205 @@ describe("a flat chain, which is length and not nesting", () => {
       ["lit", "3"],
       ["compare", "EQ"],
     ]);
+  });
+});
+
+/** The tree `parse` answers for a source, or a failure naming the source. */
+function treeOf(source: string): Ast {
+  const parsed = parseSource(source);
+  if (!parsed.ok) throw new Error(`the source did not parse: ${parsed.error.message}`);
+  return parsed.ast;
+}
+
+/** A position and a span for a node built by hand, which has no source. */
+const NOWHERE = {
+  position: { line: 1, column: 1 },
+  span: { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } },
+};
+
+/**
+ * A tree of `depth` prefix negations over a leaf, built by hand and in a
+ * loop, so that building it descends nowhere. The grammar would refuse the
+ * source for this long before it got this deep; the tree is here to reach the
+ * renderer as a tree the grammar never produced.
+ */
+function negations(depth: number, leaf: Node = { kind: "integer", value: 1, ...NOWHERE }): Ast {
+  let node: Node = leaf;
+  for (let level = 0; level < depth; level += 1) {
+    node = { kind: "unary", operator: "minus", operand: node, ...NOWHERE };
+  }
+  return node as unknown as Ast;
+}
+
+describe("the rendering direction, which counts what the emitter counts", () => {
+  // The source here is the one the emitter test above uses: the grammar reads
+  // it to the end and answers a tree, and the emitter refuses that tree. The
+  // renderer counts the same levels, so it refuses the same tree, with the
+  // refusal `compile` answers - the same reason, message, position and span.
+  //
+  // Sabotage: removing the limit test from `render` in src/decompile.ts lets
+  // this tree render, and testing the depth with `>` rather than `>=` lets one
+  // level past. Each was run and reverted.
+  it("refuses a tree the emitter refuses, with the refusal compile answers", () => {
+    const source = index(SOURCE_DEPTH_LIMIT - 1);
+    const rendered = decompile(treeOf(source));
+    const compiled = compile(source);
+    expect(rendered.ok).toBe(false);
+    expect(compiled.ok).toBe(false);
+    if (rendered.ok || compiled.ok) return;
+
+    expect(rendered.error.type).toBe("ParseError");
+    expect(rendered.error.reason).toBe("nesting_depth_exceeded");
+    expect(rendered.error.message).toBe(compiled.error.message);
+    expect(rendered.error.position).toEqual(compiled.error.position);
+    expect(rendered.error.span).toEqual(compiled.error.span);
+  });
+
+  // Every nesting shape, at every depth up to the bound: wherever the grammar
+  // answers a tree, the renderer refuses it exactly when `compile` refuses the
+  // source, and a tree it renders compiles back to the program the source
+  // compiles to.
+  //
+  // Sabotage: testing the depth with `>` rather than `>=` in `render` in
+  // src/decompile.ts lets the index shape render one level past where
+  // `compile` refuses it, and turns this red there. It was run and reverted.
+  it("renders exactly the trees compile accepts, for every nesting shape", () => {
+    for (const [name, make] of nestingShapes) {
+      for (let depth = 1; depth <= SOURCE_DEPTH_LIMIT; depth += 1) {
+        const source = make(depth);
+        const parsed = parseSource(source);
+        if (!parsed.ok) continue;
+        const rendered = decompile(parsed.ast);
+        const compiled = compile(source);
+        expect({ name, depth, renders: rendered.ok }).toEqual({
+          name,
+          depth,
+          renders: compiled.ok,
+        });
+        if (!rendered.ok || !compiled.ok) continue;
+        const again = compile(rendered.source);
+        expect({ name, depth, again: again.ok && again.instructions }).toEqual({
+          name,
+          depth,
+          again: compiled.instructions,
+        });
+      }
+    }
+  });
+
+  // The one place the two walks could count differently is a list of
+  // literals, which the emitter folds without descending into its elements.
+  // A source cannot reach that difference at the bound: the grammar spends a
+  // level on the list's elements that the folded list does not spend in the
+  // emitter, so the grammar refuses first. A tree built by hand reaches it.
+  // Each tree is a run of negations over a leaf, at depths either side of the
+  // bound, and the renderer and the emitter answer the same arm with the same
+  // refusal at every one.
+  //
+  // Sabotage: rendering a list's literal elements through the counting walk
+  // turns this red at the literal list, one level short of the emitter. It
+  // was run and reverted.
+  it("counts every leaf the way the emitter does, on trees built by hand", () => {
+    const leaves: ReadonlyArray<readonly [string, Node]> = [
+      ["an integer", { kind: "integer", value: 1, ...NOWHERE }],
+      [
+        "a list of literals",
+        { kind: "list", elements: [{ kind: "integer", value: 1, ...NOWHERE }], ...NOWHERE },
+      ],
+      [
+        "a list of a name",
+        {
+          kind: "list",
+          elements: [{ kind: "identifier", name: "charge", ...NOWHERE }],
+          ...NOWHERE,
+        },
+      ],
+    ];
+    for (const [name, leaf] of leaves) {
+      for (let depth = SOURCE_DEPTH_LIMIT - 3; depth <= SOURCE_DEPTH_LIMIT + 1; depth += 1) {
+        const tree = negations(depth, leaf);
+        const rendered = decompile(tree);
+        const emitted = emit(tree as unknown as Node);
+        expect({ name, depth, renders: rendered.ok }).toEqual({
+          name,
+          depth,
+          renders: emitted.ok,
+        });
+        if (rendered.ok || emitted.ok) continue;
+        expect({ name, depth, error: rendered.error }).toEqual({
+          name,
+          depth,
+          error: emitted.error,
+        });
+      }
+    }
+  });
+
+  // A chain is length and not nesting here as it is in the emitter, so every
+  // chain shape renders at lengths far past the bound and compiles back to the
+  // same program. This is the shape that used to run the host out of stack:
+  // the rendering walk recursed once per link.
+  //
+  // Sabotage: rendering a chain by recursing into the link it leans on through
+  // `render`, rather than collecting the spine in a loop, refuses every shape
+  // here for nesting its author never wrote. It was run and reverted.
+  it("renders a chain far past the bound, for every chain shape", () => {
+    for (const [name, make] of chainShapes) {
+      const source = make(SOURCE_DEPTH_LIMIT * 8);
+      const rendered = decompile(treeOf(source));
+      expect({ name, renders: rendered.ok }).toEqual({ name, renders: true });
+      if (!rendered.ok) continue;
+      const again = compile(rendered.source);
+      const compiled = compile(source);
+      expect({ name, same: again.ok && compiled.ok && again.instructions }).toEqual({
+        name,
+        same: compiled.ok && compiled.instructions,
+      });
+    }
+  });
+
+  // The absurd end of the chain range, at a length past anything a recursive
+  // walk could have followed, under every parentheses mode because each mode
+  // writes a link differently.
+  //
+  // Sabotage: the same recursive spine as above refuses both. It was run and
+  // reverted.
+  it("renders a chain at lengths far past anything a stack would reach", () => {
+    const terms = SOURCE_DEPTH_LIMIT * 256;
+    for (const tree of [treeOf(conjunction(terms)), treeOf(allowList(terms))]) {
+      for (const parentheses of ["minimal", "explicit", "none"] as const) {
+        const rendered = decompile(tree, { parentheses });
+        expect({ parentheses, renders: rendered.ok }).toEqual({ parentheses, renders: true });
+      }
+    }
+  });
+
+  // A tree deeper than the grammar would ever answer can still reach the
+  // renderer from inside the package, and it is answered as a value rather
+  // than left to the host's stack. The depth is a multiple of the bound far
+  // past the depths a recursive walk exhausts a stack at.
+  //
+  // Sabotage: removing the limit test from `render` in src/decompile.ts turns
+  // this red on the first assertion, the walk raising where it answered. It
+  // was run and reverted.
+  it("answers a failing arm at depths far past anything a stack would reach", () => {
+    let answered: ReturnType<typeof decompile> | undefined;
+    expect(() => {
+      answered = decompile(negations(SOURCE_DEPTH_LIMIT * 256));
+    }).not.toThrow();
+    expect(answered?.ok === false && answered.error.reason).toBe("nesting_depth_exceeded");
+  });
+
+  // The count starts at zero on every call: a refusal unwinding out of one
+  // rendering leaves nothing behind for the next.
+  //
+  // Sabotage: keeping the count on the module and not bringing it back down
+  // on the refusal, so that one refusal leaves the next call already at the
+  // limit, turns the second assertion red. It was run and reverted.
+  it("carries nothing from one rendering into the next", () => {
+    expect(decompile(negations(SOURCE_DEPTH_LIMIT * 2)).ok).toBe(false);
+    expect(decompile(negations(SOURCE_DEPTH_LIMIT - 1)).ok).toBe(true);
+    expect(decompile(negations(SOURCE_DEPTH_LIMIT)).ok).toBe(false);
   });
 });
 
