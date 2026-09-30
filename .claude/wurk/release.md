@@ -26,23 +26,22 @@ on `main`**, resolved when you read this rather than named here. Find it with:
 git log --oneline --no-patch -L '/"version"/,+1:package.json'
 ```
 
-The first line is the last commit that moved `"version"` in `package.json`,
-and the last commit that moved it is the last release prep by definition.
-
-That is not yet true. `package.json` carries its scaffold version, `0.0.0`,
-and will until the first bump lands, so the command above resolves to the
-bootstrap commit rather than to a prep. Read the checklist below instead until
-a prep has moved the version once.
+The first line is the last commit that moved `"version"` in `package.json`.
+Every line but the last is a release prep, because a prep is the only change
+that moves the version; the last line is the commit that created
+`package.json`, which wrote a starting version without cutting a release. So
+when the output has more than one line, its first line is the reference; when
+it has only one, no prep has landed and the checklist below is the only
+reference there is.
 
 Where this file and the reference commit disagree, the commit is the evidence
 and this file is the defect.
 
 **This file names no SHA for that reference, on purpose, and it carries no
-version string anywhere except in the historical claims above.** A hard-coded
-reference stops being the most recent the moment the next release lands.
-Nothing here needs editing at a release, and a release commit does not touch
-this file - the table at the end lists every file it does touch, and this is
-not one of them.
+version string anywhere.** A hard-coded reference stops being the most recent
+the moment the next release lands. Nothing here needs editing at a release, and
+a release commit does not touch this file - the table at the end lists every
+file it does touch, and this is not one of them.
 
 ## Why the recipe names no changelog
 
