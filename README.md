@@ -18,17 +18,20 @@ evaluated in a browser or in a React Native app without a round trip.
 ## Install
 
 **The name carries an earlier generation of this project.**
-`@riddler/predicator` on npm is a 2019 package, built from
+`@riddler/predicator` on npm was first a 2019 package, built from
 `github.com/riddler/predicator-js` rather than from this repository. Read
-from the live registry on 2026-09-20: `npm view @riddler/predicator version`
-answered `0.1.1`, its `dist-tags` were `{ latest: '0.1.1' }`, its description
-was "Safe predicate engine", it declared a runtime dependency on
-`chevrotain`, and its `time` metadata recorded publishes of `0.1.0` and
-`0.1.1` on 2019-08-08Z. No version of that `0.1.x` line is this code. It is
-retired by deprecation at the first publish from this repository -
-deprecation rather than removal, because a published version can be
-deprecated but not recalled. A registry is live: read it yourself rather than
-trusting this paragraph's date.
+from the live registry on 2026-09-30: `npm view @riddler/predicator versions`
+answered `0.1.1`, `0.2.0` and `0.2.1`, and its `dist-tags` were
+`{ latest: '0.2.1' }`. The two `0.2.x` versions were published from this
+repository. `0.1.1` is the earlier generation's: its description is "Safe
+predicate engine", it declares a runtime dependency on `chevrotain`, and it
+carries a deprecation message naming `0.2.0` as where the current line
+starts. The name's `time` metadata also records a publish of `0.1.0` on
+2019-08-08Z, beside `0.1.1`'s the same day, but the registry no longer
+offers `0.1.0` as a version. No version of that `0.1.x` line is this code.
+It was retired by deprecation rather than removal, because a published
+version can be deprecated but not recalled. A registry is live: read it
+yourself rather than trusting this paragraph's date.
 
 ```bash
 pnpm add @riddler/predicator@^0.2.1
@@ -67,15 +70,15 @@ the Development section below is how to provision them.
 ## The entry points
 
 ```ts
-import { compile, decompile, evaluate, execute, executeValue, float, isaVersion, parse, toHost } from "@riddler/predicator";
+import { compile, decompile, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
 import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/tagged";
 ```
 
 - **`@riddler/predicator`** is the main entry point: the value domain, the host
   boundary, the compilation of an expression's source text into an instruction
   list, the evaluation of such a list, the rendering of a parsed expression
-  back to source text, and the version of the instruction set this build
-  implements.
+  back to source text, the reading of a duration from its literal spelling,
+  and the version of the instruction set this build implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
   conformance corpus's tagged encoding, and the one evaluation that speaks it.
   That encoding carries the members a plain JSON round trip loses - a date, a
@@ -92,8 +95,13 @@ resolution reads no `exports` map at all, so the manifest also carries a
 top-level `main` and `types` naming the main entry point's CommonJS build
 and its declarations. That fallback covers the main entry point only: the
 `./tagged` subpath needs a resolution mode that reads `exports`. A gate
-stage compiles a consumer in each mode and reads the compiler's own
-resolution trace, so neither half of that can change without saying so.
+stage compiles a consumer of the main entry point under `node10`, and
+under `nodenext` from both an ES module and a CommonJS file, and reads the
+compiler's own resolution trace: the `node10` run has to resolve through
+the top-level `types` without entering `exports`, and each `nodenext` run
+through `exports` under the condition its format matches. It compiles no
+consumer under `node16` or `bundler` resolution, and none of the `./tagged`
+subpath.
 
 **Compiling an expression from its source text is `compile`**, and the
 statement grammar is not compiled here: assignment, the statement separator and
@@ -136,6 +144,33 @@ and the one place `isaVersion()` is read inside `src/` runs the other
 direction - it refuses an opcode that this version of the set has retired,
 with `retired_opcode`. The number here is re-derived from the reference
 implementation's ISA document, not chosen independently.
+
+### Reading a duration
+
+```ts
+import { parseDuration } from "@riddler/predicator";
+
+// A host holding a duration as text reads it with the parse `::duration` runs.
+const read = parseDuration("3d8h30m");
+
+if (!read.ok || read.value.days !== 3 || read.value.hours !== 8 || read.value.minutes !== 30) {
+  throw new Error("a duration's literal spelling reads back as its parts");
+}
+
+// A text that is not a duration answers the failing arm rather than a throw.
+const refused = parseDuration("3 days");
+
+if (refused.ok || refused.reason !== "invalid_duration_format") {
+  throw new Error("a text that is not a duration is refused with its reason");
+}
+```
+
+`parseDuration` reads the spelling `::duration` reads and `::string` writes: a
+run of components, each a whole number with an optional decimal fraction and
+one of the units `y`, `mo`, `w`, `d`, `h`, `m`, `s` and `ms`, with no
+whitespace and no sign. The value on the succeeding arm is a `Duration`, and
+the failing arm carries the one reason `invalid_duration_format` for every
+text it refuses.
 
 ## Compiling a rule
 
@@ -433,8 +468,9 @@ host's stack happens to allow, so where the refusal falls is a property of the
 context rather than of the engine running it. A literal in the instruction list
 is held to the same limit, and so is a value the program builds for itself: a
 comparison or a membership test whose operand is nested past the limit, a store
-that would nest the context past it, and a result nested past it are each
-refused at that point rather than walked or handed over. A value reached by two
+that would nest the context past it, a value handed to the `JSON.stringify`
+builtin nested past it, and a result nested past it are each refused at that
+point rather than walked or handed over. A value reached by two
 paths without a cycle - one card object under two keys, say - is not refused:
 it is normalized at each place it appears, as a copy of its own. Because that
 copy grows with the paths rather than with the objects, the places are counted,
@@ -762,16 +798,17 @@ only satisfy it by being empty.
 Running it:
 
 ```bash
-pnpm run test           # runs the corpus against this build and writes reports/
-pnpm run corpus:check   # the vendored corpus is the one SOURCE.json says it is
-pnpm run ratchet        # rewrites the registry from the reports, growing only
+mise exec -- pnpm run test           # runs the corpus against this build and writes reports/
+mise exec -- pnpm run corpus:check   # the vendored corpus is the one SOURCE.json says it is
+mise exec -- pnpm run ratchet        # rewrites the registry from the reports, growing only
 ```
 
 The suite that runs the corpus is `test/conformance/`, and the registry's own
 checks live beside it: the pin against the vendored corpus, each entry's
 membership and tier, a byte comparison of the file against a re-encoding, a
 fresh run in which each recorded entry still passes, and the completeness rule
-behind a claim. `pnpm run gate` runs that suite and the hash check together.
+behind a claim. The full gate, `mise exec -- pnpm run gate`, runs that suite
+and the hash check together.
 
 ## Documentation
 
@@ -796,8 +833,8 @@ mise exec -- pnpm run gate                    # the full gate, which CI runs too
 rather than duplicating the versions into the workflow. The pnpm version is the
 one exact version written in two places: `mise.toml` pins it for `mise install`
 and `package.json`'s `packageManager` pins it for corepack. Nothing checks that
-the two agree, so a bump has to move both. (`engines.node` in `package.json` is a floor
-for a consumer's runtime, not a second pin of the toolchain.)
+the two agree, so a bump has to move both. `engines.node` in `package.json` is
+not a pin of the toolchain either; the Install section says what it is.
 
 ## License
 
