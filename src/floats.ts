@@ -6,7 +6,8 @@
  * each write a float through `floatText` rather than keeping a copy of the
  * rule, and the grammar names a decimal literal in a refusal through
  * `floatSpelling`, so that the package spells a float one way wherever it
- * writes one.
+ * writes one. What a float carries is read through `floatMagnitude`, by those
+ * writers and by every place the machine reads a float's number.
  */
 
 import { ownData } from "./maps.js";
@@ -39,14 +40,21 @@ export function floatText(value: Float): string {
  * taken for a float - host code impersonating a class of this package's, which
  * the value-domain record puts outside what this package promises - and a
  * writer that called its `valueOf` would put that method's answer into its
- * output in place of the field the test read. Reading the field through its
- * descriptor makes what a writer emits a function of what was checked. It is
- * not a defence, and there is nothing here to defend: a host that builds such
- * an object is already inside the process.
+ * output in place of the field the test read. A reader that called it would
+ * do worse than write something malformed: equality, the test for zero,
+ * arithmetic, negation, the integer cast and a builtin's argument would each
+ * answer from the method, and a method that answers a different number on
+ * each call makes equality between a float and itself false. Reading the
+ * field through its descriptor makes what a writer emits and what the machine
+ * decides a function of what was checked. It is not a defence, and there is
+ * nothing here to defend: a host that builds such an object is already inside
+ * the process.
  *
  * The answer is a number, because that is what the test read. It is not
  * necessarily finite, because the test does not ask that, so a writer whose
- * output has no text for a non-finite number checks before it spells one.
+ * output has no text for a non-finite number checks before it spells one, and
+ * a reader that builds a new float from it goes through the check that
+ * refuses a non-finite result.
  * The field is the one `shareAcrossCopies` names for `Float` in `./values.ts`.
  */
 export function floatMagnitude(value: Float): number {

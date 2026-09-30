@@ -64,6 +64,7 @@ import {
   TypeMismatchError,
   UndefinedVariableError,
 } from "./errors.js";
+import { floatMagnitude } from "./floats.js";
 import { BUILTINS, perEvaluationBuiltins } from "./functions/index.js";
 import {
   type CastType,
@@ -297,7 +298,7 @@ export type ExecuteValueResult =
 // ---------------------------------------------------------------------------
 
 function numberOf(value: Value): number {
-  return value instanceof Float ? value.valueOf() : (value as number);
+  return value instanceof Float ? floatMagnitude(value) : (value as number);
 }
 
 function isNumeric(value: Value): value is number | Float {
@@ -426,7 +427,11 @@ export function strictlyEqual(left: Value, right: Value): boolean {
   if (left === Undefined || right === Undefined) return left === right;
   if (left === null || right === null) return left === right;
   if (left instanceof Float || right instanceof Float) {
-    return left instanceof Float && right instanceof Float && left.valueOf() === right.valueOf();
+    return (
+      left instanceof Float &&
+      right instanceof Float &&
+      floatMagnitude(left) === floatMagnitude(right)
+    );
   }
   if (typeof left === "number" || typeof right === "number") return left === right;
   if (typeof left === "boolean" || typeof left === "string") return left === right;
@@ -812,7 +817,7 @@ const ARITHMETIC: Record<
 
 /** Whether a value is zero, in either numeric member of the domain. */
 function isZero(value: Value): boolean {
-  if (value instanceof Float) return value.valueOf() === 0;
+  if (value instanceof Float) return floatMagnitude(value) === 0;
   return isIntegral(value) && value === 0;
 }
 
@@ -1469,8 +1474,12 @@ class Machine {
     if (this.stack.length < 1) return insufficientOperands("unary_minus", at);
     const operand = this.stack.pop() as Value;
     if (operand instanceof Float) {
-      this.stack.push(new Float(-operand.valueOf()));
-      return { ok: true, next: at + 1 };
+      // The float is built through the numeric result's check rather than by
+      // the constructor, because the field the class test read is a number
+      // and not necessarily a finite one, and a field with no negation in the
+      // domain is refused as arithmetic refuses it rather than thrown.
+      const negated = numericResult(-floatMagnitude(operand), true);
+      return this.settle(negated, "unary_minus", "number", operand, operand, at);
     }
     if (typeof operand !== "number") return typeMismatch("unary_minus", "number", operand, at);
     this.stack.push(operand === 0 ? 0 : -operand);

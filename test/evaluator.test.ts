@@ -2717,3 +2717,137 @@ describe("the loop budget, which the back edge now consumes", () => {
     expect(outcome.error.position).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// The number a float carries, read where the class test read it
+// ---------------------------------------------------------------------------
+
+/**
+ * An object built to the whole shape the value classes' `instanceof` test asks
+ * for - a prototype of its own, frozen, the float key as an own data property
+ * set true, and `n` as an own data property holding a number - carrying a
+ * `valueOf` of its own.
+ *
+ * It is host code impersonating the class, which the value-domain record puts
+ * outside what this package promises, and it is still a `Float` to the test.
+ * What these tests pin is that the machine's answer is a function of the field
+ * the test checked, and never of what the object's own method says.
+ */
+function forgedFloat(field: number, answer: () => unknown): Float {
+  const claim = Object.create({ valueOf: answer }) as object;
+  Object.defineProperty(claim, Symbol.for("predicator.float"), { value: true });
+  Object.defineProperty(claim, "n", { value: field, enumerable: true });
+  return Object.freeze(claim) as Float;
+}
+
+/** A `valueOf` that answers a different number on every call. */
+function drifting(): () => number {
+  let calls = 0;
+  return () => {
+    calls += 1;
+    return calls;
+  };
+}
+
+/**
+ * Runs a program over a context and answers the value, the refusal's reason,
+ * or the message of anything thrown, so that a throw fails an assertion
+ * rather than the test's own machinery.
+ */
+function readOver(program: Program, context: { [key: string]: Value }): Value | string {
+  try {
+    const outcome = evaluateToValue(program, context);
+    return outcome.ok ? outcome.value : `refused: ${outcome.error.reason}`;
+  } catch (thrown) {
+    return `threw: ${(thrown as Error).message}`;
+  }
+}
+
+describe("the number a float carries, to the machine", () => {
+  // Sabotage: reading the operands with `valueOf()` in `strictlyEqual` turns
+  // the strict assertions red, and in the evaluator's `numberOf` the bridging
+  // ones. Both were run and reverted.
+  it("keeps equality reflexive when a float's own valueOf answers a new number on each call", () => {
+    const context = { fine: forgedFloat(2.5, drifting()) };
+    const itself = (operator: string): Value | string =>
+      readOver(
+        [
+          ["load", "fine"],
+          ["load", "fine"],
+          ["compare", operator],
+        ] as Program,
+        context,
+      );
+    expect(itself("EQ")).toBe(true);
+    expect(itself("NE")).toBe(false);
+    expect(itself("STRICT_EQ")).toBe(true);
+    expect(itself("STRICT_NE")).toBe(false);
+  });
+
+  // Sabotage: reading a float with `valueOf()` in the evaluator's `numberOf`
+  // turns this red. It was run and reverted.
+  it("adds and orders by the field, not by the float's own valueOf", () => {
+    const context = { fine: forgedFloat(1.5, () => 7), fee: float(1) };
+    expect(readOver([["load", "fine"], ["load", "fee"], ["add"]], context)).toStrictEqual(
+      float(2.5),
+    );
+    expect(
+      readOver(
+        [
+          ["load", "fine"],
+          ["load", "fee"],
+          ["compare", "GT"],
+        ],
+        context,
+      ),
+    ).toBe(true);
+  });
+
+  // Sabotage: testing a float for zero with `valueOf()` in `isZero` turns
+  // this red. It was run and reverted.
+  it("tests a divisor for zero by the field, not by the float's own valueOf", () => {
+    const quotient = (divisor: Float): Value | string =>
+      readOver([["load", "fine"], ["load", "divisor"], ["divide"]], { fine: float(3), divisor });
+    expect(quotient(forgedFloat(0, () => 5))).toBe("refused: division_by_zero");
+    expect(quotient(forgedFloat(2, () => 0))).toStrictEqual(float(1.5));
+  });
+
+  // Sabotage: negating `operand.valueOf()` in `unaryMinus` turns the first
+  // assertion red, and building the float with the constructor rather than
+  // through the numeric result turns the second red with the float class's
+  // own error. Both were run and reverted.
+  it("negates the field, and refuses a field the domain has no float for", () => {
+    const negated = (fine: Float): Value | string =>
+      readOver([["load", "fine"], ["unary_minus"]], { fine });
+    expect(negated(forgedFloat(1.5, () => 7))).toStrictEqual(float(-1.5));
+    expect(negated(forgedFloat(Number.NaN, () => 1))).toBe("refused: non_finite_number");
+  });
+
+  // Sabotage: truncating `value.valueOf()` in the integer cast turns this red.
+  // It was run and reverted.
+  it("casts the field to an integer, not the float's own valueOf", () => {
+    expect(
+      readOver(
+        [
+          ["load", "fine"],
+          ["cast", "integer"],
+        ],
+        { fine: forgedFloat(2.75, () => 9) },
+      ),
+    ).toBe(2);
+  });
+
+  // Sabotage: unwrapping a function argument with `valueOf()` in the builtins'
+  // `numberOf` turns this red. It was run and reverted.
+  it("hands a builtin the field, not the float's own valueOf", () => {
+    expect(
+      readOver(
+        [
+          ["load", "fine"],
+          ["call", "Math.abs", 1],
+        ],
+        { fine: forgedFloat(-1.5, () => 7) },
+      ),
+    ).toStrictEqual(float(1.5));
+  });
+});

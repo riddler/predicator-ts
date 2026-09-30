@@ -29,7 +29,7 @@
 
 import { civilOf, daysFromCivil } from "./civil.js";
 import { DURATION_UNIT_TABLE, type DurationKey, type UnitRow } from "./duration-units.js";
-import { floatText } from "./floats.js";
+import { floatMagnitude, floatText } from "./floats.js";
 import type { CastType } from "./instructions.js";
 import { formatDate, formatDateTime, readDate, readDateTime } from "./iso.js";
 import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "./values.js";
@@ -98,7 +98,7 @@ export function castValue(value: Value, target: CastType): Value {
  */
 function toInteger(value: Value): Value {
   if (typeof value === "number") return value;
-  if (value instanceof Float) return admitInteger(Math.trunc(value.valueOf()));
+  if (value instanceof Float) return admitInteger(Math.trunc(floatMagnitude(value)));
   if (typeof value === "string") {
     return INTEGER_TEXT.test(value) ? admitInteger(Number(value)) : Undefined;
   }
