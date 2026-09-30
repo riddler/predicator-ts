@@ -1361,12 +1361,13 @@ describe("indexing", () => {
   });
 
   // The reference at v9.4.2 answers `loan_period["days"]` 21, a miss for an
-  // integer and a boolean key, and refuses a float key; its null-key answer is
-  // the map rule's, which this build refuses at a map as well.
+  // integer, a boolean and a null key, and refuses a float, a list and a date
+  // key. The null key misses here too, where a map refuses it.
   //
   // Sabotage: leaving a duration out of the map branch of `bracket_access`
-  // turns the first assertion red, answering the absence. It was run and
-  // reverted.
+  // turns the first assertion red, answering the absence; dropping the null-key
+  // exception turns the null assertion red, answering a type mismatch. Both
+  // were run and reverted.
   it("indexes a duration under a map's key rules", () => {
     const context = { loan_period: new Duration({ days: 21 }) };
     const index = (key: Value) =>
@@ -1374,7 +1375,8 @@ describe("indexing", () => {
     expect(index("days")).toEqual({ ok: true, value: 21 });
     expect(index(1)).toEqual({ ok: true, value: Undefined });
     expect(index(true)).toEqual({ ok: true, value: Undefined });
-    for (const key of [float(1.5), null]) {
+    expect(index(null)).toEqual({ ok: true, value: Undefined });
+    for (const key of [float(1.5), [1], new PDate(2026, 9, 1)]) {
       const refused = index(key);
       expect(refused.ok).toBe(false);
       if (refused.ok) return;
