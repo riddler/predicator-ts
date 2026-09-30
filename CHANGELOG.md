@@ -14,6 +14,38 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.3.0] 2026-09-30
+
+A minor release. The vendored conformance corpus moves to the reference's
+v9.4.2 tag; two answers move toward the reference (the null value as a map
+bracket key, and the text a float is written as); public paths that could
+exhaust the host's stack or time now refuse instead; `RefusalReason` and
+`EncodeReason` each gain `place_budget_exceeded`; `parseDuration` is new; and
+`decompile` answers a result rather than a bare string, so a caller of it
+reads the rendering from the result's `source`.
+
+### Added
+
+- `parseDuration(text)` reads a duration from its literal spelling, such as `"3d8h30m"` or `"1.5s"`, over the eight units `y`, `mo`, `w`, `d`, `h`, `m`, `s` and `ms`, and answers `{ ok: true, value }` with a `Duration` or `{ ok: false, reason: "invalid_duration_format" }` for a text that is not one, never a throw; its result type is exported as `ParseDurationResult`.
+
+### Changed
+
+- A float is written as text the way the reference writes it, in the string cast, a concatenation, `JSON.stringify`, the tagged encoder and a refusal message naming a decimal literal: below 2^53 in magnitude the shorter of the plain and exponent forms, the plain one on a tie, and from 2^53 up the exponent form, which always carries a fraction digit and never a plus sign. So a thousand, written `1000.0` before, is now `1.0e3`, a hundred-thousandth is `1.0e-5` where it was `0.00001`, and ten to the twenty-first is `1.0e21` where it was `1e+21`, while `1234.0` and `0.0001` are unchanged; a host that compares a written float as text sees the new spelling, and the number `JSON.parse` reads back is the same. The string cast's text for a float written in exponent form no longer reads back through the `::float` cast, which reads plain digits only, as at the reference.
+- A context, a value a registered function answers, or a value handed to `encodeTagged` (or to `evaluateTagged` as a result asked for as the encoding) of more than 1,000,000 places is refused with the new reason `place_budget_exceeded`, a member of `RefusalReason` and of `EncodeReason`, where it was copied or written at each place however long that took. A place is the value and every member of every list and map under it, counted once for each path that reaches it, so a structure whose shared maps double its paths at every level passes the budget at twenty levels. A shared value within the budget is normalized and written at each place it appears, exactly as before.
+- `JSON.stringify` refuses a value whose lists and maps nest past the depth limit of 256 levels with `depth_limit_exceeded`, the reason `JSON.parse` gives a text of the same shape, and a value at the limit still serializes. Before, a value a program nested past the limit serialized, and one nested far past it answered the engine's own stack-overflow message as the reason.
+- The null value as a bracket key on a map answers the absence, as the reference answers, where it was refused with a `bracket_access` type mismatch; on a duration it still answers the absence, and on a list it is still refused.
+- The evaluator reads a float's number from its own field at equality, ordering, arithmetic, the zero test, negation, the integer cast and a builtin's arguments, where it called the value's `valueOf`, so an object a host built to a float's shape can no longer change those answers through a method of its own; negating such an object whose field is not finite is refused with `non_finite_number`, as arithmetic refuses one. A float this package builds answers exactly as before.
+- Indexing a duration with a float, list, date, datetime, duration or map key is refused with a `bracket_access` type mismatch, as at a map, where it answered the absence.
+- The vendored conformance corpus moves to predicator-ex `v9.4.2`, 262 cases, and the registry claims every one of the twelve new cases on both surfaces; no instruction list changes, and nothing changes on a consumer's side.
+- A string literal with the uppercase numeric escape `\U` is refused with `unsupported_escape` and the same message as the lowercase `\u`, where it compiled to the escaped letter before; write the character itself.
+- `decompile` answers a result rather than a bare string: `{ ok: true, source }`, or `{ ok: false, error }` carrying the `ParseError` `compile` answers, under `nesting_depth_exceeded`, for a tree nesting past the declared source depth limit. Read the rendering from `source` after checking `ok`.
+
+### Fixed
+
+- Compiling a long property chain such as `loan.patron.address.city` takes time in proportion to its length, where the scanner read the rest of the chain again from every part: a chain of 8,192 links took seconds and one of 65,536 took minutes, and both now scan in milliseconds.
+- Reading a field of a duration, as `loan_period.days` or `loan_period["days"]`, answers that field for each of the eight unit names instead of the absence.
+- `decompile` no longer runs out of stack on a long chain of operators, property accesses, indexes or casts that `parse` accepts; it renders the chain at any length, as `compile` compiles it.
+
 ## [0.2.1] 2026-09-21
 
 A packaging release, carrying 0.2.0's code unchanged. The published source
