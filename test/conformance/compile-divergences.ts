@@ -63,12 +63,16 @@ export interface DeclaredRefusal {
  * reference accepts. This package declares how deep a source may nest and
  * refuses one past that depth; the reference declares no such bound and
  * compiles the same source. That difference used to be held by prose alone,
- * because the vendored corpus cannot reach it - the deepest expression there
- * nests four levels, two orders of magnitude short of the bound - so no corpus
- * case says anything about it and no later refresh of the corpus will. The row
- * below holds both answers and is re-checked whenever the reference or the
- * corpus moves, which is the shape every other difference from the reference
- * in this package is held in.
+ * because no case in the vendored corpus reaches it. Read at the pinned tag,
+ * predicator-ex `v9.4.2` (`conformance/SOURCE.json`), on 2026-09-30, the
+ * deepest source-bearing case nests four levels as a tree and costs three
+ * against the bound, two orders of magnitude short of it, so no corpus case
+ * says anything about it. That is a reading of the corpus as pinned, not a
+ * promise about a later tag: a later tag may carry a deeper case, and this
+ * package would refuse it and fail it on the compiler surface in the run that
+ * follows the refresh. The row below holds both answers and is re-checked
+ * whenever the reference or the corpus moves, which is the shape every other
+ * difference from the reference in this package is held in.
  *
  * The row's source is authored beside the others in the script that runs the
  * reference, and the reference's answer to it was recorded by the same run
