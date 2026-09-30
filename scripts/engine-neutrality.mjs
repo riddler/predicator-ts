@@ -439,11 +439,17 @@ const rules = [
     // back a later edition's members, the types form a host's globals, and
     // the path form any declaration file it names. The source typecheck then
     // passes code that ships a member the target engine may not have. The
-    // anchor is the directive itself, three slashes opening the line and the
-    // tag name after them, matched in any case because the compiler reads
-    // the tag name in any case. The same text in a string, in a block
-    // comment or after a fourth slash is not a directive and stays quiet.
-    pattern: /^\s*\/\/\/\s*<reference\b/gi,
+    // anchor is the directive itself: three slashes and the tag name after
+    // them, opening the line or directly after the close of a block comment,
+    // because the compiler reads a directive from any comment before the
+    // first statement, including one that follows a block comment on the
+    // same line. The tag name matches in any case because the compiler reads
+    // it in any case. This file reads text line by line, so a line that opens
+    // with the directive fires even inside a block comment or a template
+    // literal, where the compiler ignores it; that over-refusal is accepted.
+    // The same text inside a string, after the asterisk of a doc comment
+    // line, or after a fourth slash stays quiet.
+    pattern: /(?:^|\*\/)\s*\/\/\/\s*<reference\b/gi,
     why: "shipped source may not widen the library or the type declarations it is checked against; a member the target lacks would then typecheck and ship",
     documentedBy:
       "This module writes no triple-slash directive, so it is checked against no library or type declarations beyond the ones the source typecheck names.",
