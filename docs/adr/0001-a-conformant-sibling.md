@@ -397,17 +397,26 @@ types form naming Node's declarations and for its path form naming a
 declaration file outside the source directory. This note records where that
 is now refused. It changes nothing the Decision says, and it adds a rule to
 the engine-neutrality stage without narrowing any rule already there. Code
-is cited as this change leaves it, on a branch cut from `b1aa0ee`.
+is cited as this change leaves it, on a branch cut from `1856f82`.
 
 **What the stage refuses.** The rule `reference-directive` in the stage's
-rule table (`rules` in `scripts/engine-neutrality.mjs`) fires on a line that
-opens, after any space, with three slashes, any space, and the directive's
-tag name, in any case, whichever attribute follows. The compiler reads the
-tag name in any case, so the rule does too.
+rule table (`rules` in `scripts/engine-neutrality.mjs`) fires on three
+slashes, any space, and the directive's tag name, in any case, whichever
+attribute follows, when they open a line after any space or come directly
+after the close of a block comment, after any space. The compiler reads a
+directive from every comment before the first statement, including one
+that follows a block comment on the same line, and it reads the tag name
+in any case, so the rule does both.
 
-**What stays quiet.** The same text in a string, inside a block comment, or
-after a fourth slash is not a directive, and the rule leaves it alone, as it
-does prose that names the directive without writing it.
+**What stays quiet, and what fires that the compiler ignores.** The stage
+reads text line by line and does not parse it. A line that opens with the
+directive, or carries it directly after a block comment's close, fires
+wherever it sits, even inside a block comment or a template literal that
+spans lines, where the compiler ignores it; that over-refusal is accepted.
+Otherwise the rule stays quiet: on the same text inside a string that does
+not open its line and has no block comment's close directly before it, on a
+doc comment line that opens with an asterisk, after
+a fourth slash, and on prose that names the directive without writing it.
 
 **Still not caught.** A declaration merged into a global interface in a
 source file restores a later member's type with no directive, and neither

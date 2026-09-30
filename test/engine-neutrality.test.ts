@@ -462,8 +462,11 @@ describe("a DOM global reached another way", () => {
 
 // A reference directive widens what the source typecheck checks against from
 // inside a source file, whichever of its forms it takes; the compiler reads
-// the tag name in any case and allows space around the three slashes. Each
-// line below fires the directive rule and nothing else, once.
+// the tag name in any case, allows space around the three slashes, and reads
+// a directive that follows a block comment's close. Each fixture below fires
+// the directive rule and nothing else, once. The last is an over-refusal the
+// rule accepts: it reads text line by line, so a line inside a block comment
+// that opens with the directive fires although the compiler ignores it.
 const referenceDirectiveSpellings: readonly (readonly [string, string])[] = [
   ["the library form", '/// <reference lib="es2022" />'],
   ["the library form with a single-quoted component", "/// <reference lib='es2022.array' />"],
@@ -473,6 +476,9 @@ const referenceDirectiveSpellings: readonly (readonly [string, string])[] = [
   ["no space after the slashes", '///<reference lib="es2022" />'],
   ["an indented directive", '  /// <reference lib="es2022" />'],
   ["the tag name in capitals", '/// <REFERENCE lib="es2022" />'],
+  ["after a block comment on the same line", '/* note */ /// <reference lib="es2022" />'],
+  ["after a block comment closed on that line", '/* a\n*/ /// <reference lib="es2022" />'],
+  ["a line inside a block comment", '/*\n/// <reference lib="es2022" />\n*/'],
 ];
 
 // The other side: text that mentions a directive without being one, which the
@@ -483,7 +489,7 @@ const referenceDirectiveLookalikes: readonly (readonly [string, string])[] = [
     "// A reference directive naming a later library is refused here.",
   ],
   ["the directive in a string", 'const directive = "/// <reference lib=\\"es2022\\" />";'],
-  ["the directive in a block comment", ' * /// <reference lib="es2022" /> is not read there.'],
+  ["the directive on a doc comment line", ' * /// <reference lib="es2022" /> is not read there.'],
   ["a fourth slash", '//// <reference lib="es2022" />'],
   ["a field named reference", "const reference = hold.reference;"],
 ];
@@ -492,8 +498,9 @@ describe("a reference directive in shipped source", () => {
   // Sabotage: in scripts/engine-neutrality.mjs, deleting the
   // `reference-directive` rule turns every line here red; dropping its `i`
   // flag turns the capitals line red; dropping the `\s*` after the slashes
-  // turns the no-space line red; and dropping the `\s*` before them turns the
-  // indented line red.
+  // turns the no-space line red; dropping the `\s*` before them turns the
+  // indented line and the two block-comment-close lines red; and dropping the
+  // `\*\/` alternative turns the two block-comment-close lines red.
   it.each(referenceDirectiveSpellings)("fires on %s", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(status, line).toBe(1);
@@ -501,8 +508,8 @@ describe("a reference directive in shipped source", () => {
   });
 
   // Sabotage: in scripts/engine-neutrality.mjs, dropping the `^` from the
-  // `reference-directive` pattern turns the string, block comment and fourth
-  // slash lines red.
+  // `reference-directive` pattern turns the string, doc comment line and
+  // fourth slash lines red.
   it.each(referenceDirectiveLookalikes)("leaves %s alone", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(output, line).toContain("clean");
