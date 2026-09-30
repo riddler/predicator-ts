@@ -2963,3 +2963,80 @@ as naming two notes; the rule's exception sentence now names both, the note on
 statement mode, the two program entry points and the store write, and the
 transcript note, the second with its line declared void here. This note decides
 nothing about the Status line on the statement-mode note.
+
+## Amendment: a duration's fields are read as its map's (2026-09-30)
+
+Status: proposed (2026-09-30)
+
+Recorded for `pts-lwa4`, the refresh of the vendored corpus to predicator-ex
+`v9.4.2`. This amendment is appended, and removes no line above. Code is cited
+as this change leaves it, on a branch cut from `1b91277`.
+
+What this amends. The decision above makes a duration an instance of
+`Duration` carrying all eight keys, and a map a plain object. It did not say
+what `access` and `bracket_access` answer at a duration, and the answer was
+the absence for every name, because both opcodes read a member only from a
+plain map. Two cases the corpus gained at `v9.4.2`, `library/due-soon-window`
+and `library/overdue-days`, read a field of a duration the context supplies
+and expect the field. This amendment decides that. The refresh's own bead
+text ordered it: a new case that fails is fixed in the refresh when the fix is
+local to one site, and a claim is never narrowed (ruled by the operator,
+2026-09-29).
+
+### A duration reads as its eight-key map
+
+**`access` at a duration answers the field its name names, for each of the
+eight unit names, and the absence for any other name.** `durationField` in
+`src/evaluator.ts` answers it, and `readMember` in the same file calls it for
+a duration. A name the class only inherits is a miss, as it is at a map.
+
+**`bracket_access` at a duration takes a map's key rules.** `bracketAccess` in
+`src/evaluator.ts` sends a duration to its map branch: a string key reads the
+field, an integer or a boolean key misses, and a key that branch refuses is
+refused at a duration too, with the same `bracket_access` type mismatch.
+
+Why a duration is read as a map. Section 3 of predicator-ex's `docs/isa.md`
+at `v9.4.2` makes a duration's shape normative: "a map with the eight keys
+`years`, `months`, `weeks`, `days`, `hours`, `minutes`, `seconds`,
+`milliseconds`, all present and defaulting to `0`". Its section 5 says
+`access` pushes `target[property]`. Run at `v9.4.2` in a detached export
+(Elixir 1.18.3, OTP 27), with a context binding `loan_period` to a duration of
+twenty-one days and two hours, the reference answers `loan_period.days` 21,
+`loan_period.hours` 2, `loan_period.milliseconds` 0 and `loan_period["days"]`
+21; it answers the absence for `loan_period.fortnights`, `loan_period[1]` and
+`loan_period[true]`, and refuses `loan_period[1.5]` with a type mismatch. This
+package answers each of those the same way.
+
+### The divergence this declares
+
+**For a duration the `duration` opcode built, the reference answers the
+absence and this package answers the field.** Run at the same tag,
+`(3d).days` and `(3d)["days"]` each answer the absence there and 3 here. The
+reference's context normalization rewrites a duration the host supplied into
+a map keyed by strings, which a name finds; its `duration` opcode builds a map
+keyed by its host language's atoms, which a string name never finds. This
+package has one `Duration` class for both, so it can follow the written shape
+for both or for neither, and the corpus asks for the first. It follows section
+3 for both, as `isMapKey` in `src/evaluator.ts` follows section 5's written
+instruction over what the reference's host language gives it. The rows
+`duration-field/access-on-a-built-duration` and
+`duration-field/bracket-on-a-built-duration` in
+`conformance/transcript/transcript.json` carry the reference's answer, and
+`test/reference-transcript.test.ts` declares both.
+
+**Two further differences are not decided here.** A null key at a duration is
+refused, as it is at a map, where the reference answers the absence at both;
+that difference is the map rule's. And the same normalization leaves a
+duration the host supplied a plain map in the reference, so at `v9.4.2`
+`#2026-09-01# + loan_period` is a type mismatch there, where this package,
+which keeps the `Duration`, answers the date twenty-one days on. No case pins
+either answer, and this amendment changes neither.
+
+**It is pinned by shipped tests.** "reads a duration's field by its unit name,
+and misses on any other name", "indexes a duration under a map's key rules"
+and "reads a field of a duration the duration opcode built" in
+`test/evaluator.test.ts`, and the two corpus cases on the evaluator surface.
+
+Consequences. A host that reads a field of a duration gets the field where it
+got the absence before. No exported signature changes, no reason token is
+added, and no opcode and no wire-format change follow.

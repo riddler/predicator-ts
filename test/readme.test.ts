@@ -538,7 +538,10 @@ describe("the README's quoted JSON", () => {
   // Both quotations are byte-correct today, so without the constructed halves
   // below this check would read the same whether it compared anything or not.
   it("catches a vendoring line that has drifted from SOURCE.json", () => {
-    const drifted = readFileSync(sourcePath, "utf8").replace("v9.4.1", "v9.9.9");
+    const vendoring = readFileSync(sourcePath, "utf8");
+    const { tag } = JSON.parse(vendoring) as { tag: string };
+    const drifted = vendoring.replace(tag, "v9.9.9");
+    expect(drifted).not.toBe(vendoring);
     expect(quotationProblems(drifted)).not.toEqual([]);
   });
 

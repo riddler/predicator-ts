@@ -265,6 +265,19 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
     "map-key/integer-against-string-spelling",
     { reference: Undefined, ours: "gold", declaredBy: "bracketAccess in src/evaluator.ts" },
   ],
+  // A field of a duration the duration opcode built. This package reads any
+  // duration as its eight-key map and answers the field; the reference builds
+  // that map with keys a string name never finds, and answers the absence, by
+  // field and by bracket alike. A duration the host supplies reads its field
+  // on both sides, which the vendored corpus pins.
+  [
+    "duration-field/access-on-a-built-duration",
+    { reference: Undefined, ours: 3, declaredBy: "durationField in src/evaluator.ts" },
+  ],
+  [
+    "duration-field/bracket-on-a-built-duration",
+    { reference: Undefined, ours: 3, declaredBy: "durationField in src/evaluator.ts" },
+  ],
   // An arithmetic result past the safe integer range. The reference's
   // integers are arbitrary precision and it answers the exact number; this
   // package refuses. Each row asks for the result as text, so that the row

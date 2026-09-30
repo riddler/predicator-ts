@@ -65,9 +65,9 @@ alias Predicator.Conformance.Values
 
 compile_sources = [
   # A single-quoted string literal, and every escape the lexer recognizes,
-  # plus the two it does not: an unknown escape stands for its own character,
-  # and the uppercase numeric escape is not the refusal its lowercase spelling
-  # is. The lowercase one is a refusal row below.
+  # plus the one it does not: an unknown escape stands for its own character.
+  # The numeric escape is refused in both spellings, so both are refusal rows
+  # below.
   {"string/single-quoted", ~S('visa')},
   {"escape/double-quote", ~S("visa \"gold\"")},
   {"escape/single-quote", ~S('visa \'gold\'')},
@@ -76,7 +76,6 @@ compile_sources = [
   {"escape/tab", ~S("visa\tgold")},
   {"escape/carriage-return", ~S("visa\rgold")},
   {"escape/unknown-stands-for-its-character", ~S("visa\qgold")},
-  {"escape/uppercase-u-passes-through", ~S("caf\U00e9")},
 
   # The word operators uppercase, the symbol operators, and the negation
   # operator at its own level and below a comparison.
@@ -194,7 +193,7 @@ compile_sources = [
 
 # --------------------------------------------------------------------------
 # The authored sources the reference refuses: one for each member of the
-# closed reason union, and three more for the wordings the union's record
+# closed reason union, and five more for the wordings the union's record
 # calls out as belonging to a family it already names.
 # --------------------------------------------------------------------------
 
@@ -228,13 +227,15 @@ refusal_sources = [
   {"duration_fraction", "0.5ms"},
   {"duration_unit_twice", "1.5d2h"},
 
-  # Four spellings that belong to a family above rather than to one of their
-  # own: the single-quoted wording of the unterminated string, the datetime
+  # Five spellings that belong to a family above rather than to one of their
+  # own: the uppercase spelling of the numeric escape, refused with the
+  # lowercase spelling's message, the single-quoted wording of the unterminated string, the datetime
   # literal reported with the date wording, the assignment refused at an access
   # chain rather than at a bare name, and a comparison chained onto a
   # comparison, which is refused because comparison does not associate - the
   # second operator is a token after a finished expression rather than a site
   # of its own.
+  {"unsupported_escape/uppercase-u", ~S("caf\U00e9")},
   {"unterminated_string/single-quoted", ~S('visa)},
   {"unterminated_date/datetime", "#2026-09-19T10:30:00Z"},
   {"assignment_in_expression/access-chain", "user.age = 30"},

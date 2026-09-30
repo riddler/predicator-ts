@@ -243,6 +243,20 @@ map_key_cases = [
   }
 ]
 
+# A FIELD OF A DURATION THE PROGRAM BUILT. This package reads a duration as
+# the eight-key map its shape is, wherever the duration came from, so both
+# spellings of the read answer the field here. A duration the host supplies
+# reads its field on both sides, which the vendored corpus pins; one the
+# duration opcode builds is asked of the reference, by field and by bracket.
+duration_field_cases = [
+  %{"id" => "duration-field/access-on-a-built-duration", "source" => "(3d).days", "context" => %{}},
+  %{
+    "id" => "duration-field/bracket-on-a-built-duration",
+    "source" => ~S|(3d)["days"]|,
+    "context" => %{}
+  }
+]
+
 # AN ARITHMETIC RESULT PAST THE SAFE INTEGER RANGE. This package refuses one;
 # the reference's integers are arbitrary precision, so it answers the exact
 # number. The result is asked for as text, because a row whose answer is an
@@ -276,7 +290,10 @@ clock_cases = [
 authored =
   float_cases ++
     string_cases ++
-    offset_cases ++ json_form_cases ++ leading_sign_cases ++ map_key_cases ++ integer_range_cases ++ clock_cases
+    offset_cases ++
+    json_form_cases ++
+    leading_sign_cases ++
+    map_key_cases ++ duration_field_cases ++ integer_range_cases ++ clock_cases
 
 completed =
   case Predicator.Conformance.Generator.generate(authored) do

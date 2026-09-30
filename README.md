@@ -694,9 +694,9 @@ implementation at a named tag. `conformance/SOURCE.json` records which:
 ```json
 {
   "repo": "riddler/predicator-ex",
-  "tag": "v9.4.1",
-  "sha": "0854969a29087440e2920e951cc4fe6f342e9018",
-  "corpus_hash": "sha256:548f54cacdcb700df0c47d67f86a944b5dbe6b0c6f96ef0c4c6fbb95b0494892",
+  "tag": "v9.4.2",
+  "sha": "d8067df4deac1306f8eb2a9276a92be64abed7d5",
+  "corpus_hash": "sha256:bb60ec82faba2e82ef1e7abaac8d26257db2a77cd4ce0c083b683c5bc063fd43",
   "isa_version": 6
 }
 ```
