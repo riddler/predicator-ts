@@ -2936,3 +2936,30 @@ so.** The rule in `docs/adr/README.md` names one note that carries a Status
 line, the note on statement mode, the two program entry points and the store
 write. The transcript note carried one from the day it landed, before this
 acceptance, and this note does not remove it. Read that rule as naming two.
+
+## Note: the Status line on the transcript note is void (2026-09-30)
+
+Recorded for `pts-5c4w`, ruled by the operator, 2026-09-29: the Status line
+comes off the note on which declared divergences the reference transcript now
+carries by a superseding note rather than by an edit, and the rule in
+`docs/adr/README.md` names both notes that carry one. This note is appended,
+removes no line above, and carries no Status line.
+
+**The Status line on the transcript note is void.** That note says of itself
+that it corrects no decision and that every rule this record states stands
+unchanged; what it corrects is the evidence several passages above rest on. It
+decides nothing, so there is nothing for a status word to move, and its line
+`Status: accepted (2026-09-26; proposed 2026-09-19)` records no state of that
+note or of this record. Read the transcript note as carrying no Status line.
+The line stays where it is because a merged line of this record is not
+rewritten; this note is what a reader checking it finds.
+
+**What this leaves as it was.** Nothing the transcript note says about the
+evidence changes, and no row, declaration or test it names moves. The status of
+this record and of each amendment in it is unchanged, and so is what the
+acceptance note above records about where the transcript note's own change
+shipped. That acceptance note closes by reading the rule in the records README
+as naming two notes; the rule's exception sentence now names both, the note on
+statement mode, the two program entry points and the store write, and the
+transcript note, the second with its line declared void here. This note decides
+nothing about the Status line on the statement-mode note.

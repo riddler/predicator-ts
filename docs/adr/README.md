@@ -21,9 +21,12 @@ repository's ADR-0001, and `px-ADR-0001` is predicator-ex's. Records in sibling
 repos that are still being drafted are cited by bead id until their number is
 assigned.
 
-A `## Note` on a record carries no Status line, with one exception written
-before this rule was: the note in ADR-0002 on statement mode, the two program
-entry points, and the store write carries one. Every other Status line in
+A `## Note` on a record carries no Status line, with two exceptions, both in
+ADR-0002. The note on statement mode, the two program entry points, and the
+store write carries one, written before this rule was. The note on which
+declared divergences the reference transcript now carries carries one too, and
+the later note in that record on its Status line declares that line void.
+Every other Status line in
 these records sits on the record's own header or under a `## Amendment`,
 because an amendment changes what the record decides and a note does not: a
 note records where something already decided renders, or what a sentence
