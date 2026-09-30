@@ -270,10 +270,17 @@ const usedAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation
 
 // The DOM rule takes the same lookbehind, so an options object with a field
 // named for a window or a document stays quiet, plus one alternative the Node
-// rule does not have: a name reached as a member of `globalThis` still fires,
-// because that member is the browser global itself.
-const usedAsBareOrGlobalThisMember = (alternation) =>
-  String.raw`(?:(?<![.\w$])|(?<=\bglobalThis\.))(?:${alternation})(?:\.\w|\[)`;
+// rule does not have: a name written as a member of `globalThis`, or of a
+// `self` that is not itself a member, still fires, through a dot or an
+// optional-chaining dot and with space allowed before either, because that
+// member is the browser global itself. Its anchor is wider than the Node
+// rule's in the same three ways: an optional-chaining dot counts as a dot,
+// the character after the dot may be a dollar sign, and space may come BEFORE
+// the dot. Space AFTER the dot still does not count, which is what keeps the
+// sliding-window sentence above quiet.
+const globalObjectMember = String.raw`(?<=(?:\bglobalThis|(?<![.\w$])self)\s*\??\.)`;
+const usedAsBareOrGlobalObjectMember = (alternation) =>
+  String.raw`(?:(?<![.\w$])|${globalObjectMember})(?:${alternation})(?:\s*\??\.[\w$]|\s*\?\.\[|\[)`;
 
 // A called global: the opening parenthesis with no space before it, which is
 // what the formatter writes and what prose rarely does, behind the same
@@ -283,7 +290,7 @@ const calledAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternati
 const rules = [
   {
     id: "dom-global",
-    pattern: new RegExp(usedAsBareOrGlobalThisMember(domAlternation), "g"),
+    pattern: new RegExp(usedAsBareOrGlobalObjectMember(domAlternation), "g"),
     why: "shipped source may not touch a DOM global; it has to run where there is no DOM",
     documentedBy:
       "This module touches no browser global: no window object, no document object, and nothing else the DOM defines.",
