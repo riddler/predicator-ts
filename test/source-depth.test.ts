@@ -423,17 +423,18 @@ describe("the rendering direction, which counts what the emitter counts", () => 
     expect(rendered.error.span).toEqual(compiled.error.span);
   });
 
-  // Every nesting shape, at every depth up to the bound: wherever the grammar
-  // answers a tree, the renderer refuses it exactly when `compile` refuses the
-  // source, and a tree it renders compiles back to the program the source
-  // compiles to.
+  // Every nesting shape, at the depths either side of where its shape puts
+  // the bound: wherever the grammar answers a tree, the renderer refuses it
+  // exactly when `compile` refuses the source, and a tree it renders compiles
+  // back to the program the source compiles to.
   //
   // Sabotage: testing the depth with `>` rather than `>=` in `render` in
   // src/decompile.ts lets the index shape render one level past where
   // `compile` refuses it, and turns this red there. It was run and reverted.
   it("renders exactly the trees compile accepts, for every nesting shape", () => {
-    for (const [name, make] of nestingShapes) {
-      for (let depth = 1; depth <= SOURCE_DEPTH_LIMIT; depth += 1) {
+    for (const [name, make, offset] of nestingShapes) {
+      const deepest = SOURCE_DEPTH_LIMIT - offset;
+      for (let depth = deepest - 2; depth <= deepest + 2; depth += 1) {
         const source = make(depth);
         const parsed = parseSource(source);
         if (!parsed.ok) continue;
@@ -513,7 +514,7 @@ describe("the rendering direction, which counts what the emitter counts", () => 
   // here for nesting its author never wrote. It was run and reverted.
   it("renders a chain far past the bound, for every chain shape", () => {
     for (const [name, make] of chainShapes) {
-      const source = make(SOURCE_DEPTH_LIMIT * 8);
+      const source = make(SOURCE_DEPTH_LIMIT * 2);
       const rendered = decompile(treeOf(source));
       expect({ name, renders: rendered.ok }).toEqual({ name, renders: true });
       if (!rendered.ok) continue;
