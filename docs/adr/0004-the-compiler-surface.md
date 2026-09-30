@@ -1188,3 +1188,75 @@ looking: the amendment on nesting depth says the grammar and the emitter each
 count their own descent. They still do, at `descend` in `src/parser.ts` and
 at `visit` in `src/emitter.ts`; the rendering walk is a third that counts,
 and it refuses where the emitter does.
+
+## Note: a signed date or datetime literal body is refused, as the text readers refuse it (2026-09-30)
+
+Recorded for `pts-avml`, ruled by the operator, 2026-09-29: a signed literal
+body stays refused here, and this record carries the reason and the
+reference's answers. This note records where a refusal already recorded for
+the text readers lands for the literal and decides nothing new, so it carries
+no Status line, and it removes no line above. Code is cited as read at
+`47bb1fe`.
+
+**The reference accepts a signed body and answers a token.** Run in a detached
+export of predicator-ex `v9.4.2`, the tag the vendored corpus comes from
+(`conformance/SOURCE.json`), `Predicator.Lexer.tokenize/1` and
+`Predicator.compile/1` answered, for the four spellings:
+
+| source | the reference's token | the reference's program |
+|---|---|---|
+| `#-0001-01-01#` | `{:date, 1, 1, 13, ~D[-0001-01-01]}` | `[["lit", ~D[-0001-01-01]]]` |
+| `#-0001-01-01T00:00:00Z#` | `{:datetime, 1, 1, 23, ~U[-0001-01-01 00:00:00Z]}` | `[["lit", ~U[-0001-01-01 00:00:00Z]]]` |
+| `#+2024-01-15#` | `{:date, 1, 1, 13, ~D[2024-01-15]}` | `[["lit", ~D[2024-01-15]]]` |
+| `#-0000-01-01#` | `{:date, 1, 1, 13, ~D[0000-01-01]}` | `[["lit", ~D[0000-01-01]]]` |
+
+A minus before a date body reads as the sign of the year, and so does the same
+minus in datetime form; a plus is admitted and dropped; a minus before the
+zero year answers the year zero. Each token is followed by the end-of-input
+token.
+
+**This package refuses all four.** `tokenize` in `src/lexer.ts` and `compile`
+answered the same failing arm for each, at line 1 column 1 with a span ending
+one column past the closing marker:
+
+| source | `reason` | message |
+|---|---|---|
+| `#-0001-01-01#` | `invalid_date` | `Invalid date format: -0001-01-01` |
+| `#-0001-01-01T00:00:00Z#` | `invalid_datetime` | `Invalid datetime format: -0001-01-01T00:00:00Z` |
+| `#+2024-01-15#` | `invalid_date` | `Invalid date format: +2024-01-15` |
+| `#-0000-01-01#` | `invalid_date` | `Invalid date format: -0000-01-01` |
+
+Both are members of the reason union above, so the refusal adds no member and
+the reference's accept against this refusal is a divergence in kind rather
+than in wording.
+
+**Where the refusal is already recorded.** `parseDateBody` in `src/lexer.ts`
+reads a literal's body with `readDateTime` in `src/iso.ts` when the body holds
+the date-time separator and with `readDate` otherwise, and refuses with the
+reason above when the reader answers nothing. Those two readers refuse a
+leading sign on the whole text. ADR-0002's note headed "which declared
+divergences the reference transcript now carries" records that refusal, in
+its passage opening "A leading sign on a date or datetime text" and its
+passage opening "A minus before a date or datetime text". The literal refuses
+what the cast refuses, through the same readers, and nothing here decides the
+refusal a second time.
+
+**Why it is refused.** A minus that makes the year negative names a year this
+package cannot carry back out. `formatDate` in `src/iso.ts` writes a year as
+four digits with no place for a sign, and it is what `toText` in
+`src/cast.ts` writes a date with for `::string` and what `literal` in
+`src/decompile.ts` writes a date literal with, so a negative year would read
+in and not write back as a source this lexer reads. The
+tagged wire form a value is read back through holds only years from one
+hundred up, by its own condition at `isWireDate` in `src/tagged.ts`, so no
+transcript row can carry the reference's answer for a minus either. A plus,
+and a minus before the zero year, name years a literal already admits
+unsigned; each is refused beside the negative year so that the sign is one
+rule rather than two. What is refused is the sign and not the year:
+`#0000-01-01#` is admitted here as a date token.
+
+**Where it is pinned.** "refuses a signed body where the reference answers a
+token" in `test/lexer.test.ts` pins the first three spellings and the unsigned
+zero year beside them, and cites this note. The fourth spelling reaches
+`readDate` as the text `-0000-01-01`, which "refuses a signed year, which the
+reference reads" in `test/cast.test.ts` pins for the cast.
