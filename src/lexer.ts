@@ -29,6 +29,7 @@
  * refusal to answer with.
  */
 
+import { DURATION_UNIT_TABLE } from "./duration-units.js";
 import { ParseError, type ParseReason, type Position, type Span } from "./errors.js";
 import { readDate, readDateTime } from "./iso.js";
 import { type PDate, type PDateTime, Undefined } from "./values.js";
@@ -185,9 +186,14 @@ function classifyIdentifier(text: string): readonly [TokenType, TokenValue] {
   return RESERVED.get(text) ?? ["identifier", text];
 }
 
-/** The units a duration names, longest spelling first where two share a letter. */
-const TWO_CHARACTER_UNITS: readonly string[] = ["ms", "mo"];
-const ONE_CHARACTER_UNITS: readonly string[] = ["y", "d", "h", "m", "s", "w"];
+/**
+ * The units a duration names, read off the one unit table every duration
+ * reader shares. The two-character spellings are tried first, so `1mo` is a
+ * month rather than a minute followed by a stray letter.
+ */
+const SUFFIXES: readonly string[] = DURATION_UNIT_TABLE.map((row) => row.suffix);
+const TWO_CHARACTER_UNITS: readonly string[] = SUFFIXES.filter((suffix) => suffix.length === 2);
+const ONE_CHARACTER_UNITS: readonly string[] = SUFFIXES.filter((suffix) => suffix.length === 1);
 
 const ESCAPES: ReadonlyMap<string, string> = new Map([
   ['"', '"'],

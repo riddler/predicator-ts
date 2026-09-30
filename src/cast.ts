@@ -28,18 +28,11 @@
  */
 
 import { civilOf, daysFromCivil } from "./civil.js";
+import { DURATION_UNIT_TABLE, type DurationKey, type UnitRow } from "./duration-units.js";
 import { floatText } from "./floats.js";
 import type { CastType } from "./instructions.js";
 import { formatDate, formatDateTime, readDate, readDateTime } from "./iso.js";
-import {
-  Duration,
-  type DurationParts,
-  Float,
-  PDate,
-  PDateTime,
-  Undefined,
-  type Value,
-} from "./values.js";
+import { Duration, Float, PDate, PDateTime, Undefined, type Value } from "./values.js";
 
 const SECONDS_PER_DAY = 86400;
 
@@ -197,54 +190,20 @@ function toDuration(value: Value): Value {
 // The duration literal
 // ---------------------------------------------------------------------------
 
-/** One of the eight keys a duration carries. */
-type DurationKey = keyof DurationParts;
-
-/** A unit of the duration literal: what it is written as, and what it weighs. */
-interface UnitRow {
-  readonly key: DurationKey;
-  readonly suffix: string;
-  readonly millis: number;
-  /** Whether a fraction's remainder may be spent back into this unit. */
-  readonly remainder: boolean;
-}
-
 /**
- * The units the duration literal is written in, largest first.
+ * The units the duration literal is written in, from the one table every
+ * duration reader shares.
  *
- * One table drives the whole literal: the order `::string` writes components
+ * The table drives the whole literal: the order `::string` writes components
  * in, the suffixes the parse accepts, the weight a fraction is resolved by,
  * and which units a remainder may be spent into. The patterns below are built
- * from it too, so a unit is added or removed here and nowhere else.
- *
- * The longer spellings the `duration` opcode's operand admits are not part of
- * this grammar: the opcode carries unit names a compiler chose, and this is
- * what an author writes inside a string.
- *
- * A month weighs thirty days and a year three hundred and sixty five, the two
- * approximations the reference converts a duration by.
+ * from it too.
  */
-const UNITS: readonly UnitRow[] = [
-  { key: "years", suffix: "y", millis: 31536000000, remainder: false },
-  { key: "months", suffix: "mo", millis: 2592000000, remainder: false },
-  { key: "weeks", suffix: "w", millis: 604800000, remainder: false },
-  { key: "days", suffix: "d", millis: 86400000, remainder: true },
-  { key: "hours", suffix: "h", millis: 3600000, remainder: true },
-  { key: "minutes", suffix: "m", millis: 60000, remainder: true },
-  { key: "seconds", suffix: "s", millis: 1000, remainder: true },
-  { key: "milliseconds", suffix: "ms", millis: 1, remainder: true },
-];
+const UNITS = DURATION_UNIT_TABLE;
 
 const ROW_OF_SUFFIX: ReadonlyMap<string, UnitRow> = new Map(UNITS.map((row) => [row.suffix, row]));
 
-/**
- * The units a fraction's remainder decomposes through, largest first.
- *
- * A remainder is not spent back into a week, a month or a year. A month and a
- * year are the approximate units, and spending a remainder into one of them
- * would re-commit an approximation the fraction had just resolved; a week is
- * left out with them, so half a year reads as a day count and an hour count.
- */
+/** The units a fraction's remainder decomposes through, largest first. */
 const REMAINDER_LADDER: readonly UnitRow[] = UNITS.filter((row) => row.remainder);
 
 /**
@@ -282,7 +241,7 @@ const DURATION_COMPONENT = new RegExp(`([0-9]+)(?:\\.([0-9]+))?(${SUFFIXES})`, "
  * case pins. The parse's half is stated by the language reference rather than
  * by a corpus case, so a unit test pins it here.
  */
-function readDuration(text: string): Duration | undefined {
+export function readDuration(text: string): Duration | undefined {
   if (!DURATION_TEXT.test(text)) return undefined;
   const parts: { [key in DurationKey]?: number } = {};
   for (const [, whole, digits, suffix] of text.matchAll(DURATION_COMPONENT)) {

@@ -9,6 +9,7 @@
  * `./tagged` subpath, and this entry point neither emits nor requires it.
  */
 
+import { readDuration } from "./cast.js";
 import { compile } from "./compile.js";
 import type { Ast } from "./decompile.js";
 import type { ParseError } from "./errors.js";
@@ -27,7 +28,7 @@ import type { Program } from "./instructions.js";
 import { tokenize } from "./lexer.js";
 import { nestingFault } from "./nesting.js";
 import { parse as parseTokens } from "./parser.js";
-import { toHost } from "./values.js";
+import { type Duration, toHost } from "./values.js";
 
 export type {
   CompileResult,
@@ -291,4 +292,39 @@ export function parse(source: string): ParseResult {
   // pair, and `decompile` is the reading half; nowhere else in the package
   // crosses between the two.
   return { ok: true, ast: parsed.ast as unknown as Ast };
+}
+
+/**
+ * A duration, or the refusal of a text that does not spell one.
+ *
+ * The reference answers a refusal here with no reason at all, so there is one
+ * reason on the failing arm, the one the `duration` opcode gives an operand it
+ * cannot read.
+ */
+export type ParseDurationResult =
+  | { readonly ok: true; readonly value: Duration }
+  | { readonly ok: false; readonly reason: "invalid_duration_format" };
+
+/**
+ * Reads a duration from its literal spelling, such as `"3d8h30m"` or `"1.5s"`.
+ *
+ * The spelling is the one `::duration` reads and `::string` writes: a run of
+ * components, each a whole number with an optional decimal fraction followed
+ * by one of the eight units `y`, `mo`, `w`, `d`, `h`, `m`, `s` and `ms`, with
+ * no whitespace, no sign and no empty text. A repeated unit accumulates, and a
+ * fraction expands into whole units - a fraction of a month or a year commits
+ * that unit's thirty-day or three hundred and sixty five day approximation -
+ * or is refused when it is not an exact number of milliseconds. It is the same
+ * parse the cast runs, over the same unit table the compiled literal and the
+ * `duration` opcode read, and it answers what the reference's own duration
+ * parse answers for the same text.
+ *
+ * Failure is a value, never a throw: every text that is not a duration answers
+ * the failing arm with the reason `invalid_duration_format`.
+ */
+export function parseDuration(text: string): ParseDurationResult {
+  const duration = typeof text === "string" ? readDuration(text) : undefined;
+  return duration === undefined
+    ? { ok: false, reason: "invalid_duration_format" }
+    : { ok: true, value: duration };
 }
