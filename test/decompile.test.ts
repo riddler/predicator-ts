@@ -30,6 +30,7 @@ import { describe, expect, it } from "vitest";
 import { loadCases, loadManifest } from "../scripts/lib/corpus.mjs";
 import type { Node } from "../src/ast.js";
 import { type Ast, compile, type DecompileOptions, decompile, parse } from "../src/index.js";
+import { SOURCE_DEPTH_LIMIT } from "../src/nesting.js";
 
 const MATRIX: readonly (readonly [string, Readonly<Record<string, string>>])[] = [
   [
@@ -327,6 +328,59 @@ describe("parse", () => {
     expect(refused.error.position).toEqual(compiled.error.position);
     expect(refused.error.span).toEqual(compiled.error.span);
     expect(refused.error.type).toBe("ParseError");
+  });
+
+  // `parse` runs the scanner and the grammar and not the emitter, so a source
+  // only the emitter refuses answers a tree here. Two nesting shapes the
+  // grammar reads to the end at the last depth it reads, which the emitter
+  // counts past the bound; a membership test well short of that depth; and a
+  // numeric literal out of range. A chain is the other side of the line: it
+  // parses and compiles at a length far past the bound, because no walk
+  // counts its length.
+  //
+  // Sabotage, both run and reverted from a copy: compiling the source inside
+  // `parse` in src/index.ts and answering its refusal turns this red on the
+  // parse arm; testing the depth with `>` rather than `>=` in `render` in
+  // src/decompile.ts turns it red on the rendering.
+  it("answers a tree for a source only the emitter refuses", () => {
+    const refusedByTheEmitter: ReadonlyArray<readonly [string, string, string]> = [
+      [
+        "an index whose key holds the next",
+        `loan${"[loan.renewals".repeat(SOURCE_DEPTH_LIMIT - 1)}${"]".repeat(SOURCE_DEPTH_LIMIT - 1)}`,
+        "nesting_depth_exceeded",
+      ],
+      [
+        "a run of !",
+        `${"!".repeat(SOURCE_DEPTH_LIMIT - 1)}patron.active`,
+        "nesting_depth_exceeded",
+      ],
+      [
+        "a membership test in the next",
+        `${"1 in [".repeat(SOURCE_DEPTH_LIMIT / 2 + 1)}1${"]".repeat(SOURCE_DEPTH_LIMIT / 2 + 1)}`,
+        "nesting_depth_exceeded",
+      ],
+      ["an integer out of range", "loan.renewals > 9007199254740993", "number_out_of_range"],
+    ];
+    for (const [name, source, reason] of refusedByTheEmitter) {
+      const parsed = parse(source);
+      const compiled = compile(source);
+      expect({ name, parses: parsed.ok }).toEqual({ name, parses: true });
+      expect({ name, compiled: compiled.ok ? null : compiled.error }).toEqual({
+        name,
+        compiled: expect.objectContaining({ reason }),
+      });
+      if (!parsed.ok || compiled.ok || reason !== "nesting_depth_exceeded") continue;
+      const rendered = decompile(parsed.ast);
+      expect({ name, rendered: rendered.ok ? null : rendered.error }).toEqual({
+        name,
+        rendered: compiled.error,
+      });
+    }
+    const chain = `loan${".hold".repeat(SOURCE_DEPTH_LIMIT * 8)}`;
+    const parsedChain = parse(chain);
+    expect(parsedChain.ok).toBe(true);
+    expect(compile(chain).ok).toBe(true);
+    expect(parsedChain.ok && decompile(parsedChain.ast).ok).toBe(true);
   });
 });
 

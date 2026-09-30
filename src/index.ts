@@ -264,10 +264,23 @@ export function executeValue(
  * that cannot reproduce those is not the reference's rendering.
  * `docs/adr/0004-the-compiler-surface.md` is the record.
  *
- * It stops where `compile` stops. The scanner and the grammar are the same two
- * stages `compile` runs, so the same sources are accepted and the same ones
- * are refused - the statement grammar among them - and the tree is the one the
- * emitter would have compiled.
+ * It runs the first two of the three stages `compile` runs, the scanner and
+ * the grammar, and not the emitter. So every source this refuses, `compile`
+ * refuses with the same refusal - the statement grammar among them - and a
+ * tree comes back for every source `compile` accepts, the one the emitter
+ * compiles. The converse does not hold: a source the emitter refuses parses,
+ * and there are two such refusals. One is a numeric literal outside what the
+ * value domain represents, under `number_out_of_range`. The other is a source
+ * nesting past `SOURCE_DEPTH_LIMIT` by the emitter's count when the grammar's
+ * count stops short of it, under `nesting_depth_exceeded`: the two walks
+ * count levels differently, so an index whose key holds the next index, or a
+ * run of `!`, written to the last depth the grammar reads, is a tree here and
+ * a refusal from `compile`, and a membership test whose list holds the next
+ * membership test is the same across a wider band of depths. `decompile`
+ * refuses such a tree with the refusal `compile` answers. A chain is not
+ * nesting in any of the walks: a run of property accesses, indexes or casts,
+ * or of a left-associative operator, parses, compiles and renders at any
+ * length.
  *
  * Failure is the value `compile` answers, handed out unwrapped: the same
  * closed `reason`, the reference's own `message`, the same `position` and the
@@ -278,10 +291,12 @@ export function executeValue(
  * rather than a doc comment: `Ast` is opaque, so a caller can neither narrow
  * on a node kind nor build a tree of its own, and the one thing to do with a
  * tree is hand it back to `decompile`. The node shapes behind it may change
- * without a major version, and what holds across such a change is that
- * `decompile(parse(source).ast)` keeps answering what the reference answers
- * for that source. A caller that wants to walk the tree cannot, which is the
- * stated cost of promising nothing about it.
+ * without a major version, and what holds across such a change is that, for
+ * a source `compile` accepts, `decompile(parse(source).ast)` keeps answering
+ * what the reference answers for that source. Past the source limit it
+ * refuses a tree the reference renders, the divergence `compile` declares. A
+ * caller that wants to walk the tree cannot, which is the stated cost of
+ * promising nothing about it.
  */
 export function parse(source: string): ParseResult {
   const scanned = tokenize(source);

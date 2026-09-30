@@ -4,12 +4,12 @@
  *
  * There are two, and they bound different things: how deep a VALUE may nest,
  * which the boundary walks check, and how deep a SOURCE may nest, which the
- * grammar and the emitter check. Each is documented on its own constant
- * below. The paragraphs that follow are about the value limit, which came
- * first and whose argument the source limit reuses. Beside the two limits is
- * one budget, `PLACE_BUDGET`, which bounds how many places the two walks that
- * build an answer at each place a value appears - normalization and the
- * tagged encoder - may visit in one call.
+ * grammar, the emitter and the renderer check. Each is documented on its own
+ * constant below. The paragraphs that follow are about the value limit, which
+ * came first and whose argument the source limit reuses. Beside the two
+ * limits is one budget, `PLACE_BUDGET`, which bounds how many places the two
+ * walks that build an answer at each place a value appears - normalization
+ * and the tagged encoder - may visit in one call.
  *
  * Walking a value - normalizing a context or a function's answered value,
  * encoding and decoding the tagged wire text, comparing two values or testing
@@ -49,7 +49,8 @@
 export const DEPTH_LIMIT = 256;
 
 /**
- * How deep a SOURCE may nest before the grammar and the emitter refuse it.
+ * How deep a SOURCE may nest before the grammar, the emitter or the renderer
+ * refuses it.
  *
  * It is a second constant rather than a reuse of the one above, because the
  * two bound different things: that one bounds a value the host hands in or
@@ -61,17 +62,20 @@ export const DEPTH_LIMIT = 256;
  * grammar counts a level each time a production re-enters itself, and the
  * emitter counts a level for each syntax node it descends into, and the two
  * counts are not in step - which is why each walk carries its own and either
- * can be the one that refuses. A source at exactly this depth compiles; one
- * level deeper is refused as a value.
+ * can be the one that refuses. The third walk is the renderer `decompile`
+ * runs, and it counts what the emitter counts, level for level, so it refuses
+ * a tree exactly when the emitter refuses the same tree. A source at exactly
+ * this depth compiles; one level deeper is refused as a value.
  *
  * What is NOT nesting is a chain. A left-associative run of operators leans
  * left once per operator, and a run of property accesses, indexes or casts
  * leans the same way, so each builds a tree as deep as it is long out of
  * source that is written flat. The grammar reads every one of those in a
- * loop, and the emitter walks the left spine in a loop too, so chain length
- * costs no depth in either. That is deliberate: the alternative refuses a
- * flat allow-list of a few hundred comparisons joined by `or`, which is a
- * thing an author writes and the reference compiles.
+ * loop, and the emitter and the renderer walk the left spine in a loop too,
+ * so chain length costs no depth in any of the three. That is deliberate:
+ * the alternative refuses a flat allow-list of a few hundred comparisons
+ * joined by `or`, which is a thing an author writes and the reference
+ * compiles.
  *
  * Why the bound is declared rather than left to the host, which is the same
  * argument the value limit rests on: how deep a source may nest before the
