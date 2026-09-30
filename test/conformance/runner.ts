@@ -114,7 +114,7 @@ export interface Report {
   readonly results: readonly CaseResult[];
 }
 
-function isMap(value: unknown): value is { readonly [key: string]: Value } {
+export function isMap(value: unknown): value is { readonly [key: string]: Value } {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const proto = Object.getPrototypeOf(value) as unknown;
   return proto === null || proto === Object.prototype;
