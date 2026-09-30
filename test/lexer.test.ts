@@ -477,6 +477,72 @@ describe("names and calls", () => {
     ]);
   });
 
+  // Sabotage: carrying the end of an uncalled property chain on to every later
+  // name, rather than only the names inside that chain, reads the second
+  // chain's first part as a plain name. It was run and reverted.
+  it("fuses a called dotted name that follows an uncalled property chain", () => {
+    expect(shapesOf("loan.patron.id == hold.patron.id(loan)")).toEqual([
+      ["identifier", 1, 1, 4, "loan"],
+      ["dot", 1, 5, 1, "."],
+      ["identifier", 1, 6, 6, "patron"],
+      ["dot", 1, 12, 1, "."],
+      ["identifier", 1, 13, 2, "id"],
+      ["equal_equal", 1, 16, 2, "=="],
+      ["qualified_function_name", 1, 19, 14, "hold.patron.id"],
+      ["lparen", 1, 33, 1, "("],
+      ["identifier", 1, 34, 4, "loan"],
+      ["rparen", 1, 38, 1, ")"],
+      ["eof", 1, 39, 0, null],
+    ]);
+  });
+
+  // Sabotage: reading ahead from every part of a property chain again, rather
+  // than once per chain, turns the ratio into the thousands. It was run and
+  // reverted.
+  it("scans a long property chain in time linear in its length", () => {
+    // The budget is a ratio, not a clock: the chain is timed against a
+    // baseline of the same names separated by spaces, which has the same
+    // length and is scanned in one pass, on the same runner in the same run,
+    // so a slow or loaded machine slows both sides alike. Each side keeps its
+    // best of three, so one collection pause does not count. A linear scan
+    // measures between two and three here, since the chain has twice the
+    // tokens; a scan that reads the rest of the chain again from every part
+    // measures in the thousands at this length. The bound sits an order of
+    // magnitude from each.
+    const links = 16384;
+    const names = Array.from({ length: links }, (_, i) => `loan${i % 7}`);
+    const chain = names.join(".");
+    const spaced = names.join(" ");
+    const bound = 40;
+
+    const bestOf = (source: string, stopAbove: number): number => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < 3; run += 1) {
+        const started = performance.now();
+        const result = tokenize(source);
+        const elapsed = performance.now() - started;
+        if (!result.ok) throw new Error(`refused as ${result.error.reason}`);
+        best = Math.min(best, elapsed);
+        if (best > stopAbove) break;
+      }
+      return best;
+    };
+
+    const baseline = bestOf(spaced, Number.POSITIVE_INFINITY);
+    const scanned = bestOf(chain, baseline * bound);
+    expect(scanned / baseline).toBeLessThan(bound);
+
+    const tokens = tokensOf(chain);
+    expect(tokens).toHaveLength(2 * links);
+    expect(shape(tokens[2 * links - 2] as Token)).toEqual([
+      "identifier",
+      1,
+      chain.length - 4,
+      5,
+      `loan${(links - 1) % 7}`,
+    ]);
+  }, 120_000);
+
   // Sabotage: admitting the dot as an identifier character swallows it into
   // the name. It was run and reverted.
   it("leaves a dot alone where what follows it cannot start a name", () => {

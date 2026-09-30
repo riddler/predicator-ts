@@ -241,6 +241,11 @@ export function tokenize(source: string): LexResult {
   let index = 0;
   let line = 1;
   let column = 1;
+  // Where the last dotted name that no call followed ends. Every later part of
+  // that name ends at the same place, so no call follows it either, and
+  // reading ahead again from each part would make a long property chain cost
+  // the square of its length.
+  let uncalledChainEnd = 0;
 
   function refuse(reason: ParseReason, message: string, at: Position, extent: Span): LexResult {
     return { ok: false, error: new ParseError(reason, message, at, extent) };
@@ -326,7 +331,11 @@ export function tokenize(source: string): LexResult {
       const identifier = takeIdentifier(chars, index);
       const afterIdentifier = index + identifier.length;
 
-      if (chars[afterIdentifier] === "." && isIdentifierStart(chars[afterIdentifier + 1])) {
+      if (
+        index >= uncalledChainEnd &&
+        chars[afterIdentifier] === "." &&
+        isIdentifierStart(chars[afterIdentifier + 1])
+      ) {
         const qualified = takeQualifiedIdentifier(chars, identifier, afterIdentifier);
         // A dotted name is one token only where a call follows it. Everywhere
         // else the first part stands alone and the dot is the next token, so
@@ -344,6 +353,7 @@ export function tokenize(source: string): LexResult {
           column += qualified.consumed;
           continue;
         }
+        uncalledChainEnd = qualified.next;
         const [type, value] = classifyIdentifier(identifier);
         tokens.push({ type, line, column, length: identifier.length, value });
         index = afterIdentifier;
@@ -550,20 +560,23 @@ interface TakenQualified {
  *
  * The caller has already checked the first dot, so this always reads at least
  * one more part, and it stops at the first dot that is not followed by a name
- * part - leaving that dot to be a token of its own.
+ * part - leaving that dot to be a token of its own. The parts are joined once
+ * at the end, so the name costs its own length on an engine that copies a
+ * string on every concatenation.
  */
 function takeQualifiedIdentifier(
   chars: readonly string[],
   firstPart: string,
   atDot: number,
 ): TakenQualified {
-  let name = firstPart;
+  const parts = [firstPart];
   let index = atDot;
   while (chars[index] === "." && isIdentifierStart(chars[index + 1])) {
     const part = takeIdentifier(chars, index + 1);
-    name = `${name}.${part}`;
+    parts.push(part);
     index += 1 + part.length;
   }
+  const name = parts.join(".");
   return { name, next: index, consumed: name.length };
 }
 
