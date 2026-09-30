@@ -355,8 +355,8 @@ quieted a DOM global written as a member of `self` or after `globalThis?.`,
 and the rule's anchor let an optional-chaining dot, a space before the dot
 and a dollar sign after it through. This note records where the rule now
 fires. It changes nothing the Decision says, and it widens what the rule
-catches without narrowing anything it caught before. Code is cited as read at
-`4516160`.
+catches without narrowing anything it caught before. Code is cited as this
+change leaves it, on a branch cut from `2b0b3f4`.
 
 **What the DOM rule fires on.** The rule (`usedAsBareOrGlobalObjectMember`,
 which replaces `usedAsBareOrGlobalThisMember`) fires on a name in the DOM
