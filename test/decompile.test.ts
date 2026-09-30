@@ -29,7 +29,7 @@
 import { describe, expect, it } from "vitest";
 import { loadCases, loadManifest } from "../scripts/lib/corpus.mjs";
 import type { Node } from "../src/ast.js";
-import { type Ast, compile, decompile, parse } from "../src/index.js";
+import { type Ast, compile, type DecompileOptions, decompile, parse } from "../src/index.js";
 
 const MATRIX: readonly (readonly [string, Readonly<Record<string, string>>])[] = [
   [
@@ -242,6 +242,17 @@ function treeOf(source: string) {
   return parsed.ast;
 }
 
+/**
+ * The text a tree renders to, or a failure naming the refusal. Every tree in
+ * this file nests far inside the declared source limit, so each rendering
+ * here answers the succeeding arm.
+ */
+function rendering(ast: Ast, options?: DecompileOptions): string {
+  const rendered = decompile(ast, options);
+  if (!rendered.ok) throw new Error(`the rendering was refused: ${rendered.error.message}`);
+  return rendered.source;
+}
+
 describe("decompile", () => {
   // Sabotage, each run against the matrix and reverted from a copy taken
   // first: rendering `verbose` as one space instead of two; rendering `AND`
@@ -258,7 +269,7 @@ describe("decompile", () => {
         "minimal" | "explicit" | "none",
         "normal" | "compact" | "verbose",
       ];
-      expect(decompile(ast, { parentheses, spacing }), combination).toBe(text);
+      expect(rendering(ast, { parentheses, spacing }), combination).toBe(text);
     }
   });
 
@@ -266,8 +277,8 @@ describe("decompile", () => {
   // first source carrying an operator; defaulting `spacing` to `compact` did
   // the same. Both were run and reverted.
   it.each(MATRIX)("defaults %s to the tag's minimal and normal", (source, expected) => {
-    expect(decompile(treeOf(source))).toBe(expected.DEFAULT);
-    expect(decompile(treeOf(source))).toBe(expected["minimal/normal"]);
+    expect(rendering(treeOf(source))).toBe(expected.DEFAULT);
+    expect(rendering(treeOf(source))).toBe(expected["minimal/normal"]);
   });
 
   // Sabotage, each run and reverted from a copy: returning the shortest
@@ -278,7 +289,7 @@ describe("decompile", () => {
   // keeps turned the large magnitude red; and rendering an object key's bare
   // style as a quoted one turned the object sources red.
   it.each(KINDS)("renders %s the way the tag does", (source, expected) => {
-    expect(decompile(treeOf(source))).toBe(expected);
+    expect(rendering(treeOf(source))).toBe(expected);
   });
 });
 
@@ -289,7 +300,7 @@ describe("parse", () => {
     const parsed = parse("amount > 500 AND issuer == 'visa'");
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(decompile(parsed.ast)).toBe("amount > 500 AND issuer == 'visa'");
+    expect(rendering(parsed.ast)).toBe("amount > 500 AND issuer == 'visa'");
   });
 
   // Sabotage, both run and reverted from a copy: rewrapping the refusal in a
@@ -367,7 +378,7 @@ describe("the round trip over the corpus", () => {
     const original = compile(source);
     expect(original.ok, `${source} does not compile`).toBe(true);
     if (!original.ok) return;
-    const rendered = decompile(treeOf(source));
+    const rendered = rendering(treeOf(source));
     const again = compile(rendered);
     expect(again.ok, `${rendered} does not compile back`).toBe(true);
     if (!again.ok) return;
@@ -406,7 +417,7 @@ describe("a hand-built node", () => {
       position: { line: 1, column: 1 },
       span: { start: { line: 1, column: 1 }, end: { line: 1, column: 1 } },
     };
-    expect(decompile(node as unknown as Ast)).toBe(expected);
+    expect(rendering(node as unknown as Ast)).toBe(expected);
   });
 });
 
@@ -427,10 +438,10 @@ describe("the one rendering that is not the tag's", () => {
   it("writes an instant's fraction to six digits where the tag keeps three", () => {
     const source = "#2026-08-09T10:30:00.500Z#::datetime";
     // The tag's answer, from a run at v9.4.1: "#2026-08-09T10:30:00.500Z#::datetime".
-    expect(decompile(treeOf(source))).toBe("#2026-08-09T10:30:00.500000Z#::datetime");
+    expect(rendering(treeOf(source))).toBe("#2026-08-09T10:30:00.500000Z#::datetime");
     // The instant is unchanged, so the rendering still compiles back.
     const original = compile(source);
-    const again = compile(decompile(treeOf(source)));
+    const again = compile(rendering(treeOf(source)));
     expect(original.ok && again.ok).toBe(true);
     if (!original.ok || !again.ok) return;
     expect(again.instructions).toEqual(original.instructions);
@@ -469,6 +480,6 @@ describe("the tree type is opaque", () => {
     expect(admitsAnUnknown).toBe(false);
     expect(admitsANodeACallerBuilds).toBe(false);
     expect(narrowsOnANodeKind).toBe(false);
-    expect(decompile(treeOf("amount > 500"))).toBe("amount > 500");
+    expect(rendering(treeOf("amount > 500"))).toBe("amount > 500");
   });
 });

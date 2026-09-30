@@ -1116,3 +1116,72 @@ oddity" still holds for its general point: an escape the lexer does not
 recognize loses its backslash, as the compile row
 `compile/escape/unknown-stands-for-its-character` shows. The uppercase numeric
 escape is no longer an instance of it.
+
+## Note: `decompile` refuses a tree past the source depth bound, as a value (2026-09-30)
+
+Recorded for `pts-w6r1`, under the ruling that the rendering walk counts its
+descent against the declared source limit and refuses as a value with the
+existing depth reason (ruled by the operator, 2026-09-29). This note states
+what is now true of the record above and decides nothing further, so it
+carries no Status line. It removes no line above. `src/emitter.ts` and
+`src/parser.ts` are cited as read at `728da34`, the commit this note is
+written on top of; `src/decompile.ts` is cited as the change carrying this
+note leaves it.
+
+### What changed
+
+`decompile` answered a bare string and had no depth bound of its own, so a
+tree `parse` accepts could run the host out of stack on the way back out: a
+long chain, which neither the grammar nor the emitter counts as depth, was
+rendered by a walk that recursed once per link. Now the rendering walk counts
+what `visit` in `src/emitter.ts` counts, level for level: `renderChain` in
+`src/decompile.ts` walks a chain's left spine in a loop at one level, as
+`visitChain` does, and `render` refuses a node past `SOURCE_DEPTH_LIMIT`. So
+a chain renders at any length, and a tree `parse` answers is refused by
+`decompile` exactly when `compile` refuses the same source for its depth,
+with the same `ParseError` - reason `nesting_depth_exceeded`, message,
+position and span.
+
+The refusal is a value, so the return type widened. At `64a6e9d`, and in the
+Typespecs above:
+
+```typescript
+export declare function decompile(ast: Ast, options?: DecompileOptions): string;
+```
+
+With this change:
+
+```typescript
+export declare function decompile(
+  ast: Ast,
+  options?: DecompileOptions,
+): { readonly ok: true; readonly source: string } | { readonly ok: false; readonly error: ParseError };
+```
+
+The failing arm is the one `CompileResult` carries, and no member joins
+`ParseReason`. No name is exported for the result type.
+
+### Statements above this falsifies
+
+In the Typespecs section, the `decompile` declaration quoted first above. It
+is superseded by the second.
+
+In the Worked example, the sentence saying that
+`decompile(parse(rule).ast, { parentheses: "explicit" })` "answers"
+`((variant == 'B') AND (steps_completed >= 3))`. It now answers that text as
+`source` on the succeeding arm.
+
+In the Consequences, the clause "as long as `decompile(parse(source).ast)`
+keeps answering what the reference answers". The reference renders a tree
+past the bound and this package refuses it, so past the bound the rendering
+direction diverges from the reference at the same place `compile` does. The
+amendment on nesting depth, in its section headed "The bound diverges from
+the reference in what is accepted", declares that divergence for `compile`;
+this is the same divergence reached through `decompile`, and short of the
+bound the clause stands.
+
+One statement nearby is NOT falsified and is named so a reader does not go
+looking: the amendment on nesting depth says the grammar and the emitter each
+count their own descent. They still do, at `descend` in `src/parser.ts` and
+at `visit` in `src/emitter.ts`; the rendering walk is a third that counts,
+and it refuses where the emitter does.

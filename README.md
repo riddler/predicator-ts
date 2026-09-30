@@ -290,14 +290,16 @@ if (!read.ok) {
 // Written back at the defaults: the word operator is uppercase, each literal
 // keeps the quote character it was written with, and no parenthesis is added
 // that precedence does not need.
-if (decompile(read.ast) !== "variant == 'B' AND steps_completed >= 3") {
+const written = decompile(read.ast);
+
+if (!written.ok || written.source !== "variant == 'B' AND steps_completed >= 3") {
   throw new Error("the defaults are minimal parentheses and normal spacing");
 }
 
 // The editor offers a view that makes every grouping visible.
 const grouped = decompile(read.ast, { parentheses: "explicit" });
 
-if (grouped !== "((variant == 'B') AND (steps_completed >= 3))") {
+if (!grouped.ok || grouped.source !== "((variant == 'B') AND (steps_completed >= 3))") {
   throw new Error("explicit parentheses wrap every operator application");
 }
 
@@ -305,14 +307,14 @@ if (grouped !== "((variant == 'B') AND (steps_completed >= 3))") {
 // inside a list, an object or a call stay a fixed `", "`.
 const tight = decompile(read.ast, { spacing: "compact" });
 
-if (tight !== "variant=='B'ANDsteps_completed>=3") {
+if (!tight.ok || tight.source !== "variant=='B'ANDsteps_completed>=3") {
   throw new Error("compact spacing removes the spaces around the operators");
 }
 
 // At the defaults, a rendering compiles back to the program the source
 // itself compiles to.
 const first = compile(authored);
-const second = compile(decompile(read.ast));
+const second = compile(written.source);
 
 if (!first.ok || !second.ok) {
   throw new Error("both the source and its rendering compile");
@@ -334,6 +336,15 @@ if (draft.error.reason !== "expected_primary") {
   throw new Error("the refusal names the grammar family it belongs to");
 }
 ```
+
+`decompile` answers a result rather than a bare string, the way `parse` and
+`compile` do: `source` on the succeeding arm, and on the failing arm the
+`ParseError` `compile` answers. The one refusal is a tree nesting past the
+depth limit this package declares for a source, under
+`nesting_depth_exceeded`. The walk counts its depth the way the compiler
+does, so a tree `parse` answers is refused here exactly when `compile`
+refuses the same source for its depth. The reference renders such a tree, so past the limit
+`decompile` diverges from it at the same place `compile` does.
 
 Two values are worth care, and they are not both on the same option. `none`
 writes no parentheses at all, not merely the redundant ones, so a rendering
