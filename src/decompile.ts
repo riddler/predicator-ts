@@ -73,8 +73,11 @@ declare const astBrand: unique symbol;
  * comment is not enforcement. So the handle carries no member a caller can
  * read and none a caller can write: it cannot be narrowed, and it cannot be
  * built outside this package. What a caller does with one is hand it back to
- * `decompile`, and what is promised is that `decompile(parse(source).ast)`
- * keeps answering what the reference answers.
+ * `decompile`, and what is promised is that, for a source `compile` accepts,
+ * `decompile(parse(source).ast)` keeps answering what the reference answers.
+ * A tree nesting past `SOURCE_DEPTH_LIMIT` is refused here where the
+ * reference renders it, which is the divergence `compile` declares for the
+ * same source, reached through the rendering direction.
  *
  * The direction is chosen while it is still free. Widening this to the node
  * shapes later is not a breaking change; narrowing a published node union to
