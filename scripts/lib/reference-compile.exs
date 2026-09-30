@@ -110,6 +110,15 @@ compile_sources = [
   {"call/nested", "len(upper(tier))"},
   {"call/qualified", "Math.max(score, 85)"},
 
+  # The same call with its integer literal written as a decimal, integral and
+  # then fractional. The three sources differ only in that literal, so the
+  # rows set an integer operand beside a float one at the same position: an
+  # integral decimal compiles to a float, not to the integer it equals, and a
+  # comparison that treated the two as one value would pass the row above and
+  # fail these.
+  {"number-literal/integral-decimal", "Math.max(score, 85.0)"},
+  {"number-literal/fractional-decimal", "Math.max(score, 85.5)"},
+
   # Every relative-date form, one per arm the opcode carries.
   {"relative-date/ago", "3d ago"},
   {"relative-date/next", "next 1w"},

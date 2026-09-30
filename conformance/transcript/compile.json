@@ -28,6 +28,8 @@
 {"id":"compile/call/zero-arg","instructions":[["call","Date.now",0]],"kind":"compile","source":"Date.now()"}
 {"id":"compile/call/nested","instructions":[["load","tier"],["call","upper",1],["call","len",1]],"kind":"compile","source":"len(upper(tier))"}
 {"id":"compile/call/qualified","instructions":[["load","score"],["lit",85],["call","Math.max",2]],"kind":"compile","source":"Math.max(score, 85)"}
+{"id":"compile/number-literal/integral-decimal","instructions":[["load","score"],["lit",85.0],["call","Math.max",2]],"kind":"compile","source":"Math.max(score, 85.0)"}
+{"id":"compile/number-literal/fractional-decimal","instructions":[["load","score"],["lit",85.5],["call","Math.max",2]],"kind":"compile","source":"Math.max(score, 85.5)"}
 {"id":"compile/relative-date/ago","instructions":[["duration",[[3,"d"]]],["relative_date","ago"]],"kind":"compile","source":"3d ago"}
 {"id":"compile/relative-date/next","instructions":[["duration",[[1,"w"]]],["relative_date","next"]],"kind":"compile","source":"next 1w"}
 {"id":"compile/relative-date/last","instructions":[["duration",[[1,"w"]]],["relative_date","last"]],"kind":"compile","source":"last 1w"}
