@@ -390,11 +390,19 @@ describe("a run that does not return normally", () => {
         `import { withMutation } from ${JSON.stringify(mechanics)};`,
         `const mutation = { file: ${JSON.stringify(target)}, find: ${JSON.stringify(CAUGHT.find)}, replace: ${JSON.stringify(CAUGHT.replace)} };`,
         "const how = process.argv[2];",
+        // Idle: the mutation has come and gone and nothing is running, so a
+        // signal is handled on the event loop by the installed handler body.
+        'if (how === "idle") {',
+        "  withMutation(mutation, () => null);",
+        "  setTimeout(() => {}, 60000);",
+        `  writeFileSync(${JSON.stringify(ready)}, "ready");`,
+        "} else {",
         "withMutation(mutation, () => {",
         `  writeFileSync(${JSON.stringify(ready)}, "ready");`,
         '  if (how === "exit") process.exit(3);',
         '  return spawnSync(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);',
         "});",
+        "}",
         "",
       ].join("\n"),
     );
@@ -417,6 +425,7 @@ describe("a run that does not return normally", () => {
     return { child, ended, printed: () => printed };
   }
 
+  // This pins the restore, not the re-raise: in this blocking shape the handler body never runs.
   // Sabotage: removing the handler install from withMutation turns this red.
   it("puts the file back when the run is interrupted", async () => {
     const run = start("interrupt");
@@ -434,6 +443,24 @@ describe("a run that does not return normally", () => {
     const run = start("exit");
     await run.ended;
     expect(run.child.exitCode).toBe(3);
+    expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
+  }, 60_000);
+
+  // Registering a handler takes away the signal's default, so the process
+  // ends by the signal only if the handler body sends it again. Here the
+  // interrupt arrives with the event loop idle, a shape where that body does
+  // run. A body that stops re-raising leaves the process alive, so after a
+  // short bound it is killed outright and ends by the wrong signal. The green
+  // run waits on nothing fixed: the process ends as soon as the signal lands.
+  // Sabotage: removing the re-raise from the handler body turns this red.
+  it("ends by the signal it was sent when the handler body runs", async () => {
+    const run = start("idle");
+    await waitFor(() => existsSync(ready), 30_000);
+    process.kill(run.child.pid as number, "SIGINT");
+    const bound = setTimeout(() => process.kill(-(run.child.pid as number), "SIGKILL"), 5_000);
+    await run.ended;
+    clearTimeout(bound);
+    expect(run.child.signalCode).toBe("SIGINT");
     expect(readFileSync(target, "utf8")).toBe(CARD_SOURCE);
   }, 60_000);
 
