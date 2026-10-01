@@ -13,10 +13,12 @@
  * integer or in floating-point form, and that is a distinction that has
  * already been destroyed by the time a parsed number is in hand.
  *
- * This subpath also carries the one evaluation that speaks the encoding. The
- * main entry point neither emits nor requires it, so the request for it is a
- * member of this subpath's options type and of no other - a request for it at
- * the main entry point is refused by the compiler rather than at run time.
+ * This subpath also carries the one evaluation that speaks the encoding, and
+ * the one statement run that does. The main entry point neither emits nor
+ * requires it, so the request for it is a member of this subpath's options
+ * type and of no other - a request for it at the main entry point is refused
+ * by the compiler rather than at run time. The statement run takes no such
+ * request, because answering the encoding is the only thing it adds.
  *
  * The encoding is the corpus's apparatus, specified by predicator-ex's
  * `conformance/README.md`. Offering a codec for it here does not promote it:
@@ -25,8 +27,15 @@
  * nor requires it.
  */
 
-import { EvaluationError } from "./errors.js";
-import { type EvaluateOptions, evaluateToValue, type ProjectedEvaluation } from "./evaluator.js";
+import { compileProgram } from "./compile.js";
+import type { Context } from "./context.js";
+import { EvaluationError, type ParseError, type PredicatorError } from "./errors.js";
+import {
+  type EvaluateOptions,
+  evaluateToValue,
+  executeToContext,
+  type ProjectedEvaluation,
+} from "./evaluator.js";
 import { floatMagnitude, floatText } from "./floats.js";
 import type { Program } from "./instructions.js";
 import { formatDate, formatDateTime, isCivilDate } from "./iso.js";
@@ -713,4 +722,85 @@ export function evaluateTagged(
     ok: false,
     error: new EvaluationError(encoded.reason, "the result is outside the tagged encoding"),
   };
+}
+
+/**
+ * What `executeTagged` answers: the context at halt, as the text of the
+ * corpus's tagged-value encoding.
+ *
+ * Its arms are `execute`'s, with the context written as text rather than
+ * projected. The failing arm admits a `ParseError` because a source that does
+ * not compile never runs, and that arm carries no context: there is nothing it
+ * bound.
+ */
+type TaggedExecution =
+  | { readonly ok: true; readonly context: string }
+  | {
+      readonly ok: false;
+      readonly error: PredicatorError | ParseError;
+      readonly context?: string;
+    };
+
+/**
+ * Runs a STATEMENT program and answers the context it halted with, as the text
+ * of the corpus's tagged-value encoding, from a compiled instruction list or
+ * from source text.
+ *
+ * It is the statement run beside `evaluateTagged`. The main entry point's
+ * `execute` hands the context back under the plain projection, which drops a
+ * float's brand: a program that stores the float two reads back the integer
+ * two there. Here the context is encoded before anything projects it, so
+ * `decodeTagged` reads every value back as the one the program bound - an
+ * integral float a float, and a date, a datetime, a duration and an absence
+ * as themselves.
+ *
+ * A string is compiled as a statement program, as `compileProgram` compiles
+ * it, and run exactly as that instruction list is. A source that does not
+ * compile comes back on the failing arm as the `ParseError` `compileProgram`
+ * answers, never as a throw, and with no context.
+ *
+ * The run is `execute`'s: the same options, the same budgets and the same
+ * refusals, and the caller's own context is never written into. The failing
+ * arm carries the context as far as the program got - every write completed
+ * before the failing statement - in the same encoding, and carries none when
+ * the value boundary refused the context before any program ran.
+ *
+ * It takes the main entry point's options and not this subpath's, because the
+ * encoding is not a request here: it is the only form this answers in. A
+ * context the encoding cannot carry is a failure, not a throw. On the
+ * successful arm that failure is the encoder's reason, with no context; on
+ * the failing arm the run's own error stays the answer, and the context it
+ * cannot write is left off.
+ */
+export function executeTagged(
+  program: Program | string,
+  context?: unknown,
+  options?: EvaluateOptions,
+): TaggedExecution {
+  let instructions: Program;
+  if (typeof program === "string") {
+    const compiled = compileProgram(program);
+    if (!compiled.ok) return { ok: false, error: compiled.error };
+    instructions = compiled.instructions;
+  } else {
+    instructions = program;
+  }
+  const outcome = executeToContext(instructions, context, options);
+  if (outcome.ok) {
+    const encoded = encodeContext(outcome.context);
+    if (encoded.ok) return { ok: true, context: encoded.text };
+    return {
+      ok: false,
+      error: new EvaluationError(encoded.reason, "the context is outside the tagged encoding"),
+    };
+  }
+  if (outcome.context === undefined) return { ok: false, error: outcome.error };
+  const encoded = encodeContext(outcome.context);
+  if (!encoded.ok) return { ok: false, error: outcome.error };
+  return { ok: false, error: outcome.error, context: encoded.text };
+}
+
+/** Encodes a context as the map of its roots, in the value domain. */
+function encodeContext(context: Context): EncodeResult {
+  return encodeTagged(context.asMap());
 }
