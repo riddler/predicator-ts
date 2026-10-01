@@ -70,15 +70,15 @@ the Development section below is how to provision them.
 ## The entry points
 
 ```ts
-import { compile, decompile, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
+import { compile, decompile, durationToMilliseconds, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
 import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/tagged";
 ```
 
 - **`@riddler/predicator`** is the main entry point: the value domain, the host
   boundary, the compilation of an expression's source text into an instruction
   list, the evaluation of such a list, the rendering of a parsed expression
-  back to source text, the reading of a duration from its literal spelling,
-  and the version of the instruction set this build implements.
+  back to source text, the reading of a duration from its literal spelling
+  and its length in milliseconds, and the version of the instruction set this build implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
   conformance corpus's tagged encoding, and the one evaluation that speaks it.
   That encoding carries the members a plain JSON round trip loses - a date, a
@@ -171,6 +171,25 @@ one of the units `y`, `mo`, `w`, `d`, `h`, `m`, `s` and `ms`, with no
 whitespace and no sign. The value on the succeeding arm is a `Duration`, and
 the failing arm carries the one reason `invalid_duration_format` for every
 text it refuses.
+
+```ts
+import { durationToMilliseconds, parseDuration } from "@riddler/predicator";
+
+// A host that schedules by the clock holds the delay as text.
+const delay = parseDuration("1d12h");
+
+if (!delay.ok || durationToMilliseconds(delay.value) !== 129_600_000) {
+  throw new Error("a duration's length is its components by their weights");
+}
+```
+
+`durationToMilliseconds` answers a duration's length in milliseconds by the
+weights the reference converts by: a week of seven days, a month of thirty and
+a year of three hundred and sixty five, so a month or a year is an
+approximation with no calendar behind it. A component is weighed as it
+stands, so one a host built with a fraction contributes an unrounded product,
+and a sum past the largest safe integer is the nearest double rather than the
+exact count. It never throws: an argument that is not an object answers `NaN`.
 
 ## Compiling a rule
 

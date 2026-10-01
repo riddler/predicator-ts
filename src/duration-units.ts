@@ -71,3 +71,33 @@ export const DURATION_UNIT_TABLE: readonly UnitRow[] = [
     remainder: true,
   },
 ];
+
+/** The units smallest first: the order the reference adds a duration's terms in. */
+const SMALLEST_FIRST: readonly UnitRow[] = [...DURATION_UNIT_TABLE].reverse();
+
+/**
+ * A duration's length in milliseconds, by the reference's weights.
+ *
+ * Each of the eight components is multiplied by its unit's weight in the table
+ * above and the products are summed, smallest unit first, as the reference's
+ * `Duration.to_milliseconds/1` sums them: a week is seven days, a month thirty
+ * days and a year three hundred and sixty five, so the answer for a month or a
+ * year is the same approximation the reference converts by, with no calendar
+ * behind it. A key the argument does not carry weighs nothing, so a `Duration`
+ * and the parts it was built from answer alike.
+ *
+ * A component is weighed as it stands. A `Duration` that `parseDuration` or a
+ * literal produced holds whole numbers, and its answer is a whole number; a
+ * component a host built with a fraction contributes the unrounded product. A
+ * sum past the largest safe integer is the nearest double to it rather than
+ * the exact count, since the reference's integers have no such bound.
+ *
+ * Failure is a value, never a throw: an argument that is not an object answers
+ * `NaN`.
+ */
+export function durationToMilliseconds(duration: DurationParts): number {
+  if (typeof duration !== "object" || duration === null) return Number.NaN;
+  let total = 0;
+  for (const unit of SMALLEST_FIRST) total += (duration[unit.key] ?? 0) * unit.millis;
+  return total;
+}
