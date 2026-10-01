@@ -197,6 +197,33 @@ describe("execute", () => {
     );
     expect(context).toEqual({ step: 1 });
   });
+
+  // A store into a protected root reaches the host naming the root under
+  // `details.root`, beside the context as far as the program got.
+  //
+  // Sabotage: constructing the protected-root refusal without its details
+  // turns this red. It was run and reverted.
+  it("hands the host the protected root it refused as data", () => {
+    const outcome = execute(
+      [
+        ["lit", "renewals"],
+        ["lit", 1],
+        ["store", 1],
+        ["lit", "patron"],
+        ["lit", 2],
+        ["store", 1],
+      ],
+      {},
+      { protectedRoots: ["patron"] },
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("protected_root");
+    expect(outcome.error.type === "EvaluationError" && outcome.error.details).toEqual({
+      root: "patron",
+    });
+    expect(outcome.context).toEqual({ renewals: 1 });
+  });
 });
 
 describe("executeValue", () => {
