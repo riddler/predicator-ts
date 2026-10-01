@@ -1614,3 +1614,42 @@ An `else if` chain is bounded where the reference's is not. That is the
 divergence the amendment on nesting depth declares for nesting in general,
 reached through the one flat construct of the program grammar the tree
 nests; no program in the transcript comes near it.
+
+## Note: which transcript rows the signed-literal note's sentence covers, and how the block's close-brace wording meets its family (2026-10-01)
+
+Recorded for `pts-8q2o`. This note points a reader of this record at a scoping
+ADR-0003 already records, and states how one mapping in the statement-grammar
+amendment above relates to the precedent it cites. It decides nothing, so it
+carries no Status line, and it removes no line above. Code, records and the
+transcripts are cited as read at `ea1d274`.
+
+**The signed-literal sentence is about the rows that carry a value.** The note
+above headed "a signed date or datetime literal body is refused, as the text
+readers refuse it", in its paragraph opening "Why it is refused", reads the
+tagged wire form's year condition at `isWireDate` in `src/tagged.ts` and ends
+"so no transcript row can carry the reference's answer for a minus either".
+ADR-0003's amendment headed "a token transcript at the tag, its sources
+enumerated from the scanner's suite" scopes that sentence, in its paragraph
+opening "That note says that no transcript row can carry the reference's
+answer for a minus": it holds of the two transcripts whose rows carry a value,
+and a token row carries none. So `conformance/transcript/tokens.json` does
+carry the reference's accept for a minus, as a token's type and extent: its
+rows for `#-0001-01-01#` and `#-0001-01-01T00:00:00Z#` answer a date and a
+datetime token, and `DECLARED` in `test/reference-tokens.test.ts` names both,
+beside `#+2024-01-15#`, as declared divergences. Read alone, the sentence above
+is false of that file; read with ADR-0003's paragraph, it is a sentence about
+the value-bearing transcripts, and nothing in it changes.
+
+**The block's close-brace wording adds a construct where the cited precedent
+adds none.** The statement-grammar amendment above, in its section headed "The
+closed reason union", maps the block's message to the existing member
+`expected_close_brace` by the rule the union uses for `unterminated_string`.
+The object-literal message that member was named for, refused by `object` in
+`src/parser.ts`, is `Expected '}' but found end of input` and names no
+construct; the block's, refused by `block` in `src/parser.ts` and quoted from
+the row `program-refusal/unterminated-block/end-of-input`, is
+`Expected '}' to close the block but found end of input`, which adds one, "to
+close the block", ahead of the same "but found" tail, while
+`Unterminated single-quoted string literal` substitutes one word of
+`Unterminated double-quoted string literal` and adds none. The mapping stands
+as that amendment states it.
