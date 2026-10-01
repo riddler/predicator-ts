@@ -178,7 +178,9 @@ export function evaluate(
  * The context comes back as a plain object of projected values, under the same
  * projection `evaluate` applies to a result, so it carries the same documented
  * loss: a float comes back as a plain number with the brand gone, and a host
- * that means a float when it feeds one back writes `float()`.
+ * that means a float when it feeds one back writes `float()`. A host that
+ * needs the brand kept on the way out calls `executeTagged` on `./tagged`,
+ * which answers this context as the tagged encoding's text.
  *
  * The caller's own context is never written into. A run answers a new context,
  * so a caller that wants all-or-nothing on failure ignores what comes back and

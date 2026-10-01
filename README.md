@@ -784,7 +784,9 @@ program stored stays a float, and a partial context on the failing arm reads
 back the same way. It takes a compiled program or source text, which it
 compiles as `compileProgram` does, and the main entry point's options: the
 encoding is the only form it answers in, so there is no `tagged` request to
-make. A context the encoding cannot carry is a failure rather than a throw.
+make. A context the encoding cannot carry is a failure rather than a throw:
+on the successful arm it is the encoder's reason, and on the failing arm the
+run's own error stays the answer and the partial context is left off.
 
 ```ts
 import { isFloat } from "@riddler/predicator";

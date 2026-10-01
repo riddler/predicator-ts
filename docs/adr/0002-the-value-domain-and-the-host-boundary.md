@@ -3572,3 +3572,45 @@ reason token is added, and no opcode and no wire-format change follow. The
 compiled duration literal written with such a component answers when it is
 evaluated, so a component written past the bound is now refused by the
 literal, the cast and the export alike.
+
+## Note: the subpath's second entry point, the statement run that answers the encoding (2026-10-01)
+
+Recorded for `pts-mmls`, on the ruling that the statement run speaking the
+tagged encoding rides this release (ruled by the operator, 2026-10-01). This
+note is appended, and removes no line above. It decides nothing: it names a
+function that a change adds, says which accepted sentences it falls under, and
+says how each still reads. Code on the default branch is cited as read at
+`929bcb7`; `executeTagged` in `src/tagged.ts` is the function this same change
+adds.
+
+**`executeTagged` in `src/tagged.ts` is an entry point in the sense the note
+"the projection is an export and is not an entry point for host input"
+defines: a function that runs a program and answers its result.** That note's
+sentence opening "Those are `evaluate`, `execute` and `executeValue` in
+`src/index.ts` and `evaluateTagged` in `src/tagged.ts`" listed every such
+function when it was written; with this change the list has a fifth member,
+and `executeTagged` is the `./tagged` subpath's second entry point. Its result
+type has a failing arm, so a refusal is sayable there as at the other four.
+It projects nothing: it hands the context it ran to to `encodeTagged` in
+`src/tagged.ts`, which refuses a cyclic value, one nesting past the depth limit
+and one past the place budget onto its own failing arm rather than raising, so
+the note's paragraph on what the projection is handed gains no new caller.
+
+**`tagged` is still accepted by `evaluateTagged` alone.** The Decision's
+paragraph saying the request "is accepted by the entry point that subpath
+exports and by no other", and the note on the Consequences paragraph naming
+"the subpath's entry point, `evaluateTagged` in `src/tagged.ts`", each read a
+single entry point where there are now two. Both stay true of the option:
+`executeTagged` takes `EvaluateOptions`, not `TaggedEvaluateOptions`, accepts
+no `tagged` member, and always answers the encoding, so the option is accepted
+at `evaluateTagged` and at no other function on either entry point.
+
+**This is the change the amendment on the three questions the statement-mode
+note holds anticipated.** That amendment's paragraph on the integer/float distinction left open whether the
+subpath gains a statement mode, and said that "a change that gives it one owes
+the encoding across the returned context to a caller that needs the
+distinction to survive, and leaves the main entry point's returned context as
+the plain projection". `executeTagged` answers the context it halted with as
+the encoding's text on both arms, the failing arm's partial context included,
+and `execute` and `executeValue` in `src/index.ts` still answer the plain
+projection. The obligation is discharged by this change and by nothing else.
