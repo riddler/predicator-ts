@@ -28,7 +28,12 @@
  */
 
 import { civilOf, daysFromCivil } from "./civil.js";
-import { DURATION_UNIT_TABLE, type DurationKey, type UnitRow } from "./duration-units.js";
+import {
+  DURATION_UNIT_TABLE,
+  type DurationKey,
+  expandFraction,
+  type UnitRow,
+} from "./duration-units.js";
 import { floatMagnitude, floatText } from "./floats.js";
 import type { CastType } from "./instructions.js";
 import { formatDate, formatDateTime, readDate, readDateTime } from "./iso.js";
@@ -203,9 +208,6 @@ const UNITS = DURATION_UNIT_TABLE;
 
 const ROW_OF_SUFFIX: ReadonlyMap<string, UnitRow> = new Map(UNITS.map((row) => [row.suffix, row]));
 
-/** The units a fraction's remainder decomposes through, largest first. */
-const REMAINDER_LADDER: readonly UnitRow[] = UNITS.filter((row) => row.remainder);
-
 /**
  * The suffixes as a pattern alternation, longest first.
  *
@@ -260,9 +262,9 @@ export function readDuration(text: string): Duration | undefined {
       add(parts, row.key, Number(whole));
       continue;
     }
-    const expanded = expand(Number(whole), digits, row);
+    const expanded = expandFraction(Number(whole), digits, row);
     if (expanded === undefined) return undefined;
-    for (const [amount, key] of expanded) add(parts, key, amount);
+    for (const { amount, row: unit } of expanded) add(parts, unit.key, amount);
   }
   // No amount added above is negative, so a sum is never smaller than an amount
   // in it, and checking each component as read covers a component written too
@@ -276,68 +278,6 @@ export function readDuration(text: string): Duration | undefined {
 
 function add(parts: { [key in DurationKey]?: number }, key: DurationKey, amount: number): void {
   parts[key] = (parts[key] ?? 0) + amount;
-}
-
-/**
- * Expands a component carrying a fraction into whole-unit amounts, or answers
- * nothing when the fraction is not an exact number of milliseconds.
- *
- * A millisecond is the domain's floor, so a fraction below one is refused
- * rather than rounded or truncated: `"0.5ms"` names no duration this domain
- * holds. What the test asks is whether a remainder is zero, and a binary float
- * answers that about a decimal fraction wrongly, so the scaling below is done
- * over the written digits and the test reads the digits it shifted past. A
- * literal is written by an author and its digit run has no bound, while the
- * answer is smaller than the unit's own weight, so the shift is where the
- * arithmetic has to stay exact and the answer is an ordinary number.
- *
- * A fraction of a month or of a year commits that unit's approximation at the
- * moment the text is read, so half a month is a count of days and carries no
- * month at all.
- */
-function expand(whole: number, digits: string, row: UnitRow): [number, DurationKey][] | undefined {
-  const scaled = scale(digits, row.millis);
-  const shifted = scaled.length - digits.length;
-  if (NON_ZERO_DIGIT.test(scaled.slice(shifted))) return undefined;
-  const amounts: [number, DurationKey][] = [];
-  if (whole > 0) amounts.push([whole, row.key]);
-  let remaining = Number(scaled.slice(0, shifted) || "0");
-  for (const step of REMAINDER_LADDER) {
-    const amount = Math.floor(remaining / step.millis);
-    if (amount > 0) amounts.push([amount, step.key]);
-    remaining %= step.millis;
-  }
-  if (amounts.length === 0) amounts.push([0, row.key]);
-  return amounts;
-}
-
-const NON_ZERO_DIGIT = /[1-9]/;
-
-/**
- * Multiplies a run of decimal digits by a whole number, answering the product
- * as a run of decimal digits.
- *
- * It is long multiplication by a single factor, one written digit at a time.
- * A carry is smaller than the factor, because it is a tenth of a step and a
- * step is a digit times the factor plus a carry, so an intermediate stays
- * below ten times the factor however long the run of digits is. The product
- * keeps at least as many digits as it was given, which is what lets the caller
- * read the fraction off its tail.
- */
-function scale(digits: string, factor: number): string {
-  const product: number[] = [];
-  const zero = "0".charCodeAt(0);
-  let carry = 0;
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    const step = (digits.charCodeAt(index) - zero) * factor + carry;
-    product.push(step % 10);
-    carry = Math.floor(step / 10);
-  }
-  while (carry > 0) {
-    product.push(carry % 10);
-    carry = Math.floor(carry / 10);
-  }
-  return product.reverse().join("");
 }
 
 /**

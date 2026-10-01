@@ -6,6 +6,10 @@
  * a duration literal, the `duration` opcode that turns a unit string into the
  * key it names, and the parse behind `::duration` and `parseDuration`. A unit
  * is added or removed here and nowhere else.
+ *
+ * The expansion of a fractional component lives here too, so the grammar and
+ * the parse turn a fraction into whole units by one arithmetic rather than
+ * two.
  */
 
 import type { DurationParts } from "./values.js";
@@ -71,6 +75,95 @@ export const DURATION_UNIT_TABLE: readonly UnitRow[] = [
     remainder: true,
   },
 ];
+
+/** One whole-unit amount a fractional component expands into. */
+export interface ExpandedAmount {
+  readonly amount: number;
+  readonly row: UnitRow;
+}
+
+/** The units a fraction's remainder is spent into, largest first. */
+const REMAINDER_LADDER: readonly UnitRow[] = DURATION_UNIT_TABLE.filter((row) => row.remainder);
+
+/**
+ * The most decimal places a fraction can carry and still be exact.
+ *
+ * A fraction is exact when the tens in its denominator all cancel against the
+ * twos and fives in its unit's millisecond value and in its own digits, and
+ * digits with no trailing zero cannot supply both. The richest unit here
+ * carries eleven twos, so past eleven places nothing cancels and the fraction
+ * is a sub-millisecond remainder whatever its digits say. Refusing there is
+ * also what keeps every product below inside the whole numbers this language
+ * holds exactly.
+ */
+const MOST_EXACT_PLACES = 11;
+
+/**
+ * Expands a component written with a fraction into whole-unit amounts, or
+ * answers nothing when the fraction is not an exact number of milliseconds.
+ *
+ * `whole` is the integer part and `digits` the run of digits after the decimal
+ * point, as written. A millisecond is the domain's floor, so a fraction below
+ * one is refused rather than rounded or truncated: `0.5ms` names no duration
+ * this domain holds.
+ *
+ * The arithmetic is whole numbers throughout - the digits are read as an
+ * integer and scaled by a power of ten, never as a binary fraction, which
+ * answers whether a decimal remainder is zero wrongly - so the component is
+ * exact or it is refused, and nothing is rounded on the way. The shared
+ * factors of the unit's millisecond value and the power of ten are cancelled
+ * before anything is multiplied, which is what keeps the products small enough
+ * to stay exact.
+ *
+ * The integer part keeps its own unit, and is left out when it is zero; only
+ * the remainder walks the ladder, which never spends back into a week, a month
+ * or a year. So a fraction of a month or of a year commits that unit's
+ * approximation at the moment the text is read: half a month is a count of
+ * days and carries no month at all. A component that resolves to nothing at
+ * all answers a zero amount of its own unit. The amounts come out largest
+ * unit first, each unit at most once; what a caller does with a unit that
+ * another component also names is the caller's rule, not this one's.
+ */
+export function expandFraction(
+  whole: number,
+  digits: string,
+  row: UnitRow,
+): readonly ExpandedAmount[] | undefined {
+  // A trailing zero is a place that carries nothing: dropping it leaves the
+  // fraction's value alone and its denominator smaller. The zeros are counted
+  // back from the end rather than matched by a pattern anchored there, which
+  // retries from every zero in a long run and takes time quadratic in it.
+  let end = digits.length;
+  while (end > 0 && digits[end - 1] === "0") end -= 1;
+  const written = digits.slice(0, end);
+  if (written.length > MOST_EXACT_PLACES) return undefined;
+
+  const numerator = written === "" ? 0 : Number(written);
+  const shared = greatestCommonDivisor(row.millis, 10 ** written.length);
+  const denominator = 10 ** written.length / shared;
+  if (numerator % denominator !== 0) return undefined;
+
+  const amounts: ExpandedAmount[] = whole > 0 ? [{ amount: whole, row }] : [];
+  let remainder = (numerator / denominator) * (row.millis / shared);
+  for (const step of REMAINDER_LADDER) {
+    const amount = Math.floor(remainder / step.millis);
+    remainder -= amount * step.millis;
+    if (amount > 0) amounts.push({ amount, row: step });
+  }
+
+  return amounts.length === 0 ? [{ amount: 0, row }] : amounts;
+}
+
+function greatestCommonDivisor(left: number, right: number): number {
+  let a = left;
+  let b = right;
+  while (b !== 0) {
+    const next = a % b;
+    a = b;
+    b = next;
+  }
+  return a;
+}
 
 /** The units smallest first: the order the reference adds a duration's terms in. */
 const SMALLEST_FIRST: readonly UnitRow[] = [...DURATION_UNIT_TABLE].reverse();
