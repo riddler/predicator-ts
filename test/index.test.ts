@@ -376,8 +376,8 @@ describe("a source string in place of a program", () => {
   // ran and so bound nothing. It was run and reverted.
   it("carries no context where the source did not compile", () => {
     for (const refused of [
-      execute("3 = steps_completed", { steps_completed: 1 }),
-      executeValue("3 = steps_completed", { steps_completed: 1 }),
+      execute("3 = renewals", { renewals: 1 }),
+      executeValue("3 = renewals", { renewals: 1 }),
     ]) {
       expect(refused.ok).toBe(false);
       if (refused.ok) continue;
@@ -394,12 +394,15 @@ describe("a source string in place of a program", () => {
   // is a string, or compiling it with `compile` again at executeValue, turns
   // this red. Both were run and reverted.
   it("answers an expression source's value at executeValue", () => {
-    expect(executeValue("score > 1", { score: 5 })).toEqual({
+    expect(executeValue("loan.renewals > 1", { loan: { renewals: 2 } })).toEqual({
       ok: true,
       value: true,
-      context: { score: 5 },
+      context: { loan: { renewals: 2 } },
     });
-    expect(execute("score > 1", { score: 5 })).toEqual({ ok: true, context: { score: 5 } });
+    expect(execute("loan.renewals > 1", { loan: { renewals: 2 } })).toEqual({
+      ok: true,
+      context: { loan: { renewals: 2 } },
+    });
   });
 
   // Sabotage: compiling the instruction-list form as if it were source - calling
@@ -431,14 +434,14 @@ describe("a source string at execute and executeValue is a statement program", (
     expect(execute("x = 1")).toEqual({ ok: true, context: { x: 1 } });
     expect(executeValue("x = 1")).toEqual({ ok: true, value: undefined, context: { x: 1 } });
     expect(
-      executeValue("if charge.amount > 500 { holds = holds + 1 }; holds", {
-        charge: { amount: 750 },
-        holds: 2,
+      executeValue("if loan.overdue { fines = fines + 1 }; fines", {
+        loan: { overdue: true },
+        fines: 2,
       }),
-    ).toEqual({ ok: true, value: 3, context: { charge: { amount: 750 }, holds: 3 } });
-    expect(execute("visitor.step = visitor.step + 1", { visitor: { step: 1 } })).toEqual({
+    ).toEqual({ ok: true, value: 3, context: { loan: { overdue: true }, fines: 3 } });
+    expect(execute("patron.holds = patron.holds + 1", { patron: { holds: 1 } })).toEqual({
       ok: true,
-      context: { visitor: { step: 2 } },
+      context: { patron: { holds: 2 } },
     });
   });
 
@@ -446,7 +449,7 @@ describe("a source string at execute and executeValue is a statement program", (
   // turns this red: the assignment compiles and the run answers an empty stack
   // rather than the grammar's refusal. It was run and reverted.
   it("leaves evaluate compiling an expression", () => {
-    const refused = evaluate("variant = 'treatment'");
+    const refused = evaluate("status = 'late'");
     expect(refused.ok).toBe(false);
     if (refused.ok) return;
     expect(refused.error.type).toBe("ParseError");
