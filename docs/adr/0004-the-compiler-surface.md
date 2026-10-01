@@ -1654,15 +1654,17 @@ close the block", ahead of the same "but found" tail, while
 `Unterminated double-quoted string literal` and adds none. The mapping stands
 as that amendment states it.
 
-## Note: `decompile`'s result type is exported, as `DecompileResult` (2026-10-01)
+## Amendment: `decompile`'s result type is exported, as `DecompileResult` (2026-10-01)
 
-Recorded for `pts-shdy`. This note says what a sentence already accepted on
-this record was about, now that the package exports a name it did not, and
-decides nothing about what `decompile` answers, so it carries no Status line,
-and it removes no line above. Code is cited as the change carrying this note
-leaves it.
+Status: proposed (2026-10-01)
 
-**The sentence this note supersedes.** In the amendment headed "`decompile`
+Recorded for `pts-shdy`. This entry amends what the record decides about the
+names the package exports: the result type `decompile` answers gains a public
+name, and that supersedes one sentence of an accepted amendment above. It
+changes nothing about what `decompile` answers, and it removes no line above.
+Code is cited as the change carrying this entry leaves it.
+
+**The sentence this entry supersedes.** In the amendment headed "`decompile`
 refuses a tree past the source depth bound, as a value", the section headed
 "What changed" ends: "No name is exported for the result type." From this
 change the package's main entry exports that type as `DecompileResult`
@@ -1671,10 +1673,24 @@ listed in `test/export-surface.json`), beside `ParseResult` and
 `CompileResult`. Exporting it was ruled by the operator, 2026-10-01. The
 sentence stands as a statement about the package before this change.
 
-**What is unchanged.** The type is the union that amendment quotes, member for
-member: `decompile`'s signature, its two arms and its refusal are as the
-amendment states them. A host that wrote the union out, or derived it from the
-function, holds the same type it held.
+### Typespecs
+
+One type joins the main entry point, and the `decompile` declaration names it:
+
+```typescript
+export type DecompileResult =
+  | { readonly ok: true; readonly source: string }
+  | { readonly ok: false; readonly error: ParseError };
+
+export declare function decompile(ast: Ast, options?: DecompileOptions): DecompileResult;
+```
+
+### What is unchanged
+
+The type is the union that amendment quotes, member for member: `decompile`'s
+parameters, its two arms and its refusal are as the amendment states them. A
+host that wrote the union out, or derived it from the function, holds the same
+type it held.
 
 Two statements nearby are NOT superseded, and are named so a reader does not
 go looking. The note on that amendment's acceptance says the type behind
