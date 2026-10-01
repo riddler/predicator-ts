@@ -11,12 +11,14 @@
  * contract. One refusal is not the reference's: the depth bound below, which
  * the reference has no counterpart for, so its message is authored here.
  *
- * The grammar is the expression production alone. The statement production -
- * assignment, the separator, the two control-flow keywords - is not written
- * here, and the two ways an expression can run into it are refusals rather
- * than omissions: a bare `=` says that `==` is the equality operator, and a
- * statement keyword says where control flow is valid. A grammar that could not
- * say why it refused would be worse than one that can.
+ * There are two entry points, as there are in the reference. `parse` reads the
+ * expression production alone, and the two ways an expression can run into
+ * statement syntax are refusals rather than omissions there: a bare `=` says
+ * that `==` is the equality operator, and a statement keyword says where
+ * control flow is valid. `parseProgram` reads the statement production -
+ * assignment, the separator, `if`/`else` and `while` - over the same
+ * expression production, and never answers a bare expression tree: a program
+ * of one statement is still a program.
  *
  * Three things about the shape are worth naming.
  *
@@ -48,15 +50,20 @@
 
 import type {
   ArithmeticOperator,
+  Block,
   ComparisonOperator,
   DurationNode,
   DurationUnit,
+  IfStatement,
   MembershipOperator,
   Node,
   ObjectEntry,
   ObjectKey,
   ObjectKeyStyle,
+  ProgramNode,
   RelativeDirection,
+  Statement,
+  WhileStatement,
 } from "./ast.js";
 import { DURATION_UNIT_TABLE } from "./duration-units.js";
 import { ParseError, type ParseReason, type Position, type Span } from "./errors.js";
@@ -111,6 +118,86 @@ export function parse(tokens: readonly Token[]): ParseResult {
       trailing,
     ),
   };
+}
+
+/** A statement program, or the one refusal that stopped it. */
+export type ProgramParseResult =
+  | { readonly ok: true; readonly program: ProgramNode }
+  | { readonly ok: false; readonly error: ParseError };
+
+/**
+ * Parses a token stream into a statement program.
+ *
+ * The production is `program := statement (";" statement)* [";"]`, where a
+ * statement is an assignment, an `if`, a `while` or a bare expression, and a
+ * statement ending in a closing brace needs no separator before the next one.
+ * A program holds at least one statement, so an empty source and a lone
+ * separator are refusals, and so is a separator doubled anywhere. Every token
+ * has to be consumed: what is left over past the last statement is refused at
+ * the first leftover token.
+ */
+export function parseProgram(tokens: readonly Token[]): ProgramParseResult {
+  const parser = new Parser(tokens);
+  const start = tokenStart(parser.peek());
+  const statements = parser.statementSequence("eof");
+  if (!statements.ok) return { ok: false, error: statements.error };
+
+  const trailing = parser.peek();
+  if (trailing.type === "eof") {
+    const first = statements.value[0] as Statement;
+    const last = statements.value[statements.value.length - 1] as Statement;
+    return {
+      ok: true,
+      program: {
+        kind: "program",
+        statements: statements.value,
+        position: start,
+        span: { start: first.span.start, end: last.span.end },
+      },
+    };
+  }
+  return { ok: false, error: afterStatement(trailing) };
+}
+
+/**
+ * The refusal for a token left over after a finished statement: the stray
+ * `else` has a message of its own, and every other token is named in the
+ * general one.
+ */
+function afterStatement(token: Token): ParseError {
+  if (token.type === "else_kw") return strayElse(token);
+  return refuse("trailing_token", `Unexpected token ${formatToken(token)} after statement`, token);
+}
+
+/** An `else` where no `if` block has just closed. */
+function strayElse(token: Token): ParseError {
+  return refuse(
+    "unexpected_else",
+    "Unexpected 'else' - an 'else' block must follow an 'if' block.",
+    token,
+  );
+}
+
+/** A statement that ends in a closing brace, which the next may follow directly. */
+function braceTerminated(statement: Statement): boolean {
+  return statement.kind === "if" || statement.kind === "while";
+}
+
+/**
+ * Whether a node is a location an assignment can write: an identifier,
+ * followed by any run of property and bracket accesses. A parenthesis around
+ * any part of it changes nothing, because the grammar keeps no node for one.
+ *
+ * The chain is walked in a loop rather than by recursion, for the reason the
+ * emitter gives for its chains: its length is written flat.
+ */
+function isLocation(node: Node): boolean {
+  let link = node;
+  for (;;) {
+    if (link.kind === "identifier") return true;
+    if (link.kind !== "property_access" && link.kind !== "bracket_access") return false;
+    link = link.object;
+  }
 }
 
 class Parser {
@@ -180,6 +267,215 @@ class Parser {
    */
   expression(): Parsed<Node> {
     return this.descend(() => this.logicalOr());
+  }
+
+  /**
+   * One or more statements joined by separators, up to the token that ends
+   * them, which is left unconsumed for the caller to read.
+   *
+   * A separator is consumed and, unless it is the one trailing separator the
+   * grammar allows before the terminator, another statement is read after it.
+   * Without a separator, another statement follows only a statement that ended
+   * in a closing brace. The sequence is read in a loop, so its length costs
+   * no depth.
+   */
+  statementSequence(terminator: "eof" | "rbrace"): Parsed<readonly Statement[]> {
+    const first = this.statement();
+    if (!first.ok) return first;
+    const statements: Statement[] = [first.value];
+
+    for (;;) {
+      if (this.peek().type === "semicolon") {
+        this.advance();
+        if (this.atTerminator(terminator)) break;
+      } else if (
+        !braceTerminated(statements[statements.length - 1] as Statement) ||
+        this.atTerminator(terminator)
+      ) {
+        break;
+      }
+      const next = this.statement();
+      if (!next.ok) return next;
+      statements.push(next.value);
+    }
+    return { ok: true, value: statements };
+  }
+
+  /**
+   * Whether the cursor is at the token that ends a sequence. A stream that has
+   * run out counts, as the reference counts it; only a hand-built list can.
+   */
+  private atTerminator(terminator: "eof" | "rbrace"): boolean {
+    return this.peek().type === terminator || this.index >= this.tokens.length;
+  }
+
+  // statement -> if_statement | while_statement | assignment | expression
+  private statement(): Parsed<Statement> {
+    const token = this.peek();
+    if (token.type === "if_kw") return this.ifStatement(token);
+    if (token.type === "while_kw") return this.whileStatement(token);
+    if (token.type === "else_kw") return { ok: false, error: strayElse(token) };
+    return this.assignmentOrExpression();
+  }
+
+  /**
+   * An assignment when the statement opens with something location-shaped
+   * followed by `=`, and a bare expression otherwise.
+   *
+   * The probe reads an additive expression, one level below the comparison
+   * production that refuses a bare `=`, and looks at the token after it. A
+   * probe that refuses, or that is not followed by `=`, is discarded and the
+   * statement is read again from its start as an expression - which refuses
+   * the same way wherever the probe did, since the expression grammar meets
+   * the same leading tokens first. Once an `=` is seen the statement is an
+   * assignment, and a left side that is not a location is refused at the `=`.
+   */
+  private assignmentOrExpression(): Parsed<Statement> {
+    const start = this.index;
+    const candidate = this.descend(() => this.addition());
+    const equals = this.peek();
+    if (!candidate.ok || equals.type !== "eq") {
+      this.index = start;
+      return this.expression();
+    }
+
+    if (!isLocation(candidate.value)) {
+      return {
+        ok: false,
+        error: refuse(
+          "unassignable_location",
+          "Left side of '=' must be an assignable location - an identifier, a property " +
+            "access, or a bracket access.",
+          equals,
+        ),
+      };
+    }
+    this.advance();
+    const value = this.expression();
+    if (!value.ok) return value;
+    return {
+      ok: true,
+      value: {
+        kind: "assignment",
+        target: candidate.value,
+        value: value.value,
+        position: tokenStart(equals),
+        span: infixSpan(candidate.value, value.value),
+      },
+    };
+  }
+
+  // if_statement -> "if" expression block ( "else" ( block | if_statement ) )?
+  private ifStatement(keyword: Token): Parsed<IfStatement> {
+    this.advance();
+    const condition = this.expression();
+    if (!condition.ok) return condition;
+    const then = this.block();
+    if (!then.ok) return then;
+
+    let otherwise: Block | null = null;
+    if (this.peek().type === "else_kw") {
+      this.advance();
+      const next = this.peek();
+      if (next.type === "if_kw") {
+        // An `else if` is an else block holding one `if`, which is a level of
+        // nesting like any block.
+        const nested = this.descend(() => this.ifStatement(next));
+        if (!nested.ok) return nested;
+        otherwise = {
+          kind: "block",
+          statements: [nested.value],
+          position: nested.value.position,
+          span: nested.value.span,
+        };
+      } else {
+        const block = this.block();
+        if (!block.ok) return block;
+        otherwise = block.value;
+      }
+    }
+
+    const last = otherwise ?? then.value;
+    return {
+      ok: true,
+      value: {
+        kind: "if",
+        condition: condition.value,
+        consequent: then.value,
+        alternative: otherwise,
+        position: tokenStart(keyword),
+        span: { start: tokenStart(keyword), end: last.span.end },
+      },
+    };
+  }
+
+  // while_statement -> "while" expression block
+  private whileStatement(keyword: Token): Parsed<WhileStatement> {
+    this.advance();
+    const condition = this.expression();
+    if (!condition.ok) return condition;
+    const body = this.block();
+    if (!body.ok) return body;
+    return {
+      ok: true,
+      value: {
+        kind: "while",
+        condition: condition.value,
+        body: body.value,
+        position: tokenStart(keyword),
+        span: { start: tokenStart(keyword), end: body.value.span.end },
+      },
+    };
+  }
+
+  /**
+   * block -> "{" ( statement (";" statement)* ";"? )? "}"
+   *
+   * The statements inside are one level deeper than the block, which is what
+   * bounds how far blocks may nest inside one another.
+   */
+  private block(): Parsed<Block> {
+    const open = this.peek();
+    if (open.type !== "lbrace") {
+      return {
+        ok: false,
+        error: refuse(
+          "expected_open_brace",
+          `Expected '{' to open a block but found ${formatToken(open)}`,
+          open,
+        ),
+      };
+    }
+    this.advance();
+
+    let statements: readonly Statement[] = [];
+    if (this.peek().type !== "rbrace") {
+      const body = this.descend(() => this.statementSequence("rbrace"));
+      if (!body.ok) return body;
+      statements = body.value;
+    }
+
+    const close = this.peek();
+    if (close.type !== "rbrace") {
+      return {
+        ok: false,
+        error: refuse(
+          "expected_close_brace",
+          `Expected '}' to close the block but found ${formatToken(close)}`,
+          close,
+        ),
+      };
+    }
+    this.advance();
+    return {
+      ok: true,
+      value: {
+        kind: "block",
+        statements,
+        position: tokenStart(open),
+        span: { start: tokenStart(open), end: tokenEnd(close) },
+      },
+    };
   }
 
   // logical_or -> logical_and ( ("OR" | "||") logical_and )*

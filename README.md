@@ -268,10 +268,10 @@ machine that compiled it.
 `evaluate`, `execute` and `executeValue` each take that source text directly as
 well, in place of the instruction list, and compile it before running it. The
 string is compiled as an EXPRESSION at all three: a source that needs the
-statement grammar is refused identically at every one of them, and compiling a
-statement program from source text is not yet implemented anywhere here. A
-caller with a statement program to run still compiles it elsewhere and passes
-the instruction list.
+statement grammar is refused identically at every one of them. A caller with
+a statement program to run compiles it with `compileProgram`, under
+[Statement programs](#statement-programs) below, and passes the instruction
+list.
 
 ```ts
 import { evaluate, execute } from "@riddler/predicator";
@@ -566,6 +566,51 @@ const run = executeValue(assignVariant, { visitor: { bucket: 12 } });
 
 if (!run.ok || run.value !== "treatment" || run.context.variant !== "treatment") {
   throw new Error("a visitor in the lower half of the buckets gets the treatment");
+}
+```
+
+`compileProgram` compiles that list from source text. A program is one or
+more statements separated by `;`: an assignment to a name, a property or an
+index, an `if` with an optional `else` or `else if`, a `while`, or a bare
+expression, whose value is what `executeValue` answers when it is the last
+one to run. A statement that ends in `}` needs no `;` after it, and a block
+opens no scope of its own.
+
+```ts
+import { compileProgram, compileProgramWithSpans, executeValue } from "@riddler/predicator";
+
+// A signup wizard's step script, as an author writes it in the editor.
+const script = "if visitor.bucket < 50 { variant = 'treatment' } else { variant = 'control' }; variant";
+
+const compiled = compileProgram(script);
+
+if (!compiled.ok) {
+  throw new Error("a well-formed script compiles");
+}
+
+const run = executeValue(compiled.instructions, { visitor: { bucket: 12 } });
+
+if (!run.ok || run.value !== "treatment" || run.context.variant !== "treatment") {
+  throw new Error("the compiled script runs as the hand-written list above does");
+}
+
+// A refusal is a value here as it is at `compile`, and the statement grammar
+// brings reasons of its own: a left side that is not a location, a block
+// with no opening brace, and an `else` with no `if` before it.
+const misplaced = compileProgram("plan.trial + 1 = 14");
+
+if (misplaced.ok || misplaced.error.reason !== "unassignable_location") {
+  throw new Error("only a name, a property or an index can be assigned");
+}
+
+// `compileProgramWithSpans` carries the spans table `compileWithSpans` does,
+// where the instruction ending each statement spans that whole statement,
+// and a second table keyed by each `store`, with one span per segment of the
+// location it writes. `compileProgramWithPositions` carries points instead.
+const located = compileProgramWithSpans("plan.trial = 14");
+
+if (!located.ok || located.segmentSpans.get(3)?.length !== 2) {
+  throw new Error("a store into plan.trial writes a location of two segments");
 }
 ```
 
