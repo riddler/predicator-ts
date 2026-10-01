@@ -75,10 +75,11 @@ import { decodeTagged, encodeTagged, evaluateTagged, executeTagged } from "@ridd
 ```
 
 - **`@riddler/predicator`** is the main entry point: the value domain, the host
-  boundary, the compilation of an expression's source text into an instruction
-  list, the evaluation of such a list, the rendering of a parsed expression
-  back to source text, the reading of a duration from its literal spelling
-  and its length in milliseconds, and the version of the instruction set this build implements.
+  boundary, the compilation of an expression's or a statement program's source
+  text into an instruction list, the evaluation and the run of such a list, the
+  rendering of a parsed expression back to source text, the reading of a
+  duration from its literal spelling and its length in milliseconds, and the
+  version of the instruction set this build implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
   conformance corpus's tagged encoding, and the one evaluation and the one
   statement run that speak it.
@@ -104,12 +105,16 @@ through `exports` under the condition its format matches. It compiles no
 consumer under `node16` or `bundler` resolution, and none of the `./tagged`
 subpath.
 
-**Compiling an expression from its source text is `compile`**, and the
-statement grammar is not compiled here: assignment, the statement separator and
-the control-flow keywords are refused by the expression grammar with their own
-reasons and arrive in a later release. An instruction list may also reach this
-package already compiled - from the reference implementation, or hand-built, as
-several of the examples below are.
+**Compiling an expression from its source text is `compile`**, and compiling a
+statement program from its source text is `compileProgram`. Each has two
+siblings that hand back the same instruction list with a table beside it:
+`compileWithPositions` and `compileWithSpans` for an expression,
+`compileProgramWithPositions` and `compileProgramWithSpans` for a program.
+`evaluate` also takes an expression's source text and compiles it as `compile`
+does, and `execute` and `executeValue` take a source string and run it as a
+statement program, compiled as `compileProgram` compiles it. An instruction list
+may also reach this package already compiled - from the reference
+implementation, or hand-built, as several of the examples below are.
 
 The TypeScript examples in this file are executed by this repository's test
 suite, which also asserts that every name they import is bound, and the ones
@@ -386,8 +391,9 @@ if (JSON.stringify(first.instructions) !== JSON.stringify(second.instructions)) 
   throw new Error("rendering and recompiling answers the same program");
 }
 
-// `parse` refuses exactly what `compile` refuses, on the same arm and with
-// the same refusal - there is no second error shape to handle.
+// `parse` refuses every source whose scan or grammar fails, on the same arm
+// and with the refusal `compile` answers for that source - there is no second
+// error shape to handle.
 const draft = parse("variant == 'B' and steps_completed >= ");
 
 if (draft.ok) {
@@ -397,6 +403,25 @@ if (draft.ok) {
 if (draft.error.reason !== "expected_primary") {
   throw new Error("the refusal names the grammar family it belongs to");
 }
+
+// The converse does not hold: `compile` can still refuse a source `parse`
+// accepts. `compile` runs an emitter after the grammar and `parse` does not,
+// and the emitter refuses two things on its own account - a numeric literal
+// the value domain cannot hold, and a source its walk counts past the depth
+// limit where the grammar's count stops short. A library's hold rule written
+// with such a literal is a tree to `parse` and a refusal from `compile`.
+const oversized = "holds_placed > 99999999999999999999";
+
+const tree = parse(oversized);
+const refusedByEmitter = compile(oversized);
+
+if (!tree.ok) {
+  throw new Error("the literal scans and the grammar reads it");
+}
+
+if (refusedByEmitter.ok || refusedByEmitter.error.reason !== "number_out_of_range") {
+  throw new Error("the emitter refuses a literal outside the value domain");
+}
 ```
 
 `decompile` answers a result rather than a bare string, the way `parse` and
@@ -405,8 +430,8 @@ if (draft.error.reason !== "expected_primary") {
 depth limit this package declares for a source, under
 `nesting_depth_exceeded`. The walk counts its depth the way the compiler
 does, so a tree `parse` answers is refused here exactly when `compile`
-refuses the same source for its depth. The reference renders such a tree, so past the limit
-`decompile` diverges from it at the same place `compile` does.
+refuses the same source for its depth. The reference renders such a tree, so
+past the limit `decompile` diverges from it at the same place `compile` does.
 
 Two values are worth care, and they are not both on the same option. `none`
 writes no parentheses at all, not merely the redundant ones, so a rendering
@@ -423,11 +448,14 @@ opaque rather than a promise. It carries no member a caller can read and none
 a caller can write, so there is nothing on it to switch on and no way to build
 one: hand it back to `decompile` and that is all it is for. The node shapes
 behind it are internal and may change without a major version, and what holds
-across such a change is that
-`decompile(parse(source).ast)` keeps answering what the reference answers.
-Not being able to walk the tree is the cost of promising nothing about it, and
-the direction is the reversible one: publishing the shapes later would break
-nobody, while taking them back once they were public would.
+across such a change is that, for a source `compile` accepts,
+`decompile(parse(source).ast)` keeps answering what the reference answers for
+that source. A source `compile` refuses carries no such promise: past the
+depth limit `decompile` refuses a tree the reference renders, the divergence
+described above. Not being able to walk the tree is the cost of promising
+nothing about it, and the direction is the reversible one: publishing the
+shapes later would break nobody, while taking them back once they were public
+would.
 `docs/adr/0004-the-compiler-surface.md` is the record, and it says why the
 renderer takes the tree rather than a compiled program.
 
