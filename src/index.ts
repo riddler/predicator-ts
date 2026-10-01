@@ -333,7 +333,9 @@ export type ParseDurationResult =
  * or is refused when it is not an exact number of milliseconds. It is the same
  * parse the cast runs, over the same unit table the compiled literal and the
  * `duration` opcode read, and it answers what the reference's own duration
- * parse answers for the same text.
+ * parse answers for the same text, with one exception: a text whose
+ * component, as read, is past the largest safe integer is refused here, where
+ * the reference, whose integers have no bound, answers a duration.
  *
  * Failure is a value, never a throw: every text that is not a duration answers
  * the failing arm with the reason `invalid_duration_format`.

@@ -3494,3 +3494,81 @@ It changes no answer, adds no reason token, and changes no exported
 signature, opcode or wire form. Whether the reference should keep a duration
 a host supplies as a duration is the reference's question, and it is raised
 in the reference's tracker rather than decided here.
+
+## Amendment: a duration component past the safe integer range is refused when a text is read (2026-10-01)
+
+Status: proposed (2026-10-01)
+
+Recorded for `pts-o0gr`, on the ruling to refuse such a component in both the
+cast and `parseDuration` with the existing `invalid_duration_format` reason and
+to declare the difference here (ruled by the operator, 2026-10-01). This
+amendment is appended, and removes no line above. It has its own heading,
+rather than a paragraph under the note above it, because that note changes no
+answer and this amendment changes one. Code is cited as this change leaves it,
+on a branch cut from `c9e0dd9`; every claim about the reference was run in the
+same detached export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27,
+rather than read.
+
+What this amends. The Decision section above refuses an integer outside the
+safe range at every place one can arise, and the amendment above headed "the
+out-of-range rule's sites, and the cast exemption" makes a cast exempt: it
+answers undefined rather than refusing. That amendment observed that a
+string-to-duration parse at the reference accepts a component far past the
+bound and said the exemption covers it, since it is also a cast. The parse
+did not follow that: a text whose component was past the bound read as a
+duration whose component was infinite, for a count too long for a double, or
+the nearest double, for one a double rounds. Such a duration could not be
+written to wire text, because `encodeInteger` in `src/tagged.ts` refuses a
+component that is not a safe integer. This amendment decides what the parse
+answers there.
+
+### A component past the bound is not a duration here
+
+**`readDuration` in `src/cast.ts` answers nothing for a text whose component,
+as read, is not a safe integer.** A component is judged after the parse has
+added it up, so the rule covers a component written too long, a repeated unit
+that sums past the bound, and the whole part of a fraction alike. A count
+written with leading zeros is judged by its value, not its length.
+
+**The two callers of that parse answer the refusal each in its own shape.**
+The `duration` target of the cast, `toDuration` in `src/cast.ts`, answers
+undefined, as it does for every text it cannot read, which is the cast
+exemption above applied rather than a new rule. `parseDuration` in
+`src/index.ts` answers its failing arm with the one reason it already gives,
+`invalid_duration_format`. No reason token is added.
+
+| Text | Reference at `v9.4.2` | Cast here | `parseDuration` here |
+|---|---|---|---|
+| a four hundred digit day count | a duration of that many days | undefined | `invalid_duration_format` |
+| `9007199254740992s` | a duration of that many seconds | undefined | `invalid_duration_format` |
+| `9007199254740993s` | a duration of that many seconds | undefined | `invalid_duration_format` |
+| `9007199254740991s1s` | a duration of `9007199254740992` seconds | undefined | `invalid_duration_format` |
+| `4503599627370496d4503599627370496d` | a duration of `9007199254740992` days | undefined | `invalid_duration_format` |
+| `9007199254740992.5d` | a duration of `9007199254740992` days and twelve hours | undefined | `invalid_duration_format` |
+| `9007199254740991s` | a duration of that many seconds | the same | the same |
+
+### The divergence this declares
+
+**The reference answers each refused text above with a duration, and this
+package refuses it.** The reference's integers have no bound, so the
+condition never arises there. A JavaScript number holds an exact integer only
+up to the largest safe integer, and this package's domain holds no integer
+past it, so it cannot answer the reference's duration and refuses the text
+rather than answering a different one. The rows are not in the reference
+transcript; the tests below carry the reference's answer in their comments.
+
+**It is pinned by shipped tests.** "refuses a component past the largest safe
+integer" and "reads a component at the largest safe integer, and one written
+with leading zeros" in `test/cast.test.ts`, and the describe block
+"parseDuration past the largest safe integer" in `test/parse-duration.test.ts`,
+which asks both the export and the cast for each refused text above.
+
+Consequences. A host that read such a text before got a duration it could not
+write to wire text and whose length was not exact; it now gets the cast's
+undefined or `parseDuration`'s failing arm. No exported signature changes, no
+reason token is added, and no opcode and no wire-format change follow. The
+`duration` opcode already refuses a magnitude that is not a safe integer with
+`invalid_duration_format` (`duration` in `src/evaluator.ts`), which is what a
+compiled duration literal written with such a component answers when it is
+evaluated, so a component written past the bound is now refused by the
+literal, the cast and the export alike.

@@ -412,6 +412,30 @@ describe("the duration literal, which the parse canonicalizes", () => {
     expectValue(cast("0.0001s", "duration"), Undefined);
   });
 
+  // A component this domain cannot hold as an exact integer is refused, so the
+  // cast answers undefined, as it does for every text it cannot read, rather
+  // than a duration whose component is infinite or rounded. A component is
+  // judged as read: a repeated unit that sums past the bound is refused too,
+  // and so is a fraction's whole part.
+  // Sabotage: removing the safe-range check from readDuration turns this red.
+  it("refuses a component past the largest safe integer", () => {
+    expectValue(cast(`${"9".repeat(400)}d`, "duration"), Undefined);
+    expectValue(cast("9007199254740992s", "duration"), Undefined);
+    expectValue(cast("9007199254740993s", "duration"), Undefined);
+    expectValue(cast("9007199254740991s1s", "duration"), Undefined);
+    expectValue(cast("9007199254740992.5d", "duration"), Undefined);
+  });
+
+  // Sabotage: checking the bound with a strict less-than on the largest safe
+  // integer turns the first assertion red.
+  it("reads a component at the largest safe integer, and one written with leading zeros", () => {
+    expectValue(
+      cast("9007199254740991s", "duration"),
+      new Duration({ seconds: Number.MAX_SAFE_INTEGER }),
+    );
+    expectValue(cast(`${"0".repeat(400)}5d`, "duration"), new Duration({ days: 5 }));
+  });
+
   it("keeps a zero component's unit when the fraction resolves to nothing", () => {
     expectValue(cast("0.0s", "duration"), new Duration());
   });

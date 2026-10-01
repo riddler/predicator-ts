@@ -92,12 +92,18 @@ const SMALLEST_FIRST: readonly UnitRow[] = [...DURATION_UNIT_TABLE].reverse();
  * sum past the largest safe integer is the nearest double to it rather than
  * the exact count, since the reference's integers have no such bound.
  *
- * Failure is a value, never a throw: an argument that is not an object answers
- * `NaN`.
+ * Failure is a value, never a throw: an argument that is not an object, or one
+ * carrying a component that is not a number, answers `NaN`.
  */
 export function durationToMilliseconds(duration: DurationParts): number {
   if (typeof duration !== "object" || duration === null) return Number.NaN;
   let total = 0;
-  for (const unit of SMALLEST_FIRST) total += (duration[unit.key] ?? 0) * unit.millis;
+  for (const unit of SMALLEST_FIRST) {
+    // An untyped caller can hand over any component, and weighing one that is
+    // not a number either throws or coerces it, so it answers `NaN` instead.
+    const amount: unknown = duration[unit.key] ?? 0;
+    if (typeof amount !== "number") return Number.NaN;
+    total += amount * unit.millis;
+  }
   return total;
 }

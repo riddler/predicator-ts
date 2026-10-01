@@ -95,8 +95,11 @@ describe("durationToMilliseconds", () => {
 
   // The reference sums with integers of any size; a JavaScript number past
   // the largest safe integer is the nearest double. This pins what the
-  // conversion answers there today: the double the arithmetic gives, which is
-  // not the exact sum, and no refusal. Whether it should refuse is open.
+  // conversion answers there: the double the arithmetic gives, which is not
+  // the exact sum, and no refusal. That it keeps a plain number was decided
+  // under the night rule by the conductor, 2026-10-01; a component past the
+  // safe range is refused where a text is read instead, by the cast and by
+  // parseDuration.
   // Sabotage: clamping the sum to the largest safe integer turns this red.
   it("answers the double arithmetic gives past the largest safe integer, never a throw", () => {
     const past = new Duration({ seconds: 1, milliseconds: Number.MAX_SAFE_INTEGER });
@@ -110,6 +113,20 @@ describe("durationToMilliseconds", () => {
   it("answers NaN rather than throwing for an argument that is not a duration", () => {
     for (const value of [null, undefined, 3, "1s"]) {
       const convert = () => durationToMilliseconds(value as unknown as DurationParts);
+      expect(convert).not.toThrow();
+      expect(convert()).toBeNaN();
+    }
+  });
+
+  // A host that calls this from untyped code can hand over an object whose
+  // component is not a number. Multiplying a bigint or a symbol by a weight
+  // throws, so each component is checked before it is weighed.
+  // Sabotage: removing the per-component check turns the bigint and symbol
+  // rows into a throw, and the string row into 1000.
+  it("answers NaN rather than throwing for a component that is not a number", () => {
+    for (const component of [1n, Symbol("days"), "1", true]) {
+      const parts = { seconds: component } as unknown as DurationParts;
+      const convert = () => durationToMilliseconds(parts);
       expect(convert).not.toThrow();
       expect(convert()).toBeNaN();
     }
