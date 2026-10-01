@@ -1653,3 +1653,33 @@ close the block", ahead of the same "but found" tail, while
 `Unterminated single-quoted string literal` substitutes one word of
 `Unterminated double-quoted string literal` and adds none. The mapping stands
 as that amendment states it.
+
+## Note: `decompile`'s result type is exported, as `DecompileResult` (2026-10-01)
+
+Recorded for `pts-shdy`. This note says what a sentence already accepted on
+this record was about, now that the package exports a name it did not, and
+decides nothing about what `decompile` answers, so it carries no Status line,
+and it removes no line above. Code is cited as the change carrying this note
+leaves it.
+
+**The sentence this note supersedes.** In the amendment headed "`decompile`
+refuses a tree past the source depth bound, as a value", the section headed
+"What changed" ends: "No name is exported for the result type." From this
+change the package's main entry exports that type as `DecompileResult`
+(`DecompileResult` in `src/decompile.ts`, re-exported from `src/index.ts` and
+listed in `test/export-surface.json`), beside `ParseResult` and
+`CompileResult`. Exporting it was ruled by the operator, 2026-10-01. The
+sentence stands as a statement about the package before this change.
+
+**What is unchanged.** The type is the union that amendment quotes, member for
+member: `decompile`'s signature, its two arms and its refusal are as the
+amendment states them. A host that wrote the union out, or derived it from the
+function, holds the same type it held.
+
+Two statements nearby are NOT superseded, and are named so a reader does not
+go looking. The note on that amendment's acceptance says the type behind
+`decompile` is not exported from the package's entry; it is a reading of
+`1ddd46b`, the commit it names, and still holds there. The amendment on the
+statement grammar says no name is exported for the result types of
+`compileProgramWithPositions` and `compileProgramWithSpans`; it is about those
+two results, and this change exports neither.

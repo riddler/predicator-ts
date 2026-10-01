@@ -5,6 +5,7 @@
     "CompileWithPositionsResult",
     "CompileWithSpansResult",
     "DecompileOptions",
+    "DecompileResult",
     "Duration",
     "DurationParts",
     "EvaluateOptions",
