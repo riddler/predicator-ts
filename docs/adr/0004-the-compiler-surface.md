@@ -1344,7 +1344,7 @@ parentheses and rendered its tree, as the amendment says.
 
 ## Amendment: the statement grammar compiles, through three program entry points, with the transcript's program rows as its evidence (2026-10-01)
 
-Status: proposed (2026-10-01)
+Status: accepted (2026-10-01; proposed 2026-10-01)
 
 Recorded for `pts-xmz6`, under two rulings: that the grammar is the
 reference's full statement grammar - assignment to every location shape, a
@@ -1656,7 +1656,7 @@ as that amendment states it.
 
 ## Amendment: `decompile`'s result type is exported, as `DecompileResult` (2026-10-01)
 
-Status: proposed (2026-10-01)
+Status: accepted (2026-10-01; proposed 2026-10-01)
 
 Recorded for `pts-shdy`. This entry amends what the record decides about the
 names the package exports: the result type `decompile` answers gains a public
@@ -1702,7 +1702,7 @@ two results, and this change exports neither.
 
 ## Amendment: `execute` and `executeValue` compile a source string as a statement program (2026-10-01)
 
-Status: proposed (2026-10-01)
+Status: accepted (2026-10-01; proposed 2026-10-01)
 
 Recorded for `pts-0zns`, under the ruling that the two run entry points
 compile a source string as the reference's do, a named host-visible change
@@ -1819,3 +1819,75 @@ before.
 The source form of `executeValue` now answers an expression's value, so an
 expression's source answers the same value at `evaluate` and at
 `executeValue` wherever `evaluate` answers one.
+
+## Note: the acceptance of the three amendments of 2026-10-01 (2026-10-01)
+
+Recorded for `pts-e1zw`. This note records that three amendments above moved
+from proposed to accepted together: on the statement grammar, on the exported
+`decompile` result type, and on `execute` and `executeValue` compiling a source
+string as a statement program. The conductor moved them under the flip standard
+of the campaign consent the operator adopted, 2026-10-01. It decides nothing,
+so it carries no Status line, and it removes no line. With it, no entry in this
+record reads proposed.
+
+**All three shipped in `@riddler/predicator` 0.4.0.** That version is on npm,
+built from the commit tagged `v0.4.0` (`fe42eea`). Each amendment's own change
+is in the tag: `ea1d274` (request 157) for the statement grammar, `929bcb7`
+(request 159) for the result type, and `8e20280` (request 161) for the two run
+entry points. Every claim was re-checked at `fe42eea`, re-located by anchor,
+and every claim about the reference was run in a detached export of
+predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27, rather than read.
+
+**The statement grammar.** `compileProgram`, `compileProgramWithPositions` and
+`compileProgramWithSpans` are in `src/compile.ts` and exported from
+`src/index.ts`, the two located result types are not, and the three new
+members are in `ParseReason` in `src/errors.ts`. `parseProgram` and `descend` in
+`src/parser.ts`, and `visitStatement`, `visitAssignment` and `deeper` in
+`src/emitter.ts`, are where the amendment reads them. Run at the tag, the
+grammar's refusals of an empty source, a lone separator and a doubled one, its
+acceptance of one trailing separator and of a statement after a closing brace
+with none, and each emission shape and span the amendment states held, and the
+reference answered the same instructions, refusals and spans for each source
+run. `conformance/transcript/compile.json`
+has not changed since `6149371`; each message the amendment quotes is its
+row's, `test/reference-compile.test.ts` holds every program row and program
+refusal row as stated, and `test/compile-program.test.ts` pins a source for
+each of the eight families. Run at the tag over every program row, the
+reference's `Predicator.compile_program_with_positions/1` and
+`compileProgramWithPositions` agreed on every point table and every segment
+table. The tier-6, tier-8 and tier-9 corpus cases still carry a null source,
+and `conformance/registry.json` is unchanged since before the amendment. Run
+at the tag over three `else if` chains whose links nest progressively deeper,
+the longest that compiled had 255, 254 and 253 links, which is the "few links
+short of two hundred and fifty-six" the amendment states, and the reference
+compiled a chain of four hundred `else if` links.
+
+Two of its sentences are superseded by the amendment on `execute` and
+`executeValue`, as that amendment says: the paragraph opening "One sentence
+nearby is NOT superseded", which left the two run entry points compiling an
+expression, and the first paragraph of "What this does not decide", which
+listed `execute` and `executeValue` among the functions whose answers do not
+change. They are read as that amendment reads them, and do not hold this one.
+
+**The result type.** `DecompileResult` is in `src/decompile.ts`, re-exported
+from `src/index.ts` and listed in `test/export-surface.json` beside
+`ParseResult` and `CompileResult`, and `decompile` is declared to answer it,
+with the two arms the amendment quotes. The sentence it supersedes ends the
+section headed "What changed" in the amendment on `decompile` past the source
+depth bound.
+
+**The two run entry points.** `programOf` in `src/index.ts` takes the compiler
+as an argument; `evaluate` passes `compile`, and `execute` and `executeValue`
+pass `compileProgram`. At the reference, `evaluate/3`'s source clause hands its
+tokens to `Parser.parse`, `execute/3` runs through `execute_value/3`, whose
+source clause hands them to `Parser.parse_program`, and a parsed program runs
+through `execute_value_ast`. Each row of the amendment's table was run: the
+after column through this package at the tag and through
+`Predicator.execute_value/3` in the export, and the before column through this
+package at `5afceb8`, the commit the change was cut from. The four program
+refusal sources the amendment names answered each row's message, position and
+span at both, and the reference answered its input context beside each
+refusal. The tests the amendment names are under "a source string at execute
+and executeValue is a statement program" in `test/index.test.ts`.
+`EvaluationError` in `src/errors.ts` carries an instruction index as its
+position, and `conformance/` is unchanged by the change.
