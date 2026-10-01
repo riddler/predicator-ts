@@ -3397,3 +3397,100 @@ under "the place budget of the walks that answer at each place" in
 `test/nesting.test.ts`. The place counts it gives add up as stated, and at the
 tag every match of `budget` under the reference's `lib/` belongs to its loop
 budget.
+
+## Note: a duration the host supplies, against a plain map and added to a date (2026-10-01)
+
+Recorded for `pts-ahl` and `pts-wkzl`, on the ruling to declare both
+differences and keep this package's answers (ruled by the operator,
+2026-10-01). This note is appended, and removes no line above. It changes no
+answer and decides no new rule: it declares two differences from the
+reference that follow from the decision above that a duration is an instance
+of `Duration` and a map is a plain object, and it says what pins each. Code is
+cited as read at `0950ee3`; every claim about the reference was run in a
+detached export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27,
+rather than read.
+
+### Why the reference answers differently
+
+The reference's duration is not a class of its own. It is a map keyed by its
+host language's atoms, and its evaluator tells a duration from a map by those
+atom keys (`duration_map?` in `lib/predicator/evaluator.ex`). Its context
+normalization then rewrites every map a host supplies, a duration included.
+`Predicator.Context.new/2` documents it: "`data` is normalized deeply before it
+is stored: atom keys become string keys (a string key wins if both are present
+at the same level), recursing through nested maps and lists. `Date`,
+`DateTime`, and any other struct pass through unchanged." A duration is a map
+and not a struct, so `normalize_value` in `lib/predicator/context.ex` sends it
+to `normalize_map`, and what reaches the evaluator is a plain map keyed by
+strings. A duration the `duration` opcode builds is never normalized and keeps
+its atom keys.
+
+So the reference has two kinds of duration where this package has one: one the
+program built, which is a duration there, and one the host supplied, which is
+a plain map there. A JavaScript host has no atom-keyed map to hand this
+package, and `Duration` is the one class both come in as, so neither half of
+the reference's split can be copied without the other. This package keeps one
+answer for both.
+
+### A duration against a plain map
+
+**Here a duration matches no plain map.** `typesMatch` in `src/evaluator.ts`
+admits two durations or two plain maps, and `isPlainMap` excludes a
+`Duration`. So `compareValues` answers the absence for a loose comparison of a
+duration and a plain map and `compareOrder` answers none for an ordering,
+`strictlyEqual` answers false, and membership, which compares through
+`valuesEqual`, finds nothing.
+
+**The reference answers by key spelling.** Its `types_match` guard admits any
+two maps that are not structs, so a duration and a plain map always compare;
+whether they are equal turns on whether the keys are spelled alike.
+
+The rows ask each operator of a duration of three days and eight hours
+against a plain map holding the same eight keys and values, once for a
+duration the program built (`3d8h`) and once for one the host supplied:
+
+| Operator | Built: reference | Supplied: reference | Here, both |
+|---|---|---|---|
+| `==` | false | true | the absence |
+| `!=` | true | false | the absence |
+| `===` | false | true | false |
+| `!==` | true | false | true |
+| `>=` | false | true | the absence |
+| `<` | true | false | the absence |
+| `in` a one-item list | false | true | false |
+
+For a built duration the strict comparisons and membership agree; every other
+cell differs. The reference's orderings answer its host language's term order
+rather than any order of durations. The rows are the fourteen whose ids begin
+`duration-against-map/` in `conformance/transcript/transcript.json`, and
+`test/reference-transcript.test.ts` declares the eleven that differ with both
+answers, so each fails if either side moves or if the two come to agree.
+
+### A date plus a duration the host supplies
+
+The amendment above headed "a duration's fields are read as its map's" says,
+in its paragraph "One further difference is not decided here", that the
+reference refuses a date plus a duration the host supplies with a type
+mismatch, where this package moves the date on, and that no case pins either.
+This declares it. **Here `applyAdd` in `src/evaluator.ts` adds a `Duration` to
+a date whichever side supplied it.** The reference adds to a date only a map
+that `duration_map?` reads as a duration (`apply_addition` in
+`lib/predicator/evaluator.ex`), and the duration the host supplied is a plain
+map keyed by strings there by the time it is added. Run at the tag with the date `2026-09-19` and a
+supplied duration of three days and eight hours, the reference refused the sum
+with the `TypeMismatchError` whose reason is `add`; this package answers
+`2026-09-22`, the date moved on by the duration's whole days. A duration the
+program built moves the date on both sides, which the corpus case
+`arithmetic/date-plus-duration` pins.
+
+The row is `duration-arithmetic/date-plus-a-supplied-duration`, declared in
+`test/reference-transcript.test.ts`. It is the transcript's first row whose
+reference answer is a refusal; the suite compares a refusal by its reason,
+written as this package writes its own.
+
+### What this note does not decide
+
+It changes no answer, adds no reason token, and changes no exported
+signature, opcode or wire form. Whether the reference should keep a duration
+a host supplies as a duration is the reference's question, and it is raised
+in the reference's tracker rather than decided here.
