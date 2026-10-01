@@ -9,9 +9,11 @@
   "counts": {
     "compile": 63,
     "decompile": 45,
+    "program": 35,
+    "program_refusal": 29,
     "refusal": 27,
-    "rows": 135
+    "rows": 199
   },
   "generator": "node scripts/reference-compile.mjs --from <export of riddler/predicator-ex at v9.4.2> --tag v9.4.2",
-  "transcript_hash": "sha256:434f089e5929b9859c707fac3a6646b93be0c5a5a945e5f05a092c1b66b5b18e"
+  "transcript_hash": "sha256:c8e29a457c23f3c01c2bd7ab25552ddbca2fa7f8fb427f59d627d8354f32283c"
 }

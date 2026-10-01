@@ -32,6 +32,17 @@
 // `parse`'s, not a compiled program's, because the renderer takes the syntax
 // tree.
 //
+// A PROGRAM ROW and a PROGRAM REFUSAL ROW hold what the reference's statement
+// compiler answered for one of the programs `scripts/lib/program-sources.mjs`
+// lists: an instruction list with its `positions` and `segment_positions`
+// tables, or a refusal with its message, position and span. This package does
+// not compile statements yet, so nothing here diffs them against an answer of
+// its own; what is asserted is that every row is well formed and that the rows
+// are exactly the list, in its order, each under the kind it was authored to
+// draw. They are the oracle the statement compiler is built against, and an
+// oracle that has quietly lost a row, gained one, or carries a table that does
+// not fit its own program is worse than none.
+//
 // DIVERGENCES ARE DECLARED, NEVER NARROWED. `DECLARED`, in
 // `test/conformance/compile-divergences.ts`, holds both answers for any row
 // where this package and the reference differ, beside a pointer to the place
@@ -58,14 +69,25 @@
 // tag, commit and corpus hash are the vendored corpus's. It is the only
 // sanctioned route to a row and this file does not name the transcript's path.
 
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { PROGRAM_SOURCES } from "../scripts/lib/program-sources.mjs";
 import type { DecompileOptions, ParseReason, Position, Span } from "../src/index.js";
 import { compile, decompile, parse } from "../src/index.js";
 import { SOURCE_DEPTH_LIMIT } from "../src/nesting.js";
 import { decodeTagged } from "../src/tagged.js";
 import type { Value } from "../src/values.js";
 import { DECLARED, declaredOf, writtenNestingDepth } from "./conformance/compile-divergences.js";
-import { compileTranscriptLines } from "./conformance/compile-transcript.js";
+import {
+  compileTranscriptLines,
+  compileTranscriptStamp,
+  corpusStamp,
+} from "./conformance/compile-transcript.js";
 import { sameValue } from "./conformance/runner.js";
 
 /**
@@ -147,7 +169,157 @@ interface DecompileRow {
   readonly rendered: string;
 }
 
-type Row = CompileRow | RefusalRow | DecompileRow;
+/** One entry of a program row's `positions` table. */
+interface PositionEntry {
+  readonly instruction: number;
+  readonly span: Span;
+}
+
+/** One entry of a program row's `segment_positions` table. */
+interface SegmentEntry {
+  readonly instruction: number;
+  readonly spans: readonly Span[];
+}
+
+/** A row holding a statement program the reference compiled. */
+interface ProgramRow {
+  readonly kind: "program";
+  readonly id: string;
+  readonly source: string;
+  /** The reference's instruction list, decoded rather than read as JSON. */
+  readonly instructions: Value;
+  readonly positions: readonly PositionEntry[];
+  readonly segment_positions: readonly SegmentEntry[];
+}
+
+/** A row holding a statement program the reference refused. */
+interface ProgramRefusalRow {
+  readonly kind: "program_refusal";
+  readonly id: string;
+  readonly source: string;
+  readonly message: string;
+  readonly position: Position;
+  readonly span: Span;
+}
+
+type Row = CompileRow | RefusalRow | DecompileRow | ProgramRow | ProgramRefusalRow;
+
+function isRecord(value: unknown): value is { readonly [key: string]: unknown } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isPosition(value: unknown): value is Position {
+  return (
+    isRecord(value) &&
+    Number.isInteger(value.line) &&
+    Number.isInteger(value.column) &&
+    (value.line as number) >= 1 &&
+    (value.column as number) >= 1
+  );
+}
+
+/** A position strictly before another, in reading order. */
+function before(left: Position, right: Position): boolean {
+  return left.line < right.line || (left.line === right.line && left.column < right.column);
+}
+
+/** A span whose two ends are positions and whose end is not before its start. */
+function isSpan(value: unknown): value is Span {
+  return (
+    isRecord(value) &&
+    isPosition(value.start) &&
+    isPosition(value.end) &&
+    !before(value.end, value.start)
+  );
+}
+
+/**
+ * Every way a program row, as read from its line, is not the shape its kind
+ * promises, as readable sentences. An empty answer is a well-formed row.
+ *
+ * Taken as a function of the raw record, so that a test can hold a fabricated
+ * malformed row against it without touching `conformance/`.
+ *
+ * What it holds a `program` row to: an instruction list; a `positions` table
+ * with one entry per instruction, in instruction order, each a valid span;
+ * and a `segment_positions` table whose entries name `store` instructions in
+ * ascending order, each with one valid span per segment the `store` writes.
+ * What it holds a `program_refusal` row to: a message, a position and a span.
+ */
+function programRowFaults(raw: { readonly [key: string]: unknown }): readonly string[] {
+  const faults: string[] = [];
+  if (typeof raw.id !== "string") faults.push("it has no string id");
+  if (typeof raw.source !== "string") faults.push("it has no string source");
+  if (raw.kind === "program_refusal") {
+    if (typeof raw.message !== "string" || raw.message === "") faults.push("it has no message");
+    if (!isPosition(raw.position)) faults.push("its position is not a position");
+    if (!isSpan(raw.span)) faults.push("its span is not a span");
+    return faults;
+  }
+  if (raw.kind !== "program")
+    return [...faults, `its kind ${String(raw.kind)} is not a program kind`];
+
+  const instructions = raw.instructions;
+  if (!Array.isArray(instructions) || !instructions.every(Array.isArray)) {
+    return [...faults, "its instructions are not a list of instructions"];
+  }
+  const program = instructions as readonly (readonly unknown[])[];
+
+  const positions = raw.positions;
+  if (!Array.isArray(positions)) {
+    faults.push("its positions table is not a list");
+  } else {
+    const indices = positions.map((entry) => (isRecord(entry) ? entry.instruction : undefined));
+    const expected = program.map((_, index) => index);
+    if (JSON.stringify(indices) !== JSON.stringify(expected))
+      faults.push(
+        `its positions table names instructions ${JSON.stringify(indices)} and the program has ${JSON.stringify(expected)}`,
+      );
+    positions.forEach((entry, index) => {
+      if (!isRecord(entry) || !isSpan(entry.span))
+        faults.push(`its positions entry ${index} carries no valid span`);
+    });
+  }
+
+  const segments = raw.segment_positions;
+  if (!Array.isArray(segments)) {
+    faults.push("its segment_positions table is not a list");
+  } else {
+    let previous = -1;
+    for (const entry of segments) {
+      if (!isRecord(entry) || !Number.isInteger(entry.instruction)) {
+        faults.push("a segment_positions entry names no instruction");
+        continue;
+      }
+      const index = entry.instruction as number;
+      if (index <= previous) faults.push(`its segment_positions entry ${index} is out of order`);
+      previous = index;
+      const instruction = program[index];
+      if (instruction === undefined || instruction[0] !== "store") {
+        faults.push(`its segment_positions entry ${index} does not name a store`);
+        continue;
+      }
+      const spans = entry.spans;
+      if (!Array.isArray(spans) || !spans.every(isSpan)) {
+        faults.push(`its segment_positions entry ${index} carries a span that is not one`);
+        continue;
+      }
+      if (spans.length !== instruction[1])
+        faults.push(
+          `its segment_positions entry ${index} carries ${spans.length} spans for a store of ${String(instruction[1])} segments`,
+        );
+    }
+    const stores = program.flatMap((instruction, index) =>
+      instruction[0] === "store" ? [index] : [],
+    );
+    const named = segments.map((entry) => (isRecord(entry) ? entry.instruction : undefined));
+    if (JSON.stringify(stores) !== JSON.stringify(named))
+      faults.push(
+        `its segment_positions table names ${JSON.stringify(named)} and the program stores at ${JSON.stringify(stores)}`,
+      );
+  }
+  return faults;
+}
 
 /**
  * Reads one line into the row it is.
@@ -187,6 +359,31 @@ function rowOf(line: string): Row {
       rendered: String(raw.rendered),
     };
   }
+  if (raw.kind === "program" || raw.kind === "program_refusal") {
+    const faults = programRowFaults(raw);
+    if (faults.length > 0) throw new Error(`program row ${id} is malformed: ${faults.join("; ")}`);
+    if (raw.kind === "program_refusal") {
+      return {
+        kind: "program_refusal",
+        id,
+        source,
+        message: String(raw.message),
+        position: raw.position as Position,
+        span: raw.span as Span,
+      };
+    }
+    const decoded = decodeTagged(line);
+    if (!decoded.ok) throw new Error(`program row ${id} did not decode: ${decoded.reason}`);
+    const record = decoded.value as { readonly [key: string]: Value };
+    return {
+      kind: "program",
+      id,
+      source,
+      instructions: record.instructions ?? null,
+      positions: raw.positions as readonly PositionEntry[],
+      segment_positions: raw.segment_positions as readonly SegmentEntry[],
+    };
+  }
   throw new Error(`transcript row ${id} carries the unknown kind ${String(raw.kind)}`);
 }
 
@@ -194,6 +391,10 @@ const ROWS: readonly Row[] = compileTranscriptLines().map(rowOf);
 const COMPILE_ROWS = ROWS.filter((row): row is CompileRow => row.kind === "compile");
 const REFUSAL_ROWS = ROWS.filter((row): row is RefusalRow => row.kind === "refusal");
 const DECOMPILE_ROWS = ROWS.filter((row): row is DecompileRow => row.kind === "decompile");
+const PROGRAM_ROWS = ROWS.filter(
+  (row): row is ProgramRow | ProgramRefusalRow =>
+    row.kind === "program" || row.kind === "program_refusal",
+);
 
 /** A position read field by field, so a key order cannot make two agree or differ. */
 function samePosition(left: Position, right: Position): boolean {
@@ -215,13 +416,17 @@ describe("the reference compile transcript", () => {
   // Sabotage: the `decompile` arm of `rowOf` removed turns this red on the
   // unknown-kind throw, and dropping a kind from the partition below turns it
   // red on the sum. Both were run and reverted.
-  it("is read whole, every row falling into one of the three kinds", () => {
-    expect(COMPILE_ROWS.length + REFUSAL_ROWS.length + DECOMPILE_ROWS.length).toBe(ROWS.length);
-    expect([COMPILE_ROWS.length > 0, REFUSAL_ROWS.length > 0, DECOMPILE_ROWS.length > 0]).toEqual([
-      true,
-      true,
-      true,
-    ]);
+  it("is read whole, every row falling into one of the five kinds", () => {
+    expect(
+      COMPILE_ROWS.length + REFUSAL_ROWS.length + DECOMPILE_ROWS.length + PROGRAM_ROWS.length,
+    ).toBe(ROWS.length);
+    expect([
+      COMPILE_ROWS.length > 0,
+      REFUSAL_ROWS.length > 0,
+      DECOMPILE_ROWS.length > 0,
+      PROGRAM_ROWS.some((row) => row.kind === "program"),
+      PROGRAM_ROWS.some((row) => row.kind === "program_refusal"),
+    ]).toEqual([true, true, true, true, true]);
   });
 
   // Sabotage: raising `SOURCE_DEPTH_LIMIT` in src/nesting.ts past the depth
@@ -253,6 +458,110 @@ describe("the reference compile transcript", () => {
   it("has a written-out refusal union that the typechecker keeps complete", () => {
     expect(NOTHING_UNLISTED).toBe(true);
     expect(new Set(PARSE_REASONS).size).toBe(PARSE_REASONS.length);
+  });
+});
+
+describe("the program rows", () => {
+  // Sabotage, each run and reverted: an entry dropped from PROGRAM_SOURCES
+  // turns this red on the id list, and one entry's `answer` flipped turns it
+  // red on the kind list, the transcript left as generated in both.
+  it("are the authored program list, in its order, each under the kind it was authored to draw", () => {
+    expect(PROGRAM_ROWS.map((row) => [row.id, row.source, row.kind])).toEqual(
+      PROGRAM_SOURCES.map((entry) => [
+        entry.id,
+        entry.source,
+        entry.answer === "program" ? "program" : "program_refusal",
+      ]),
+    );
+    expect(new Set(PROGRAM_SOURCES.map((entry) => entry.id)).size).toBe(PROGRAM_SOURCES.length);
+  });
+
+  // Sabotage, each run and reverted: the segment-count comparison in
+  // programRowFaults disabled turns this red on the row giving a one-segment
+  // store two spans, and the positions-coverage comparison disabled turns it
+  // red on the row missing an entry. Disabling the per-entry `store` check
+  // left it green, because the comparison of the stores with the table's
+  // entries names the same fault; that check is kept for its message.
+  it("hold every row to its shape, and a malformed row is named", () => {
+    const span = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } };
+    const wellFormed = {
+      id: "program/fabricated",
+      kind: "program",
+      source: "renewals = 0",
+      instructions: [
+        ["lit", "renewals"],
+        ["lit", 0],
+        ["store", 1],
+      ],
+      positions: [0, 1, 2].map((instruction) => ({ instruction, span })),
+      segment_positions: [{ instruction: 2, spans: [span] }],
+    };
+    expect(programRowFaults(wellFormed)).toEqual([]);
+
+    const malformed = [
+      { ...wellFormed, positions: wellFormed.positions.slice(1) },
+      { ...wellFormed, segment_positions: [{ instruction: 1, spans: [span] }] },
+      { ...wellFormed, segment_positions: [{ instruction: 2, spans: [span, span] }] },
+      { ...wellFormed, segment_positions: [] },
+      {
+        ...wellFormed,
+        positions: [0, 1, 2].map((instruction) => ({
+          instruction,
+          span: { start: span.end, end: span.start },
+        })),
+      },
+      { id: "program-refusal/fabricated", kind: "program_refusal", source: ";", span },
+    ];
+    expect(malformed.map((raw) => programRowFaults(raw).length > 0)).toEqual(
+      malformed.map(() => true),
+    );
+  });
+});
+
+describe("the compile transcript's generator", () => {
+  const generator = fileURLToPath(new URL("../scripts/reference-compile.mjs", import.meta.url));
+  const stampPath = fileURLToPath(
+    new URL("../conformance/transcript/compile-SOURCE.json", import.meta.url),
+  );
+  const digest = (path: string): string =>
+    createHash("sha256").update(readFileSync(path)).digest("hex");
+
+  /** Runs the generator against a fabricated export declaring `version`. */
+  function runAgainst(version: string, tag: string): { status: number | null; stderr: string } {
+    const fakeExport = mkdtempSync(join(tmpdir(), "reference-compile-export-"));
+    try {
+      writeFileSync(join(fakeExport, "mix.exs"), `  @version "${version}"\n`);
+      const run = spawnSync(process.execPath, [generator, "--from", fakeExport, "--tag", tag], {
+        encoding: "utf8",
+      });
+      return { status: run.status, stderr: run.stderr };
+    } finally {
+      rmSync(fakeExport, { recursive: true, force: true });
+    }
+  }
+
+  // Sabotage, each run and reverted: the version comparison in
+  // scripts/reference-compile.mjs made to pass every export turns the first
+  // case red, and the vendored-tag comparison removed turns the second red;
+  // each run stopped at the next check instead, with another message.
+  it("refuses an export whose tag is not the one the SOURCE records name, and writes nothing", () => {
+    const pinned = compileTranscriptStamp.tag;
+    expect(pinned).toBe(corpusStamp.tag);
+    const before = digest(stampPath);
+
+    const otherVersion = runAgainst("0.0.1", pinned);
+    expect([otherVersion.status, otherVersion.stderr]).toEqual([
+      1,
+      `reference-compile: the export's mix.exs declares version 0.0.1, which is not the tag ${pinned}\n`,
+    ]);
+
+    const otherTag = runAgainst("0.0.1", "v0.0.1");
+    expect([otherTag.status, otherTag.stderr]).toEqual([
+      1,
+      `reference-compile: the vendored corpus is at ${pinned}; a transcript at v0.0.1 would not compare with it\n`,
+    ]);
+
+    expect(digest(stampPath)).toBe(before);
   });
 });
 

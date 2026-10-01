@@ -946,7 +946,17 @@ describe("the reference's own answers at the tag", () => {
   // and their instructions are the emitting stage's to match. The rows come
   // from `test/conformance/compile-transcript.ts`, which refuses to hand out a
   // line until the file is the one its SOURCE.json records.
-  const transcript = compileTranscriptLines().map((line) => JSON.parse(line) as TranscriptRow);
+  //
+  // The transcript's program rows are left to `test/reference-compile.test.ts`:
+  // their sources are statement programs, which this grammar - the expression
+  // grammar - is not asked to read, and their refusals are the statement
+  // grammar's. Every expression row is still read here. The kinds kept are
+  // named rather than the program kinds dropped; a kind added later is not
+  // read here until someone decides it should be, and the diff suite there
+  // refuses to load a transcript carrying a kind it does not know.
+  const transcript = compileTranscriptLines()
+    .map((line) => JSON.parse(line) as TranscriptRow)
+    .filter((row) => ["compile", "refusal", "decompile"].includes(row.kind));
 
   // Sabotage: rewording any message, or moving any position, turns this red;
   // dropping the trailing full stop of the statement-keyword message was the

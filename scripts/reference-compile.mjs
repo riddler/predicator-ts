@@ -7,8 +7,9 @@
 // The compile transcript is `conformance/transcript/compile.json`: one row per
 // line, each row carrying a source and what the reference answered for it at
 // that tag - an instruction list it compiled, a refusal with the reference's
-// message, position and span, or a rendering under one combination of
-// `decompile`'s options. `conformance/transcript/compile-SOURCE.json` records
+// message, position and span, a rendering under one combination of
+// `decompile`'s options, or a statement program compiled with its two side
+// tables or refused. `conformance/transcript/compile-SOURCE.json` records
 // where it came from and how. The suite reads those two files and never runs
 // the reference; this script is the only thing that does, and it is run by a
 // person, like the corpus refresh, and its diff is read like any other.
@@ -18,9 +19,10 @@
 // gets its answers from the reference's own corpus generator, which reports an
 // error when a source does not compile. A refusal therefore has no oracle
 // through it, and a rendering is not one of the things that generator derives.
-// This script calls `Predicator.compile/1`, `Predicator.parse/2` and
-// `Predicator.decompile/2` directly instead. Neither script writes the other's
-// files, and the first transcript is not rewritten by anything here.
+// This script calls `Predicator.compile/1`, `Predicator.parse/2`,
+// `Predicator.decompile/2` and `Predicator.compile_program_with_spans/1`
+// directly instead. Neither script writes the other's files, and the first
+// transcript is not rewritten by anything here.
 //
 // WHY AN EXPORT RATHER THAN A CHECKOUT. Running the reference means compiling
 // it, and compiling writes build output into the tree it runs in. An export is
@@ -38,9 +40,13 @@
 // that tag.
 //
 // THE ELIXIR SIDE is `scripts/lib/reference-compile.exs`, which holds the
-// authored sources and the option matrix. It runs under `mise exec` with the
-// export as the working directory, so the toolchain is the one the export's own
-// `mise.toml` pins, and it runs in the `prod` environment, which needs no
+// authored expression sources and the option matrix. The statement programs
+// are authored on this side, in `scripts/lib/program-sources.mjs`, so that the
+// suite can hold the program rows equal to the list that produced them; this
+// script writes that list into the scratch directory as JSON and hands its
+// path to the Elixir side. The Elixir side runs under `mise exec` with the
+// export as the working directory, so the toolchain is the one the export's
+// own `mise.toml` pins, and it runs in the `prod` environment, which needs no
 // dependency fetched. The toolchain it ran on is recorded beside the tag. That
 // side reports every authored source the reference raised on and writes nothing
 // when there is one, so a source outside what the reference answers for stops
@@ -53,6 +59,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PROGRAM_SOURCES } from "./lib/program-sources.mjs";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const conformanceRoot = join(repoRoot, "conformance");
@@ -116,16 +123,28 @@ if (manifest.corpus_hash !== vendored.corpus_hash) {
 
 const scratch = mkdtempSync(join(tmpdir(), "reference-compile-"));
 try {
-  const run = spawnSync("mise", ["exec", "--", "mix", "run", elixirSide, scratch], {
-    cwd: exportRoot,
-    env: { ...process.env, MIX_ENV: "prod" },
-    stdio: ["ignore", "inherit", "inherit"],
-  });
+  const programSourcesPath = join(scratch, "program-sources.json");
+  writeFileSync(programSourcesPath, JSON.stringify(PROGRAM_SOURCES));
+  const run = spawnSync(
+    "mise",
+    ["exec", "--", "mix", "run", elixirSide, programSourcesPath, scratch],
+    {
+      cwd: exportRoot,
+      env: { ...process.env, MIX_ENV: "prod" },
+      stdio: ["ignore", "inherit", "inherit"],
+    },
+  );
   if (run.error !== undefined) die(`cannot run mise: ${run.error.message}`);
   if (run.status !== 0) die(`the reference run exited with status ${run.status}`);
 
   const transcript = readFileSync(join(scratch, "compile.json"));
   const toolchain = JSON.parse(readFileSync(join(scratch, "toolchain.json"), "utf8"));
+  const programRows = toolchain.counts.program + toolchain.counts.program_refusal;
+  if (programRows !== PROGRAM_SOURCES.length) {
+    die(
+      `the reference answered ${programRows} program rows for ${PROGRAM_SOURCES.length} programs`,
+    );
+  }
 
   const source = {
     repo: vendored.repo,

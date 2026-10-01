@@ -1,38 +1,58 @@
 # The reference half of the compile transcript: run inside an export of the
 # reference implementation, never inside this repository.
 #
-#   mix run <this file> <output directory>
+#   mix run <this file> <program sources file> <output directory>
 #
 # `scripts/reference-compile.mjs` is what runs this, with the export as the
 # working directory, and it is the only intended caller: it checks the export
 # against the tag it was asked for and writes what this leaves behind into
-# `conformance/transcript/`. Run by hand, this writes two files into the output
-# directory and nothing else.
+# `conformance/transcript/`. Run by hand, this reads the program sources file,
+# a JSON array of objects each carrying an `id`, a `source` and the `answer` it
+# is authored to draw, and writes two files into the output directory and
+# nothing else.
 #
 # WHAT THIS DOES. For each authored source it calls `Predicator.compile/1` and
 # records the answer, and for each authored source and option combination it
 # calls `Predicator.parse/2` and `Predicator.decompile/2` and records the
-# rendering. Nothing here computes an answer; the reference does. The
-# reference's own canonical writer, `Predicator.Conformance.JSON.encode_lines/1`,
-# writes each row as one line, and `Predicator.Conformance.Values.to_json/1`
-# encodes an instruction list's operands in the same tagged encoding the
-# vendored corpus carries, so a date operand reads as a tagged object here
-# exactly as it does there.
+# rendering; and for each program source it calls
+# `Predicator.compile_program_with_spans/1` and records the program with its
+# two side tables, or the refusal. Nothing here computes an answer; the
+# reference does. The reference's own canonical writer,
+# `Predicator.Conformance.JSON.encode_lines/1`, writes each row as one line,
+# and `Predicator.Conformance.Values.to_json/1` encodes an instruction list's
+# operands in the same tagged encoding the vendored corpus carries, so a date
+# operand reads as a tagged object here exactly as it does there.
 #
 # WHY NOT THE CORPUS GENERATOR. `scripts/lib/reference-transcript.exs` hands
 # its authored cases to `Predicator.Conformance.Generator.generate/1`, which
 # answers an error when a source does not compile; a refusal therefore has no
 # oracle through it, and a rendering has no field there to be written into.
-# This file calls the two entry points directly instead, which is the whole of
-# what it calls.
+# This file calls the entry points directly instead, which is the whole of what
+# it calls.
 #
-# THREE KINDS OF ROW, each authored here. A `compile` row holds a source the
-# reference compiles and the instruction list it answered. A `refusal` row
-# holds a source the reference refuses and the message, position and span it
-# gave, under an authored `reason` label naming which message family the row
-# stands for - the label is this repository's token for the family and is not a
-# word the reference said. A `decompile` row holds a source, one combination of
+# FIVE KINDS OF ROW. The first three are authored here. A `compile` row holds
+# a source the reference compiles and the instruction list it answered. A
+# `refusal` row holds a source the reference refuses and the message, position
+# and span it gave, under an authored `reason` label naming which message
+# family the row stands for - the label is this repository's token for the
+# family and is not a word the reference said. A `decompile` row holds a source, one combination of
 # the `parentheses` and `spacing` options, and the text the reference rendered.
+#
+# The other two are authored in `scripts/lib/program-sources.mjs` and arrive
+# through the program sources file, because the suite holds these rows equal to
+# that list and can only do so for a list it can read. A `program` row holds a
+# statement program the reference compiles: the instruction list, the
+# `positions` table and the `segment_positions` table of
+# `Predicator.Compiled`, under the struct's own field names. Both tables are
+# written as lists in instruction order rather than as objects keyed by index,
+# so that the canonical writer's key sort cannot reorder them and a missing
+# index stays visible. A `positions` entry is an instruction index and the span
+# of the node that emitted it; a `segment_positions` entry is the index of a
+# `store` and one span per segment of the location it writes. A
+# `program_refusal` row holds a program the reference refuses and the message,
+# position and span it gave. It carries no `reason` label: the statement
+# grammar's refusals have no member in this package's reason union yet, and
+# naming one is not this file's to do.
 #
 # WHAT HAPPENS WHEN THE REFERENCE RAISES. `Predicator.compile/1` is not total:
 # a decimal literal naming a magnitude outside the finite double range makes it
@@ -47,10 +67,13 @@
 # stack trace partway through it, and that no row invents an answer the
 # reference did not give.
 #
-# Every example stays inside the two canonical domains: card processing, and a
-# signup wizard.
+# The expression examples stay inside the two canonical domains: card
+# processing, and a signup wizard. The program examples are in the library
+# world, as `scripts/lib/program-sources.mjs` says.
 
-[output_dir] = System.argv()
+[program_sources_path, output_dir] = System.argv()
+
+program_sources = program_sources_path |> File.read!() |> JSON.decode!()
 
 alias Predicator.Conformance.JSON, as: CanonicalJSON
 alias Predicator.Conformance.Values
@@ -288,6 +311,10 @@ end
 
 encode_position = fn {line, column} -> %{"line" => line, "column" => column} end
 
+encode_span = fn {start_position, end_position} ->
+  %{"start" => encode_position.(start_position), "end" => encode_position.(end_position)}
+end
+
 encode_instructions = fn instructions ->
   case Values.to_json(instructions) do
     {:ok, encoded} -> {:ok, encoded}
@@ -386,7 +413,63 @@ decompile_rows =
     end
   end
 
-results = compile_rows ++ refusal_rows ++ decompile_rows
+program_rows =
+  for %{"id" => id, "source" => source, "answer" => answer} <- program_sources do
+    case {answer, attempt.(fn -> Predicator.compile_program_with_spans(source) end)} do
+      {"program", {:answered, {:ok, compiled}}} ->
+        case encode_instructions.(compiled.instructions) do
+          {:ok, encoded} ->
+            positions =
+              for {index, span} <- Enum.sort(compiled.positions) do
+                %{"instruction" => index, "span" => encode_span.(span)}
+              end
+
+            segment_positions =
+              for {index, spans} <- Enum.sort(compiled.segment_positions) do
+                %{"instruction" => index, "spans" => Enum.map(spans, encode_span)}
+              end
+
+            {:ok,
+             %{
+               "id" => id,
+               "kind" => "program",
+               "source" => source,
+               "instructions" => encoded,
+               "positions" => positions,
+               "segment_positions" => segment_positions
+             }}
+
+          {:error, problem} ->
+            {:problem, id, problem}
+        end
+
+      {"refusal", {:answered, {:error, error}}} ->
+        {:ok,
+         %{
+           "id" => id,
+           "kind" => "program_refusal",
+           "source" => source,
+           "message" => error.message,
+           "position" => encode_position.(error.position),
+           "span" => encode_span.(error.span)
+         }}
+
+      {"program", {:answered, {:error, error}}} ->
+        {:problem, id,
+         "the reference refused a program authored as one it compiles: #{error.message}"}
+
+      {"refusal", {:answered, {:ok, _compiled}}} ->
+        {:problem, id, "the reference compiled a program authored as one it refuses"}
+
+      {_answer, {:raised, struct_name, message}} ->
+        {:problem, id, "the reference raised #{struct_name}: #{message}"}
+
+      {answer, _answered} ->
+        {:problem, id, "the authored answer #{inspect(answer)} is neither program nor refusal"}
+    end
+  end
+
+results = compile_rows ++ refusal_rows ++ decompile_rows ++ program_rows
 
 problems = for {:problem, id, problem} <- results, do: {id, problem}
 
@@ -409,6 +492,8 @@ counts = %{
   "compile" => length(compile_sources),
   "refusal" => length(refusal_sources),
   "decompile" => length(decompile_sources) * length(parentheses_options) * length(spacing_options),
+  "program" => Enum.count(program_sources, &(&1["answer"] == "program")),
+  "program_refusal" => Enum.count(program_sources, &(&1["answer"] == "refusal")),
   "rows" => length(rows)
 }
 
