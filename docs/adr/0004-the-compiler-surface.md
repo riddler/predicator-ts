@@ -1352,8 +1352,8 @@ bare expression, the separator, `if`/`else` and `else if`, and `while` - and
 that its evidence is a set of program rows in the compile transcript, taken
 from the reference at the tag (both ruled by the operator, 2026-10-01). This
 entry is appended and removes no line above. `src/` is cited as the change
-carrying this entry leaves it, on a branch cut from `6149371`; the transcript
-is cited as it stands on main at `6149371`, unchanged by this entry.
+carrying this entry leaves it; the transcript is cited as it stands on main at
+`6149371`, unchanged by this entry.
 
 ### What this amends
 
