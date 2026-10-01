@@ -39,6 +39,7 @@ export { compile, compileWithPositions, compileWithSpans } from "./compile.js";
 export type { UnboundPolicy } from "./context.js";
 export type { Ast, DecompileOptions } from "./decompile.js";
 export { decompile } from "./decompile.js";
+export { durationToMilliseconds } from "./duration-units.js";
 export type { ParseReason, Position, PredicatorError, Reason, Span } from "./errors.js";
 export {
   EvaluationError,

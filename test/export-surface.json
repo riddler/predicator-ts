@@ -40,6 +40,7 @@
     "compileWithPositions",
     "compileWithSpans",
     "decompile",
+    "durationToMilliseconds",
     "evaluate",
     "execute",
     "executeValue",
