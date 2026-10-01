@@ -1341,3 +1341,276 @@ falsified are where it says, and `decompile` answered a bare string at
 `64a6e9d`. Run in a detached export of predicator-ex `v9.4.2` under Elixir
 1.18.3 and OTP 27, the reference compiled a source of three hundred nested
 parentheses and rendered its tree, as the amendment says.
+
+## Amendment: the statement grammar compiles, through three program entry points, with the transcript's program rows as its evidence (2026-10-01)
+
+Status: proposed (2026-10-01)
+
+Recorded for `pts-xmz6`, under two rulings: that the grammar is the
+reference's full statement grammar - assignment to every location shape, a
+bare expression, the separator, `if`/`else` and `else if`, and `while` - and
+that its evidence is a set of program rows in the compile transcript, taken
+from the reference at the tag (both ruled by the operator, 2026-10-01). This
+entry is appended and removes no line above. `src/` is cited as the change
+carrying this entry leaves it, on a branch cut from `6149371`; the transcript
+is cited as it stands on main at `6149371`, unchanged by this entry.
+
+### What this amends
+
+The record's section headed "The expression grammar only" put the statement
+grammar out of scope until it had evidence, and said why: "A statement
+compiler written now would be written against no conformance evidence". The
+evidence now exists. `conformance/transcript/compile.json` carries a
+`program` row for each statement program the authored list in
+`scripts/lib/program-sources.mjs` expects the reference to compile, with the
+instruction list and both of the reference's side tables, and a
+`program_refusal` row for each one it expects refused, with the message,
+position and span; the rows were written by running
+`Predicator.compile_program_with_spans/1` in a detached export of
+predicator-ex at `v9.4.2`. So the sentence "The statement grammar -
+assignment, the statement separator, `if`/`else` and the loop keyword - is out
+of scope for this record and arrives in a later release with its own
+evidence." is superseded by this entry, which is that release's record. What
+the same section says of `compile` itself still holds: `compile` compiles the
+expression grammar and nothing else, and refuses statement syntax with
+`statement_keyword` and `assignment_in_expression` exactly as before.
+
+Four more statements above are superseded, each only as far as it says.
+
+- In "The closed reason union", the paragraph headed "There is no
+  unassignable-location reason." Through `compile` its run still holds -
+  `user.age = 30` answers `assignment_in_expression` at the `=` - but the
+  union now carries `unassignable_location`, answered by the program entry
+  points.
+- In the same section, the sentence closing the paragraph on unreachable
+  families, "Its statement and block messages belong to the statement
+  grammar." The statement grammar is now in the surface, and its messages are
+  mapped to members below.
+- In "Typespecs", the `ParseReason` union, which gains three members below.
+- In "Consequences", the paragraph opening "Leaving the statement grammar out
+  means the package compiles a strict subset of what the reference compiles".
+  The program entry points now compile what the reference's
+  `Predicator.compile_program/1` compiles; the paragraph's account of why the
+  two keyword refusals are in the union still holds of `compile`.
+
+One sentence nearby is NOT superseded and is named so a reader does not go
+looking. "The three entry points take a source string" says that "A
+program-mode `execute(source)` that compiles the statement grammar arrives
+with that grammar, not here." This entry brings the grammar and leaves
+`evaluate`, `execute` and `executeValue` exactly as they were: each still
+compiles a source string as an expression. Switching the two run entry points
+to program mode is a later change with its own record.
+
+### The decision
+
+**Three entry points compile a statement program from source text:
+`compileProgram`, `compileProgramWithPositions` and
+`compileProgramWithSpans`.** Each is the program-shaped counterpart of an
+expression entry point, as the reference's `compile_program/1`,
+`compile_program_with_positions/1` and `compile_program_with_spans/1` are of
+its own, and each answers the result union its counterpart answers, a refusal
+being a `ParseError` value on the failing arm and never a throw.
+
+The grammar is the reference's `parse_program` at the tag, read in
+`parseProgram` in `src/parser.ts`:
+
+- a program is one or more statements separated by `;`, with one trailing
+  `;` allowed, so an empty source, a lone `;` and a doubled `;` anywhere are
+  refusals;
+- a statement is an `if`, a `while`, an assignment, or a bare expression;
+- an assignment is a location, `=`, and an expression, where a location is an
+  identifier followed by any run of property and bracket accesses, a
+  parenthesis around any part of it changing nothing; the left side is
+  probed as an additive expression and refused at the `=` when it is not a
+  location;
+- `if` takes an expression and a block, then optionally `else` and either a
+  block or another `if`, an `else if` being an else block that holds one
+  `if`; `while` takes an expression and a block;
+- a block is `{`, an optional statement sequence, `}`, and opens no scope;
+- a statement ending in `}` needs no `;` before the next statement.
+
+The emission is the reference's instructions visitor at the tag, read in
+`visitStatement` and `visitAssignment` in `src/emitter.ts`. An assignment
+pushes its location's segments root first - a name as a string literal, a
+bracket's key as whatever its expression compiles to - then its value, then
+`["store", n]` with `n` the number of segments. A bare expression ends in
+`["pop"]`. `if c { A }` is `c`, `["pop_jump_if_falsy", len(A) + 1]`, `A`;
+with an else block `B` it is `c`, `["pop_jump_if_falsy", len(A) + 2]`, `A`,
+`["jump", len(B) + 1]`, `B`; `while c { A }` is `c`,
+`["pop_jump_if_falsy", len(A) + 2]`, `A`,
+`["jump_backward", len(c) + len(A) + 1]`. Every statement leaves the stack as
+it found it, so statements are emitted one after another.
+
+The side tables follow the reference's annotations, both built in one walk as
+the expression tables are:
+
+| instruction | position | span |
+|---|---|---|
+| a segment's string literal | the identifier, or the property name | the identifier, or the access from the location's root through the property |
+| a bracket key's instructions | the key expression's own, as in any expression | the key expression's own |
+| `store` | the location's root | the whole assignment |
+| `pop` | the expression's own | the expression's own |
+| the jumps of an `if` or a `while` | the keyword | the keyword through the last closing brace |
+
+Each `store` also carries one annotation per segment, root first: the root
+identifier's, each property access node's, and each bracket key's.
+
+**Evidence.** Every `program` row is reproduced exactly by
+`compileProgramWithSpans` - the instruction list compared as values, the
+`positions` table and the `segment_positions` table entry by entry - and
+every `program_refusal` row by `compileProgram`, the message verbatim with its
+position and span; `test/reference-compile.test.ts` reads the rows through
+`compileTranscriptLines` and holds each to that. The rows carry span tables
+only, because the reference was run in its span mode to write them, so the
+point tables were checked by running `Predicator.compile_program_with_positions/1`
+in the same export on 2026-10-01 over every program the rows hold; every
+table agreed, and `test/compile-program.test.ts` pins a selection of them, each
+quoted as the run printed it.
+
+### The closed reason union
+
+The program grammar meets eight message families. Five are families the
+union already names, and three are new.
+
+Of the five, three are reached by the expression production inside a
+statement, with the expression grammar's own message: `expected_primary` (an
+empty statement, a missing condition, a block that ends with the source),
+`statement_keyword` (`status = if`) and `assignment_in_expression` (a second
+`=` in `renewals = fines = 0`, or one in a condition). The other two are the
+statement grammar's own wording of a family the union already names, and are
+mapped to it by the rule the union already uses for `unterminated_string`,
+whose single-quoted wording names the quote and is the same family: a message
+that is one template up to the token and the construct it names is one
+family.
+
+| `reason` | message, as run at the tag |
+|---|---|
+| `trailing_token` | `Unexpected token identifier 'fines' after statement` |
+| `expected_close_brace` | `Expected '}' to close the block but found end of input` |
+
+The three members this entry adds name families the union lacked. Each is the
+reference's message family, and each message is the reference's verbatim:
+
+| `reason` | message, as run at the tag |
+|---|---|
+| `unexpected_else` | `Unexpected 'else' - an 'else' block must follow an 'if' block.` |
+| `unassignable_location` | `Left side of '=' must be an assignable location - an identifier, a property access, or a bracket access.` |
+| `expected_open_brace` | `Expected '{' to open a block but found identifier 'status'` |
+
+Each message above is quoted from a `program_refusal` row:
+`after-statement/missing-separator`, `unterminated-block/end-of-input`,
+`stray-else/leading`, `not-a-location/literal` and `missing-block/if-token`,
+under the prefix `program-refusal/`. A row carries no reason, because the
+reason is this package's token and the reference has none; the mapping is
+this entry's, and `test/compile-program.test.ts` pins one source per family to
+its member. Only the three program entry points answer the three new members.
+
+### The depth bound reaches the statement grammar
+
+The source depth bound the amendment on nesting depth declares applies to a
+program as it does to an expression, and with the same reason and message. A
+block's statements are one level deeper than the block in the grammar
+(`descend` in `src/parser.ts`), and an `if` or a `while` is one level deeper
+than the sequence that holds it in the emission (`deeper` in
+`src/emitter.ts`), so blocks nested inside one another are bounded as any
+other nesting is. A statement sequence is read and emitted in a loop, so its
+length costs no depth, as a chain's does not. An `else if` chain is written
+flat and is nesting in the tree, an else block holding an `if`, and it counts
+a level per link in both walks; that is the one flat construct of the program
+grammar whose length is bounded: a chain is refused a few links short of two
+hundred and fifty-six, since each link's own block and condition sit a level
+below it. The message still says "Expression nests past the depth
+limit"; it is this package's own message, and a program is held to it
+unchanged rather than given a second message for the same family.
+
+### Typespecs
+
+The union in the Typespecs section above gains three members, appended:
+
+```typescript
+export type ParseReason =
+  // the members above and those the amendments above add, unchanged, and:
+  | "unexpected_else"
+  | "unassignable_location"
+  | "expected_open_brace";
+```
+
+Three functions join the main entry point:
+
+```typescript
+export declare function compileProgram(source: string): CompileResult;
+
+export declare function compileProgramWithPositions(source: string):
+  | {
+      readonly ok: true;
+      readonly instructions: Program;
+      readonly positions: ReadonlyMap<number, Position>;
+      readonly segmentPositions: ReadonlyMap<number, readonly Position[]>;
+    }
+  | { readonly ok: false; readonly error: ParseError };
+
+export declare function compileProgramWithSpans(source: string):
+  | {
+      readonly ok: true;
+      readonly instructions: Program;
+      readonly spans: ReadonlyMap<number, Span>;
+      readonly segmentSpans: ReadonlyMap<number, readonly Span[]>;
+    }
+  | { readonly ok: false; readonly error: ParseError };
+```
+
+The two located results are the expression results with one more member on
+the succeeding arm, so a value of each is a value of
+`CompileWithPositionsResult` or `CompileWithSpansResult`, and a caller that
+handles the expression entry point's answer handles this one unchanged. The
+member is the reference's `segment_positions` table, keyed by the index of
+each `store` and holding one annotation per segment of the location it
+writes. It is a separate member rather than folded into `positions` for the
+reason the reference gives for its own field: the positions table's meaning
+does not change. It is named for the kind of annotation it holds, as the two
+expression tables are, rather than carrying one name whose type depends on
+the function that produced it - the choice "Two envelopes, neither
+serialized" made above. A program that assigns nothing answers an empty one.
+No name is exported for either result type, and `ParseError`, `Program`,
+`Position` and `Span` are the types already exported.
+
+### What this does not decide
+
+It does not change what any existing function answers. `compile`,
+`compileWithPositions`, `compileWithSpans`, `parse`, `evaluate`, `execute` and
+`executeValue` answer exactly what they answered before, and every expression
+row of the transcript is diffed as it was.
+
+It does not render a program back. `decompile` takes the expression tree
+`parse` answers, and no entry point answers a program's tree.
+
+It does not move the conformance registry's compiler claim. The corpus still
+carries no statement source - every case in `tier-6.json`, `tier-8.json`
+and `tier-9.json` has a null `source` - so under ADR-0003's case-set rule the compiler surface's case
+set is unchanged, and the transcript, not the corpus, is this grammar's
+evidence. `conformance/registry.json` is unchanged.
+
+It does not decide anything about a location API, a way for a host to name a
+location in a context outside a program.
+
+### Consequences
+
+A host can now compile the statement programs the evaluator already runs,
+from the same source text the reference compiles, and a statement program it
+compiled elsewhere and stored is no longer the only way to run one.
+
+The union is a compatibility surface and it gained three members, exactly as
+the Consequences of the amendments above say of the members they added. A
+caller that switches exhaustively on `ParseReason` is told by the typechecker,
+and a caller that never calls a program entry point never receives one of
+the three.
+
+The verbatim-message rule now ties three more messages, and the two
+statement-grammar wordings of existing families, to the reference's text; a
+message reworded in predicator-ex is a diff here at the next refresh of the
+transcript, as it is for the expression grammar's.
+
+An `else if` chain is bounded where the reference's is not. That is the
+divergence the amendment on nesting depth declares for nesting in general,
+reached through the one flat construct of the program grammar the tree
+nests; no program in the transcript comes near it.

@@ -35,13 +35,18 @@
 // A PROGRAM ROW and a PROGRAM REFUSAL ROW hold what the reference's statement
 // compiler answered for one of the programs `scripts/lib/program-sources.mjs`
 // lists: an instruction list with its `positions` and `segment_positions`
-// tables, or a refusal with its message, position and span. This package does
-// not compile statements yet, so nothing here diffs them against an answer of
-// its own; what is asserted is that every row is well formed and that the rows
-// are exactly the list, in its order, each under the kind it was authored to
-// draw. They are the oracle the statement compiler is built against, and an
-// oracle that has quietly lost a row, gained one, or carries a table that does
-// not fit its own program is worse than none.
+// tables, or a refusal with its message, position and span. Each is diffed
+// against `compileProgram` and `compileProgramWithSpans` in full: the
+// instruction list compared as values, both tables entry by entry and index
+// by index, and a refusal's message verbatim with its position and span. The
+// rows are also held well formed, and exactly the list, in its order, each
+// under the kind it was authored to draw: they are the oracle the statement
+// compiler is built against, and an oracle that has quietly lost a row,
+// gained one, or carries a table that does not fit its own program is worse
+// than none. A program refusal row carries no reason label, so a refusal's
+// reason is asserted to be a member of the closed union, as a refusal row's
+// is, and which member each message family maps to is pinned where the
+// grammar is tested.
 //
 // DIVERGENCES ARE DECLARED, NEVER NARROWED. `DECLARED`, in
 // `test/conformance/compile-divergences.ts`, holds both answers for any row
@@ -78,7 +83,14 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { PROGRAM_SOURCES } from "../scripts/lib/program-sources.mjs";
 import type { DecompileOptions, ParseReason, Position, Span } from "../src/index.js";
-import { compile, decompile, parse } from "../src/index.js";
+import {
+  compile,
+  compileProgram,
+  compileProgramWithPositions,
+  compileProgramWithSpans,
+  decompile,
+  parse,
+} from "../src/index.js";
 import { SOURCE_DEPTH_LIMIT } from "../src/nesting.js";
 import { decodeTagged } from "../src/tagged.js";
 import type { Value } from "../src/values.js";
@@ -122,6 +134,9 @@ const PARSE_REASONS = [
   "expected_duration",
   "duration_fraction",
   "duration_unit_twice",
+  "unexpected_else",
+  "unassignable_location",
+  "expected_open_brace",
   "number_out_of_range",
   "nesting_depth_exceeded",
 ] as const satisfies readonly ParseReason[];
@@ -668,5 +683,114 @@ describe("what the reference renders, this package renders", () => {
     expect(row.rendered, `${id}: the reference's rendering moved`).toBe(declared.reference);
     expect(ours, `${id}: this package's rendering moved`).toBe(declared.ours);
     expect(ours === row.rendered, `${id}: the two now agree`).toBe(false);
+  });
+});
+
+/** A table entry as the transcript writes it, from a map this package answers. */
+function spanEntries(table: ReadonlyMap<number, Span>): readonly PositionEntry[] {
+  return [...table.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([instruction, span]) => ({ instruction, span: plainSpan(span) }));
+}
+
+function segmentEntries(table: ReadonlyMap<number, readonly Span[]>): readonly SegmentEntry[] {
+  return [...table.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([instruction, spans]) => ({ instruction, spans: spans.map(plainSpan) }));
+}
+
+/** A span copied field by field, so a key order or a frozen object cannot matter. */
+function plainSpan(span: Span): Span {
+  return {
+    start: { line: span.start.line, column: span.start.column },
+    end: { line: span.end.line, column: span.end.column },
+  };
+}
+
+const COMPILED_PROGRAM_ROWS = PROGRAM_ROWS.filter(
+  (row): row is ProgramRow => row.kind === "program",
+);
+const REFUSED_PROGRAM_ROWS = PROGRAM_ROWS.filter(
+  (row): row is ProgramRefusalRow => row.kind === "program_refusal",
+);
+
+describe("what the reference compiles as a program, this package compiles", () => {
+  // Sabotage, each run and reverted: the `jump` that ends a then block dropped
+  // in `visitStatement` in src/emitter.ts turns red every row whose `if` has an
+  // `else`; the `pop` after a bare expression statement dropped turns red every
+  // row holding one; the `while` back edge dropped turns red every row holding
+  // a loop; a `store` spanned from the `=` rather than from the location turns
+  // red every row that assigns; a bracket segment annotated with the access
+  // node rather than its key turns the bracket rows red; and the separator
+  // before a closing brace no longer accepted as a trailing one, in
+  // `statementSequence` in src/parser.ts, turns the block-with-separators row
+  // red. Every one failed on an assertion.
+  it.each(COMPILED_PROGRAM_ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
+    const plain = compileProgram(row.source);
+    const spanned = compileProgramWithSpans(row.source);
+    const pointed = compileProgramWithPositions(row.source);
+    expect(
+      [plain.ok, spanned.ok, pointed.ok],
+      `${id}: the reference compiled this program and this package refused it`,
+    ).toEqual([true, true, true]);
+    if (!plain.ok || !spanned.ok || !pointed.ok) return;
+
+    const ours: Value = plain.instructions.map((instruction) => [...instruction]);
+    expect(
+      sameValue(ours, row.instructions),
+      `${id}: this package and the reference emit different programs - ${JSON.stringify(ours)}`,
+    ).toBe(true);
+    // The three entry points run one compilation, so their lists are one list.
+    expect(spanned.instructions).toEqual(plain.instructions);
+    expect(pointed.instructions).toEqual(plain.instructions);
+
+    expect(spanEntries(spanned.spans), `${id}: the spans table is not the reference's`).toEqual(
+      row.positions,
+    );
+    expect(
+      segmentEntries(spanned.segmentSpans),
+      `${id}: the segment table is not the reference's`,
+    ).toEqual(row.segment_positions);
+    // The point tables have no row to diff against; they are keyed exactly as
+    // the span tables are, which is what one walk building all four promises.
+    expect([...pointed.positions.keys()]).toEqual([...spanned.spans.keys()]);
+    expect(
+      [...pointed.segmentPositions.entries()].map(([index, points]) => [index, points.length]),
+    ).toEqual([...spanned.segmentSpans.entries()].map(([index, spans]) => [index, spans.length]));
+  });
+});
+
+describe("what the reference refuses as a program, this package refuses the same way", () => {
+  // Sabotage, each run and reverted: the stray-else message's wording changed
+  // in src/parser.ts turns the message assertion red on the three stray-else
+  // rows, and the unassignable-location message's wording changed there turns
+  // it red on the three not-a-location rows.
+  it.each(REFUSED_PROGRAM_ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
+    const compiled = compileProgram(row.source);
+    expect(
+      compiled.ok,
+      `${id}: the reference refused this program and this package compiled it`,
+    ).toBe(false);
+    if (compiled.ok) return;
+    const error = compiled.error;
+    expect(PARSE_REASONS, `${id}: the reason is outside the closed union`).toContain(error.reason);
+    expect(error.message, `${id}: the message is not the reference's`).toBe(row.message);
+    expect(
+      samePosition(error.position, row.position),
+      `${id}: the position is not the reference's - ${JSON.stringify(error.position)} against ${JSON.stringify(row.position)}`,
+    ).toBe(true);
+    expect(
+      sameSpan(error.span, row.span),
+      `${id}: the span is not the reference's - ${JSON.stringify(error.span)} against ${JSON.stringify(row.span)}`,
+    ).toBe(true);
+    // The other two entry points refuse with the same value.
+    for (const other of [
+      compileProgramWithPositions(row.source),
+      compileProgramWithSpans(row.source),
+    ]) {
+      expect(other.ok ? null : other.error, `${id}: the entry points refuse differently`).toEqual(
+        error,
+      );
+    }
   });
 });

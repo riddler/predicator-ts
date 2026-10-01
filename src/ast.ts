@@ -1,5 +1,6 @@
 /**
- * The syntax tree the expression grammar produces.
+ * The syntax tree the expression grammar produces, and the statement nodes the
+ * program grammar builds over it, at the end of this module.
  *
  * Every node carries two pieces of source metadata rather than one. The
  * reference implementation carries a single slot holding either a position or
@@ -338,3 +339,74 @@ export type Node =
   | CastNode
   | DurationNode
   | RelativeDateNode;
+
+/**
+ * An assignment: a location, an `=`, and the expression whose value is
+ * written there.
+ *
+ * The target is an ordinary node of the expression grammar, restricted to the
+ * three location shapes - an identifier, optionally followed by any run of
+ * property and bracket accesses - and the grammar refuses any other left side
+ * before it builds this node. Its `position` is the `=` and its `span` runs
+ * from the location's start to the value's end, which is what the reference
+ * gives the same node.
+ */
+export interface AssignmentStatement extends Located {
+  readonly kind: "assignment";
+  readonly target: Node;
+  readonly value: Node;
+}
+
+/**
+ * A statement sequence inside braces. It opens no scope: a block is the
+ * program production terminated by a closing brace rather than by the end of
+ * the source.
+ *
+ * Its `position` is the opening brace and its `span` runs through the closing
+ * one. The block an `else if` stands for has no braces of its own, and borrows
+ * both from the `if` it holds.
+ */
+export interface Block extends Located {
+  readonly kind: "block";
+  readonly statements: readonly Statement[];
+}
+
+/**
+ * `if` with an optional `else`. An `else if` is an `else` whose block holds
+ * one nested `if`, so a chain is a nesting rather than a list.
+ *
+ * Its `position` is the `if` keyword and its `span` runs through the closing
+ * brace of the last block present.
+ */
+export interface IfStatement extends Located {
+  readonly kind: "if";
+  readonly condition: Node;
+  readonly consequent: Block;
+  readonly alternative: Block | null;
+}
+
+/** `while` and its body, positioned and spanned the way an `if` is. */
+export interface WhileStatement extends Located {
+  readonly kind: "while";
+  readonly condition: Node;
+  readonly body: Block;
+}
+
+/**
+ * One statement of a program: an assignment, one of the two control-flow
+ * statements, or a bare expression, which is any node of the expression
+ * grammar standing alone.
+ */
+export type Statement = AssignmentStatement | IfStatement | WhileStatement | Node;
+
+/**
+ * A statement program: one or more statements, never none.
+ *
+ * Its `position` is its first token and its `span` runs from its first
+ * statement's start to its last statement's end, so a trailing separator is
+ * outside it.
+ */
+export interface ProgramNode extends Located {
+  readonly kind: "program";
+  readonly statements: readonly Statement[];
+}

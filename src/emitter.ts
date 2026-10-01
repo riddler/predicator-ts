@@ -61,11 +61,16 @@
 
 import type {
   ArithmeticOperator,
+  AssignmentStatement,
+  Block,
   ComparisonOperator,
   DurationNode,
+  Located,
   MembershipOperator,
   Node,
+  ProgramNode,
   RelativeDirection,
+  Statement,
   UnaryOperator,
 } from "./ast.js";
 import { ParseError, type Position, type Span } from "./errors.js";
@@ -86,11 +91,34 @@ export type EmitResult =
     }
   | { readonly ok: false; readonly error: ParseError };
 
-/** One instruction with the position and the span of the node that emitted it. */
+/**
+ * A statement program with both side tables over it and the two segment
+ * tables beside them, or the one refusal that stopped it.
+ *
+ * A segment table is keyed by the index of a `store` and holds one entry per
+ * segment of the location that store writes, root first: the position, or
+ * the span, of the node that produced the segment's value.
+ */
+export type ProgramEmitResult =
+  | {
+      readonly ok: true;
+      readonly instructions: Program;
+      readonly positions: ReadonlyMap<number, Position>;
+      readonly spans: ReadonlyMap<number, Span>;
+      readonly segmentPositions: ReadonlyMap<number, readonly Position[]>;
+      readonly segmentSpans: ReadonlyMap<number, readonly Span[]>;
+    }
+  | { readonly ok: false; readonly error: ParseError };
+
+/**
+ * One instruction with the position and the span of the node that emitted it,
+ * and, on a `store`, the annotation of each segment of the location it writes.
+ */
 interface Annotated {
   readonly instruction: Instruction;
   readonly position: Position;
   readonly span: Span;
+  readonly segments?: readonly Located[];
 }
 
 /**
@@ -118,28 +146,79 @@ class EmitSignal extends Error {
  * there is one list and the tables are built beside it.
  */
 export function emit(ast: Node): EmitResult {
-  let annotated: readonly Annotated[];
+  const walked = walk(() => visit(ast));
+  if (!walked.ok) return walked;
+  const { instructions, positions, spans } = tables(walked.annotated);
+  return { ok: true, instructions, positions, spans };
+}
+
+/**
+ * Compiles a statement program into a program, its two side tables and its
+ * two segment tables.
+ *
+ * Every statement leaves the stack as it found it: an assignment ends in the
+ * `store` that consumes its value, a bare expression in a `pop`, and the two
+ * control-flow statements consume their condition in the jump that tests it.
+ * So the statements are emitted one after another, and the instruction list
+ * has no statement boundary of its own.
+ */
+export function emitProgram(program: ProgramNode): ProgramEmitResult {
+  const walked = walk(() => visitStatements(program.statements));
+  if (!walked.ok) return walked;
+  return { ok: true, ...tables(walked.annotated) };
+}
+
+/** Runs one walk from a depth of zero, answering its refusal as a value. */
+function walk(
+  run: () => readonly Annotated[],
+):
+  | { readonly ok: true; readonly annotated: readonly Annotated[] }
+  | { readonly ok: false; readonly error: ParseError } {
   depth = 0;
   try {
-    annotated = visit(ast);
+    return { ok: true, annotated: run() };
   } catch (signal) {
     if (signal instanceof EmitSignal) return { ok: false, error: signal.error };
     throw signal;
   }
+}
 
+/**
+ * The instruction list and the four tables, read off one annotated list in
+ * one pass, so no two of them can disagree about an index.
+ */
+function tables(annotated: readonly Annotated[]): {
+  readonly instructions: Program;
+  readonly positions: ReadonlyMap<number, Position>;
+  readonly spans: ReadonlyMap<number, Span>;
+  readonly segmentPositions: ReadonlyMap<number, readonly Position[]>;
+  readonly segmentSpans: ReadonlyMap<number, readonly Span[]>;
+} {
   const positions = new Map<number, Position>();
   const spans = new Map<number, Span>();
+  const segmentPositions = new Map<number, readonly Position[]>();
+  const segmentSpans = new Map<number, readonly Span[]>();
   const instructions: Instruction[] = [];
   for (const [index, entry] of annotated.entries()) {
     instructions.push(entry.instruction);
     positions.set(index, entry.position);
     spans.set(index, entry.span);
+    if (entry.segments !== undefined) {
+      segmentPositions.set(
+        index,
+        entry.segments.map((segment) => segment.position),
+      );
+      segmentSpans.set(
+        index,
+        entry.segments.map((segment) => segment.span),
+      );
+    }
   }
-  return { ok: true, instructions, positions, spans };
+  return { instructions, positions, spans, segmentPositions, segmentSpans };
 }
 
 /** One instruction, annotated with the node that emitted it. */
-function own(node: Node, instruction: Instruction): Annotated {
+function own(node: Located, instruction: Instruction): Annotated {
   return { instruction, position: node.position, span: node.span };
 }
 
@@ -168,6 +247,14 @@ let depth = 0;
  * reaches this test.
  */
 function visit(node: Node): readonly Annotated[] {
+  return deeper(node, () => visitNode(node));
+}
+
+/**
+ * Runs one step of the walk a level deeper than its caller, or refuses at the
+ * node it was about to enter because the tree is already at the limit.
+ */
+function deeper(node: Located, step: () => readonly Annotated[]): readonly Annotated[] {
   if (depth >= SOURCE_DEPTH_LIMIT) {
     throw new EmitSignal(
       new ParseError(
@@ -180,10 +267,136 @@ function visit(node: Node): readonly Annotated[] {
   }
   depth += 1;
   try {
-    return visitNode(node);
+    return step();
   } finally {
     depth -= 1;
   }
+}
+
+/**
+ * A statement sequence, one statement after another, at the level of the
+ * program or the block that holds it. A sequence is written flat, and is
+ * walked in a loop.
+ */
+function visitStatements(statements: readonly Statement[]): readonly Annotated[] {
+  const emitted: Annotated[] = [];
+  for (const statement of statements) append(emitted, visitStatement(statement));
+  return emitted;
+}
+
+/**
+ * One statement.
+ *
+ * The two control-flow statements are each a level deeper than the sequence
+ * that holds them, so blocks nested inside one another are bounded as any
+ * other nesting is; an `else if` is a block holding an `if`, and counts the
+ * same way. Their jumps are relative, counted from the jump itself, and each
+ * carries the statement's own position and span:
+ *
+ * - `if c { A }` is `c`, a falsy jump past `A`, then `A`;
+ * - `if c { A } else { B }` is `c`, a falsy jump past `A` and the jump that
+ *   ends it, `A`, a jump past `B`, then `B`;
+ * - `while c { A }` is `c`, a falsy jump past `A` and the back edge, `A`, then
+ *   a backward jump to the first instruction of `c`.
+ *
+ * A bare expression is the expression and a `pop` carrying its node's own
+ * position and span.
+ */
+function visitStatement(statement: Statement): readonly Annotated[] {
+  switch (statement.kind) {
+    case "assignment":
+      return visitAssignment(statement);
+
+    case "if":
+      return deeper(statement, () => {
+        const emitted: Annotated[] = [];
+        append(emitted, visit(statement.condition));
+        const then = visitBlock(statement.consequent);
+        if (statement.alternative === null) {
+          emitted.push(own(statement, ["pop_jump_if_falsy", then.length + 1]));
+          append(emitted, then);
+          return emitted;
+        }
+        const otherwise = visitBlock(statement.alternative);
+        emitted.push(own(statement, ["pop_jump_if_falsy", then.length + 2]));
+        append(emitted, then);
+        emitted.push(own(statement, ["jump", otherwise.length + 1]));
+        append(emitted, otherwise);
+        return emitted;
+      });
+
+    case "while":
+      return deeper(statement, () => {
+        const condition = visit(statement.condition);
+        const body = visitBlock(statement.body);
+        const emitted: Annotated[] = [];
+        append(emitted, condition);
+        emitted.push(own(statement, ["pop_jump_if_falsy", body.length + 2]));
+        append(emitted, body);
+        emitted.push(own(statement, ["jump_backward", condition.length + body.length + 1]));
+        return emitted;
+      });
+
+    default: {
+      const emitted: Annotated[] = [];
+      append(emitted, visit(statement));
+      emitted.push(own(statement, ["pop"]));
+      return emitted;
+    }
+  }
+}
+
+function visitBlock(block: Block): readonly Annotated[] {
+  return visitStatements(block.statements);
+}
+
+/**
+ * An assignment: the location's segments root first, the value, then one
+ * `store` whose operand is the number of segments.
+ *
+ * A segment is a name pushed as a string - the root identifier's, or a
+ * property's - or a bracket's key expression, which may be several
+ * instructions and is still one segment. The `store` carries the root's
+ * POSITION and the whole statement's SPAN: a failed write is blamed on the
+ * location rather than on the `=` that is the statement's own position, and
+ * a span already starts at the root and underlines the statement. Its
+ * segment annotations are the root identifier's, each property access
+ * node's, and each bracket key's.
+ *
+ * The location is a chain written flat, and is walked in a loop.
+ */
+function visitAssignment(statement: AssignmentStatement): readonly Annotated[] {
+  const links: Node[] = [];
+  let root: Node = statement.target;
+  while (root.kind === "property_access" || root.kind === "bracket_access") {
+    links.push(root);
+    root = root.object;
+  }
+  if (root.kind !== "identifier") {
+    // The grammar builds an assignment over a location only.
+    throw new Error("an assignment's target is not a location");
+  }
+
+  const emitted: Annotated[] = [own(root, ["lit", root.name])];
+  const segments: Located[] = [root];
+  for (let at = links.length - 1; at >= 0; at -= 1) {
+    const link = links[at] as Node;
+    if (link.kind === "property_access") {
+      emitted.push(own(link, ["lit", link.property]));
+      segments.push(link);
+    } else if (link.kind === "bracket_access") {
+      append(emitted, visit(link.key));
+      segments.push(link.key);
+    }
+  }
+  append(emitted, visit(statement.value));
+  emitted.push({
+    instruction: ["store", segments.length],
+    position: root.position,
+    span: statement.span,
+    segments,
+  });
+  return emitted;
 }
 
 function visitNode(node: Node): readonly Annotated[] {

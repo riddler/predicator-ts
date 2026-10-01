@@ -192,6 +192,11 @@ export type ParseReason =
   | "expected_duration"
   | "duration_fraction"
   | "duration_unit_twice"
+  // Statements: what the program grammar refuses that the expression grammar
+  // has no site for. Each names one message family of the reference.
+  | "unexpected_else"
+  | "unassignable_location"
+  | "expected_open_brace"
   // Emission: what building the domain value for a literal refuses. The
   // reference raises here rather than answering, so this member's message is
   // this package's own and not one quoted from it.

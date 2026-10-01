@@ -35,7 +35,14 @@ export type {
   CompileWithPositionsResult,
   CompileWithSpansResult,
 } from "./compile.js";
-export { compile, compileWithPositions, compileWithSpans } from "./compile.js";
+export {
+  compile,
+  compileProgram,
+  compileProgramWithPositions,
+  compileProgramWithSpans,
+  compileWithPositions,
+  compileWithSpans,
+} from "./compile.js";
 export type { UnboundPolicy } from "./context.js";
 export type { Ast, DecompileOptions } from "./decompile.js";
 export { decompile } from "./decompile.js";
