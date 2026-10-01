@@ -66,6 +66,7 @@
     "TaggedEvaluateOptions",
     "decodeTagged",
     "encodeTagged",
-    "evaluateTagged"
+    "evaluateTagged",
+    "executeTagged"
   ]
 }

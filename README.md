@@ -71,7 +71,7 @@ the Development section below is how to provision them.
 
 ```ts
 import { compile, decompile, durationToMilliseconds, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
-import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/tagged";
+import { decodeTagged, encodeTagged, evaluateTagged, executeTagged } from "@riddler/predicator/tagged";
 ```
 
 - **`@riddler/predicator`** is the main entry point: the value domain, the host
@@ -80,7 +80,8 @@ import { decodeTagged, encodeTagged, evaluateTagged } from "@riddler/predicator/
   back to source text, the reading of a duration from its literal spelling
   and its length in milliseconds, and the version of the instruction set this build implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
-  conformance corpus's tagged encoding, and the one evaluation that speaks it.
+  conformance corpus's tagged encoding, and the one evaluation and the one
+  statement run that speak it.
   That encoding carries the members a plain JSON round trip loses - a date, a
   datetime, a duration, an absence, and the difference between an integer and
   an integral float. The main entry point neither emits nor requires it.
@@ -772,6 +773,34 @@ const signedUpAt = evaluateTagged(
 
 if (!signedUpAt.ok || signedUpAt.value !== '{"$type":"datetime","value":"2026-03-01T09:30:00Z"}') {
   throw new Error("asked for the encoding, a datetime result comes back as its tag");
+}
+```
+
+`executeTagged` is the statement run beside it. `execute` hands the context a
+program halted with back under the plain projection, which drops a float's
+brand; `executeTagged` answers that context as the encoding's text on both
+arms, so `decodeTagged` reads back every value the program bound - a float the
+program stored stays a float, and a partial context on the failing arm reads
+back the same way. It takes a compiled program or source text, which it
+compiles as `compileProgram` does, and the main entry point's options: the
+encoding is the only form it answers in, so there is no `tagged` request to
+make. A context the encoding cannot carry is a failure rather than a throw.
+
+```ts
+import { isFloat } from "@riddler/predicator";
+import { decodeTagged, executeTagged } from "@riddler/predicator/tagged";
+
+// A library loan's overdue script that sets a flat late fee.
+const run = executeTagged("late_fee = 2.0", { loan: { days_late: 3 } });
+
+if (!run.ok || run.context !== '{"loan":{"days_late":3},"late_fee":2.0}') {
+  throw new Error("the halt context comes back as the encoding's text");
+}
+
+const back = decodeTagged(run.context);
+
+if (!back.ok || !isFloat((back.value as { late_fee: unknown }).late_fee)) {
+  throw new Error("the late fee reads back as the float the script stored");
 }
 ```
 

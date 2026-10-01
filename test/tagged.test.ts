@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { EvaluateOptions } from "../src/index.js";
+import { compileProgram, type EvaluateOptions } from "../src/index.js";
 import {
   type DecodeReason,
   decodeTagged,
   type EncodeReason,
   encodeTagged,
   evaluateTagged,
+  executeTagged,
   type TaggedEvaluateOptions,
 } from "../src/tagged.js";
 import {
@@ -13,6 +14,7 @@ import {
   Float,
   float,
   fromHost,
+  isFloat,
   PDate,
   PDateTime,
   toHost,
@@ -714,5 +716,131 @@ describe("evaluateTagged", () => {
     const shared: EvaluateOptions = { onUnbound: "error" };
     const options: TaggedEvaluateOptions = { ...shared, tagged: true };
     expect(evaluateTagged([["load", "cohort"]], {}, options).ok).toBe(false);
+  });
+});
+
+describe("executeTagged", () => {
+  /** The map a context's text decodes to. Fails loudly rather than defaulting. */
+  function decodedContext(text: string | undefined): { [key: string]: Value } {
+    if (text === undefined) throw new Error("expected a context, got none");
+    const value = decoded(text);
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(`expected a map, got ${text}`);
+    }
+    return value as { [key: string]: Value };
+  }
+
+  // Sabotage: projecting the halt context before encoding it, as `execute`
+  // does, turns this red: the late fee comes back as the integer two. So does
+  // compiling the source as an expression rather than a statement program,
+  // which refuses the assignment. Both were run and reverted.
+  it("keeps an integral float a float on the success arm, from source text", () => {
+    const outcome = executeTagged("late_fee = 2.0");
+    expect(outcome).toEqual({ ok: true, context: '{"late_fee":2.0}' });
+    if (!outcome.ok) return;
+    const lateFee = decodedContext(outcome.context).late_fee;
+    expect(isFloat(lateFee)).toBe(true);
+    expect(lateFee).toEqual(float(2));
+  });
+
+  it("runs a compiled program the same way it runs its source", () => {
+    const compiled = compileProgram("late_fee = 2.0; total = 2");
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    const outcome = executeTagged(compiled.instructions, { loan: { days_late: 10 } });
+    expect(outcome).toEqual({
+      ok: true,
+      context: '{"loan":{"days_late":10},"late_fee":2.0,"total":2}',
+    });
+  });
+
+  // Sabotage: projecting the partial context before encoding it turns this
+  // red: the late fee written before the refusal comes back as the integer
+  // two. It was run and reverted.
+  it("answers the partial context the same way on the failure arm", () => {
+    const outcome = executeTagged(
+      "late_fee = 2.0; loan.days_late = 3",
+      { loan: { days_late: 10 } },
+      {
+        protectedRoots: ["loan"],
+      },
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("EvaluationError");
+    expect(outcome.error.reason).toBe("protected_root");
+    expect(outcome.context).toBe('{"loan":{"days_late":10},"late_fee":2.0}');
+    expect(isFloat(decodedContext(outcome.context).late_fee)).toBe(true);
+  });
+
+  it("carries the dates, durations and absences a plain projection loses", () => {
+    const outcome = executeTagged("due_on = #2026-03-01#; grace = 3d; hold = missing");
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    const context = decodedContext(outcome.context);
+    expect(context.due_on).toEqual(new PDate(2026, 3, 1));
+    expect(context.grace).toEqual(new Duration({ days: 3 }));
+    expect(context.hold).toBe(Undefined);
+  });
+
+  it("answers the loop budget's refusal with the context the run reached", () => {
+    const outcome = executeTagged(
+      "renewals = 0; while (true) { renewals = renewals + 1 }",
+      {},
+      {
+        loopBudget: 3,
+      },
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("loop_budget_exceeded");
+    expect(decodedContext(outcome.context).renewals).toBeTypeOf("number");
+  });
+
+  it("answers a source the program compiler refuses as its parse error, with no context", () => {
+    const outcome = executeTagged("late_fee = ");
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("ParseError");
+    expect("context" in outcome).toBe(false);
+  });
+
+  it("answers a context the value boundary refuses with no context", () => {
+    const outcome = executeTagged("late_fee = 2.0", { loan: Number.NaN });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("EvaluationError");
+    expect("context" in outcome).toBe(false);
+  });
+
+  // Sabotage: letting the encoder's refusal through as a successful context
+  // turns this red. It was run and reverted.
+  it("answers a halt context the encoding cannot carry as a failure", () => {
+    const outcome = executeTagged("late_fee = 2.0", { slip: { $type: "date" } });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.type).toBe("EvaluationError");
+    expect(outcome.error.reason).toBe("reserved_map_key");
+    expect("context" in outcome).toBe(false);
+  });
+
+  // Sabotage: handing back an empty text as the context the encoding refused
+  // turns this red. It was run and reverted.
+  it("keeps the run's own refusal when its partial context cannot be encoded", () => {
+    const outcome = executeTagged(
+      "late_fee = 2.0; loan.days_late = 3",
+      { loan: { days_late: 10 }, slip: { $type: "date" } },
+      { protectedRoots: ["loan"] },
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.error.reason).toBe("protected_root");
+    expect("context" in outcome).toBe(false);
+  });
+
+  it("never writes into the caller's context", () => {
+    const context = { loan: { days_late: 10 } };
+    executeTagged("loan.days_late = 2.0", context);
+    expect(context).toEqual({ loan: { days_late: 10 } });
   });
 });
