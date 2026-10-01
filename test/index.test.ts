@@ -5,7 +5,10 @@
 // entry point does not have.
 
 import { describe, expect, it } from "vitest";
+import { loadCases } from "../scripts/lib/corpus.mjs";
 import {
+  compile,
+  compileProgram,
   type EvaluateOptions,
   evaluate,
   execute,
@@ -14,6 +17,8 @@ import {
   isaVersion,
   PDateTime,
 } from "../src/index.js";
+import { compileTranscriptLines } from "./conformance/compile-transcript.js";
+import { decodeCase } from "./conformance/runner.js";
 
 describe("isaVersion", () => {
   // Sabotage: returning 5 instead of 6 turns this red.
@@ -337,8 +342,12 @@ describe("a source string in place of a program", () => {
   // Sabotage: rewrapping the compiler's refusal in an EvaluationError, instead
   // of handing it out unchanged, turns the type, the reason and the message
   // assertions red together. It was run and reverted.
-  it("answers the compiler's own refusal on the failing arm, at all three", () => {
-    for (const outcome of [evaluate("x = 1"), execute("x = 1"), executeValue("x = 1")]) {
+  //
+  // `evaluate` is the one of the three that still compiles an EXPRESSION, as
+  // the reference's `evaluate/3` does, so an assignment is refused here and
+  // runs at the other two (the block below).
+  it("answers the expression compiler's own refusal at evaluate", () => {
+    for (const outcome of [evaluate("x = 1")]) {
       expect(outcome.ok).toBe(false);
       if (outcome.ok) continue;
       expect(outcome.error.type).toBe("ParseError");
@@ -366,22 +375,31 @@ describe("a source string in place of a program", () => {
   // context member at all, turns this red. A source that did not compile never
   // ran and so bound nothing. It was run and reverted.
   it("carries no context where the source did not compile", () => {
-    const refused = execute("x = 1", { visitor: { bucket: 12 } });
-    expect(refused.ok).toBe(false);
-    if (refused.ok) return;
-    expect("context" in refused).toBe(false);
+    for (const refused of [
+      execute("3 = steps_completed", { steps_completed: 1 }),
+      executeValue("3 = steps_completed", { steps_completed: 1 }),
+    ]) {
+      expect(refused.ok).toBe(false);
+      if (refused.ok) continue;
+      expect("context" in refused).toBe(false);
+    }
   });
 
-  // Sabotage: retaining a value for the compiled expression - returning the
-  // stack top instead of the last expression statement's value - turns this
-  // red. The expression grammar emits no statement boundary, so there is no
-  // value to retain. It was run and reverted.
-  it("answers the absence at executeValue, whatever the expression evaluates to", () => {
+  // An expression's source is a program of one bare expression statement, so
+  // its value is the last expression statement's value. Before execute and
+  // executeValue compiled a program, this source answered the absence as its
+  // value here, because the expression grammar emitted no statement boundary.
+  //
+  // Sabotage: answering the absence as the value whenever the first argument
+  // is a string, or compiling it with `compile` again at executeValue, turns
+  // this red. Both were run and reverted.
+  it("answers an expression source's value at executeValue", () => {
     expect(executeValue("score > 1", { score: 5 })).toEqual({
       ok: true,
-      value: undefined,
+      value: true,
       context: { score: 5 },
     });
+    expect(execute("score > 1", { score: 5 })).toEqual({ ok: true, context: { score: 5 } });
   });
 
   // Sabotage: compiling the instruction-list form as if it were source - calling
@@ -399,5 +417,115 @@ describe("a source string in place of a program", () => {
       ok: true,
       context: { variant: "b" },
     });
+  });
+});
+
+// execute and executeValue compile a source string as a statement PROGRAM, as
+// the reference's execute/3 and execute_value/3 do (its source clause calls
+// Parser.parse_program at v9.4.2); evaluate keeps compiling an expression.
+describe("a source string at execute and executeValue is a statement program", () => {
+  // Sabotage: compiling the source with `compile` again at execute, or at
+  // executeValue, instead of `compileProgram`, turns this red with an
+  // assignment refused. Both were run and reverted.
+  it("runs a statement source the expression grammar refused", () => {
+    expect(execute("x = 1")).toEqual({ ok: true, context: { x: 1 } });
+    expect(executeValue("x = 1")).toEqual({ ok: true, value: undefined, context: { x: 1 } });
+    expect(
+      executeValue("if charge.amount > 500 { holds = holds + 1 }; holds", {
+        charge: { amount: 750 },
+        holds: 2,
+      }),
+    ).toEqual({ ok: true, value: 3, context: { charge: { amount: 750 }, holds: 3 } });
+    expect(execute("visitor.step = visitor.step + 1", { visitor: { step: 1 } })).toEqual({
+      ok: true,
+      context: { visitor: { step: 2 } },
+    });
+  });
+
+  // Sabotage: switching evaluate to `compileProgram` along with the other two
+  // turns this red: the assignment compiles and the run answers an empty stack
+  // rather than the grammar's refusal. It was run and reverted.
+  it("leaves evaluate compiling an expression", () => {
+    const refused = evaluate("variant = 'treatment'");
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.error.type).toBe("ParseError");
+    expect(refused.error.reason).toBe("assignment_in_expression");
+  });
+
+  // The rows are the reference's own refusals, run at v9.4.2 into the compile
+  // transcript; each source below is refused by the program grammar with one
+  // of the three reasons only the program entry points answer, or with the
+  // statement grammar's wording of a family the union already names.
+  //
+  // Sabotage: replacing the refusal's message on its way out, or compiling
+  // with `compile` again at execute, turns this red, the second at the first
+  // row's reason. Both were run and reverted.
+  it("answers the program grammar's refusal, as its transcript row records it", () => {
+    const rows = new Map<string, Record<string, unknown>>();
+    for (const line of compileTranscriptLines()) {
+      const row = JSON.parse(line) as Record<string, unknown>;
+      if (row.kind === "program_refusal") rows.set(row.id as string, row);
+    }
+    const pinned: readonly (readonly [string, string])[] = [
+      ["program-refusal/stray-else/leading", "unexpected_else"],
+      ["program-refusal/not-a-location/literal", "unassignable_location"],
+      ["program-refusal/missing-block/if-token", "expected_open_brace"],
+      ["program-refusal/after-statement/missing-separator", "trailing_token"],
+    ];
+    for (const [id, reason] of pinned) {
+      const row = rows.get(id);
+      expect(row, id).toBeDefined();
+      if (row === undefined) continue;
+      for (const outcome of [execute(row.source as string), executeValue(row.source as string)]) {
+        expect(outcome.ok, id).toBe(false);
+        if (outcome.ok) continue;
+        expect(outcome.error.type, id).toBe("ParseError");
+        if (outcome.error.type !== "ParseError") continue;
+        expect(outcome.error.reason, id).toBe(reason);
+        expect(outcome.error.message, id).toBe(row.message);
+        expect(outcome.error.position, id).toEqual(row.position);
+        expect(outcome.error.span, id).toEqual(row.span);
+      }
+    }
+  });
+
+  // What answers as before. Every corpus case that carries a source and that
+  // both grammars compile is run three ways: at execute, the context or the
+  // failing arm the expression compilation answered (the old answer, by
+  // construction, since that is what execute ran); at executeValue, the same
+  // context or failing arm; and at evaluate, the source form answering what
+  // the expression's instruction list answers.
+  //
+  // Sabotage: switching evaluate to `compileProgram` turns this red at the
+  // first corpus case. It was run and reverted. This test pins the answers
+  // that must NOT move, so switching execute or executeValue back to `compile`
+  // leaves it green; the tests above are the ones that catch that.
+  it("answers an expression source's context and failing arm as before", () => {
+    let compared = 0;
+    for (const item of loadCases(9)) {
+      if (item.source === null) continue;
+      const expression = compile(item.source);
+      const program = compileProgram(item.source);
+      if (!expression.ok || !program.ok) continue;
+      expect(program.instructions, item.id).toEqual([...expression.instructions, ["pop"]]);
+      const context = decodeCase(item).context ?? {};
+      expect(execute(item.source, context), item.id).toEqual(
+        execute(expression.instructions, context),
+      );
+      const before = executeValue(expression.instructions, context);
+      const after = executeValue(item.source, context);
+      expect(after.ok, item.id).toBe(before.ok);
+      if (before.ok && after.ok) {
+        expect(after.context, item.id).toEqual(before.context);
+      } else {
+        expect(after, item.id).toEqual(before);
+      }
+      expect(evaluate(item.source, context), item.id).toEqual(
+        evaluate(expression.instructions, context),
+      );
+      compared += 1;
+    }
+    expect(compared).toBeGreaterThan(200);
   });
 });

@@ -10,7 +10,7 @@
  */
 
 import { readDuration } from "./cast.js";
-import { compile } from "./compile.js";
+import { type CompileResult, compile, compileProgram } from "./compile.js";
 import type { Ast } from "./decompile.js";
 import type { ParseError } from "./errors.js";
 import {
@@ -82,11 +82,15 @@ export type ParseResult =
 /**
  * The program to run, from either accepted first argument.
  *
- * A string is compiled as an EXPRESSION - the same compilation `compile`
- * performs, from the same module, so the refusal a caller reads here is the
- * one `compile` would have answered for that source, handed out unwrapped with
- * its reason, message, position and span intact. A program is already what the
- * evaluator wants and is passed on untouched.
+ * A string is compiled by the compiler the entry point names: `compile` at
+ * `evaluate`, which reads an expression, and `compileProgram` at `execute` and
+ * `executeValue`, which read a statement program, as the reference's
+ * `evaluate/3`, `execute/3` and `execute_value/3` do. Either way it is the
+ * same compilation the exported function performs, from the same module, so
+ * the refusal a caller reads here is the one that function would have
+ * answered for that source, handed out unwrapped with its reason, message,
+ * position and span intact. A program is already what the evaluator wants and
+ * is passed on untouched.
  *
  * It is not exported. What a caller holds is a result, and this shape exists
  * only so the three entry points share one answer to which of the two they
@@ -94,11 +98,12 @@ export type ParseResult =
  */
 function programOf(
   source: Program | string,
+  compiler: (text: string) => CompileResult,
 ):
   | { readonly ok: true; readonly program: Program }
   | { readonly ok: false; readonly error: ParseError } {
   if (typeof source !== "string") return { ok: true, program: source };
-  const compiled = compile(source);
+  const compiled = compiler(source);
   if (!compiled.ok) return { ok: false, error: compiled.error };
   return { ok: true, program: compiled.instructions };
 }
@@ -111,7 +116,10 @@ function programOf(
  * instruction list is, under the same context and the same options, so the two
  * accepted first arguments differ in what a caller stores rather than in what
  * the run does. A source that does not compile comes back on the failing arm
- * below.
+ * below. The string is compiled as an EXPRESSION here and only here, as the
+ * reference's `evaluate/3` compiles one: `evaluate("x = 1")` answers
+ * `assignment_in_expression`, where `execute` and `executeValue` compile the
+ * same text as a statement program and run it.
  *
  * The context is normalized on the way in and the result is projected back to
  * plain host values on the way out, so a host writes and reads its own values
@@ -147,7 +155,7 @@ export function evaluate(
   context?: unknown,
   options?: EvaluateOptions,
 ): EvaluateResult {
-  const resolved = programOf(program);
+  const resolved = programOf(program, compile);
   if (!resolved.ok) return { ok: false, error: resolved.error };
   const outcome = evaluateToValue(resolved.program, context, options);
   return outcome.ok ? { ok: true, value: toHost(outcome.value) } : outcome;
@@ -157,16 +165,13 @@ export function evaluate(
  * Runs a STATEMENT program and answers the context it halted with, from a
  * compiled instruction list or from source text.
  *
- * THE SOURCE FORM COMPILES AN EXPRESSION, NOT A STATEMENT PROGRAM. A string
- * here goes through the same expression compilation it goes through at
- * `evaluate`, so a source that needs the statement grammar is refused with
- * that grammar's own reason instead of running: `execute("x = 1")` answers
- * `assignment_in_expression` and binds nothing, exactly as `evaluate("x = 1")`
- * does. Compiling the statement grammar from source is not yet implemented and
- * is not part of this entry point; it belongs with that grammar and arrives
- * with it. Until then a caller with a statement program to run holds it as an
- * instruction list and passes the list, which is what this entry point has
- * always taken and what it still runs as a statement program.
+ * A string is compiled as a STATEMENT PROGRAM, by the compilation
+ * `compileProgram` performs, as the reference's `execute/3` compiles one:
+ * `execute("x = 1")` binds `x`, where `evaluate("x = 1")` refuses the same text
+ * with `assignment_in_expression`. An expression's source is a program of one
+ * bare expression statement, so it runs as the expression does and answers
+ * the context it was given. A source the program grammar refuses answers that
+ * grammar's `ParseError`, handed out unwrapped as `compileProgram` answers it.
  *
  * The mode is carried by the entry point rather than by the artifact: the same
  * instruction list runs here and at `evaluate`, and what differs is only what
@@ -201,7 +206,7 @@ export function execute(
   context?: unknown,
   options?: EvaluateOptions,
 ): ExecuteResult {
-  const resolved = programOf(program);
+  const resolved = programOf(program, compileProgram);
   if (!resolved.ok) return { ok: false, error: resolved.error };
   const outcome = executeToContext(resolved.program, context, options);
   if (outcome.ok) return { ok: true, context: projectContext(outcome.context) };
@@ -214,16 +219,10 @@ export function execute(
  * statement alongside the context, from a compiled instruction list or from
  * source text.
  *
- * The source form compiles an expression, on the same terms as at `execute`:
- * a source needing the statement grammar is refused rather than run, and
- * compiling that grammar from source is not yet implemented here. That makes
- * this the least useful of the three string forms, and deliberately so. The
- * value below is the last expression STATEMENT's, and what the expression
- * grammar compiles has no statement boundary to retain one, so a source
- * argument answers the absence as its value however well it evaluates - a
- * caller wanting an expression's value from its source text calls `evaluate`.
- * The form is accepted here because it is accepted at all three, not because
- * this is where it earns its keep.
+ * The source form compiles a statement program, on the same terms as at
+ * `execute`. An expression's source is a program of one bare expression
+ * statement, and so its value is that expression's: `executeValue("score > 1",
+ * { score: 5 })` answers `true`, as the reference's `execute_value/3` does.
  *
  * This is a host convenience rather than an instruction-set guarantee. The
  * value is what the statement boundary's `pop` discarded, retained rather than
@@ -247,7 +246,7 @@ export function executeValue(
   context?: unknown,
   options?: EvaluateOptions,
 ): ExecuteValueResult {
-  const resolved = programOf(program);
+  const resolved = programOf(program, compileProgram);
   if (!resolved.ok) return { ok: false, error: resolved.error };
   const outcome = executeToContext(resolved.program, context, options);
   if (outcome.ok) {

@@ -1699,3 +1699,123 @@ go looking. The note on that amendment's acceptance says the type behind
 statement grammar says no name is exported for the result types of
 `compileProgramWithPositions` and `compileProgramWithSpans`; it is about those
 two results, and this change exports neither.
+
+## Amendment: `execute` and `executeValue` compile a source string as a statement program (2026-10-01)
+
+Status: proposed (2026-10-01)
+
+Recorded for `pts-0zns`, under the ruling that the two run entry points
+compile a source string as the reference's do, a named host-visible change
+(ruled by the operator, 2026-10-01). This entry is appended and removes no
+line above. `src/` and `test/` are cited as the change carrying this entry
+leaves them; the reference is cited at `v9.4.2`, read in a detached export of
+predicator-ex whose `mix.exs` `@version` reads `9.4.2`.
+
+### What this amends
+
+The section headed "The three entry points take a source string" says that
+`evaluate`, `execute` and `executeValue` each "compile it as an EXPRESSION",
+that `execute("x = 1")` answers `assignment_in_expression` "exactly as
+`evaluate("x = 1")` does", and that "A program-mode `execute(source)` that
+compiles the statement grammar arrives with that grammar, not here." Those
+statements are superseded for `execute` and `executeValue` by this entry and
+still hold of `evaluate`. The section's second paragraph, on the failing arm
+widening to admit `ParseError`, holds unchanged at all three.
+
+The statement-grammar amendment above names the same sentence in its
+paragraph opening "One sentence nearby is NOT superseded", and says that
+"Switching the two run entry points to program mode is a later change with
+its own record." This entry is that record. That paragraph, and the first
+paragraph of that amendment's "What this does not decide", were true of the
+change they were written for; what `execute` and `executeValue` answer for a
+source string from here on is stated below.
+
+### The decision
+
+**`execute` and `executeValue` compile a source string with the compilation
+`compileProgram` performs; `evaluate` compiles one with the compilation
+`compile` performs.** That is the reference's split at the tag: in
+`lib/predicator.ex`, `evaluate/3`'s source clause hands its tokens to
+`Parser.parse`, and `execute/3` runs through `execute_value/3`, whose source
+clause hands them to `Parser.parse_program`. Here `programOf` in
+`src/index.ts` takes the compiler as an argument; `evaluate` passes
+`compile`, and `execute` and `executeValue` pass `compileProgram`. An
+instruction list passed in place of a source runs exactly as before at all
+three.
+
+An expression's source is a program of one bare expression statement, which
+the program grammar compiles to the expression's own instruction list
+followed by `["pop"]`. So for such a source `execute` answers the context or
+the failing arm it answered before, and `executeValue` answers the same
+context or failing arm with the expression's value beside it.
+
+What a host sees change, each answer run at `v9.4.2` through
+`Predicator.execute_value/3` in the export and through this package after the
+change:
+
+| at | source | before | after |
+|---|---|---|---|
+| `execute`, `executeValue` | `x = 1` | `assignment_in_expression` | runs, binding `x` to 1 |
+| `execute`, `executeValue` | `score 3` | `trailing_token`, `Unexpected token number '3' after expression` | `trailing_token`, `Unexpected token number '3' after statement` |
+| `execute`, `executeValue` | `if` | `statement_keyword`, at column 1 | `expected_primary`, at the end of input, column 3 |
+| `executeValue` | `score > 1`, with `score` bound to 5 | the value absent | the value `true` |
+
+The first row is a source the expression grammar refused that now runs; the
+second and third are a refusal that is now the program grammar's, with a
+different message or reason; the fourth is the value an expression's source
+now has at `executeValue`. A refusal at either entry point is the one
+`compileProgram` answers for the same source, handed out unwrapped, and a
+source either grammar refuses carries no context on the failing arm, as
+before.
+
+**Evidence.** `test/index.test.ts` holds both halves. For every corpus case
+that carries a source both grammars compile, it checks that the program is
+the expression's list followed by `["pop"]`, that `execute` answers what the
+expression's list answers, that `executeValue` answers the same context or
+failing arm, and that `evaluate` is unchanged. It holds `execute` and
+`executeValue` to four `program_refusal` rows of the compile transcript, read
+through `compileTranscriptLines` - `stray-else/leading`,
+`not-a-location/literal`, `missing-block/if-token` and
+`after-statement/missing-separator`, under the prefix `program-refusal/` -
+each message, position and span verbatim with its reason. The same four
+sources run through `Predicator.execute_value/3` in the export answer the
+same message, position and span as their rows.
+
+### What this does not decide
+
+It does not change `evaluate`, which compiles an expression, as the
+reference's `evaluate/3` does.
+
+It adds no export and changes no signature. The failing arm of `execute` and
+`executeValue` already admitted `ParseError`, and the three reasons only the
+program grammar answers are already members of `ParseReason`.
+
+It does not carry a source location into a run. The reference runs a source
+with its positions and segment positions tables (`execute_value_ast`), so an
+evaluation error there can point into the source. Here an evaluation error's
+`position` is the index of the failing instruction (`EvaluationError` in
+`src/errors.ts`) and no entry point takes a positions table; the index is
+into the list `compileProgram` answers for the same source, which
+`compileProgramWithPositions` maps to a point.
+
+It does not hand back a context beside a refused source. The reference
+answers its normalized input context beside a parse error; here a source that
+did not compile carries no context on the failing arm, as it did before this
+entry.
+
+It does not move the conformance registry's compiler claim or any corpus
+expectation; `conformance/` is unchanged.
+
+### Consequences
+
+A host that keeps a statement program as text runs it directly, as a host of
+the reference does, rather than compiling it first.
+
+A caller that relied on `execute` or `executeValue` refusing a source that is
+not an expression no longer gets that refusal. It compiles the source with
+`compile` and passes the instruction list, which is refused or run exactly as
+before.
+
+The source form of `executeValue` now answers an expression's value, so an
+expression's source answers the same value at `evaluate` and at
+`executeValue` wherever `evaluate` answers one.
