@@ -240,6 +240,12 @@ const DURATION_COMPONENT = new RegExp(`([0-9]+)(?:\\.([0-9]+))?(${SUFFIXES})`, "
  * repeated unit in that opcode's operand keeps the last pair, which a corpus
  * case pins. The parse's half is stated by the language reference rather than
  * by a corpus case, so a unit test pins it here.
+ *
+ * A component this domain cannot hold as an exact integer is not a duration
+ * here: a text whose component, as read, is past the largest safe integer
+ * answers nothing, rather than a duration whose component is infinite or
+ * rounded. The reference reads integers of any size and answers such a text
+ * with a duration, so this is a declared difference rather than a match.
  */
 export function readDuration(text: string): Duration | undefined {
   if (!DURATION_TEXT.test(text)) return undefined;
@@ -257,6 +263,13 @@ export function readDuration(text: string): Duration | undefined {
     const expanded = expand(Number(whole), digits, row);
     if (expanded === undefined) return undefined;
     for (const [amount, key] of expanded) add(parts, key, amount);
+  }
+  // No amount added above is negative, so a sum is never smaller than an amount
+  // in it, and checking each component as read covers a component written too
+  // long, a repeated unit that sums past the bound, and the whole part of a
+  // fraction alike.
+  for (const amount of Object.values(parts)) {
+    if (!Number.isSafeInteger(amount)) return undefined;
   }
   return new Duration(parts);
 }

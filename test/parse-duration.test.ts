@@ -163,6 +163,43 @@ describe("parseDuration and the compiled duration literal share one unit table",
   );
 });
 
+// The reference reads integers of any size, so it answers each of these texts
+// with a duration. A JavaScript number holds an exact integer only up to the
+// largest safe integer, and past it a component would be infinite or rounded,
+// so this package refuses the text instead, with the one reason it gives every
+// text it refuses. The value-domain record declares the difference.
+const PAST_THE_SAFE_RANGE: readonly (readonly [string, string])[] = [
+  ["a four hundred digit day count, infinite as a number", `${"9".repeat(400)}d`],
+  ["one past the largest safe integer", "9007199254740992s"],
+  ["a count a number rounds", "9007199254740993s"],
+  ["a repeated unit that sums past it", "9007199254740991s1s"],
+  ["two halves that sum past it", "4503599627370496d4503599627370496d"],
+  ["the whole part of a fraction", "9007199254740992.5d"],
+];
+
+describe("parseDuration past the largest safe integer", () => {
+  // Sabotage: removing the safe-range check from readDuration turns every row
+  // here red.
+  it.each(PAST_THE_SAFE_RANGE)("refuses %s with invalid_duration_format", (_name, text) => {
+    expect(parseDuration(text)).toStrictEqual({ ok: false, reason: "invalid_duration_format" });
+  });
+
+  // Sabotage: giving the export a bound of its own that the cast does not
+  // share makes the two disagree on these rows.
+  it.each(PAST_THE_SAFE_RANGE)("answers what ::duration answers for %s", (_name, text) => {
+    expect(cast(text)).toBe(Undefined);
+  });
+
+  // Sabotage: checking the bound with a strict less-than on the largest safe
+  // integer turns this red.
+  it("reads a component at the largest safe integer", () => {
+    expect(parseDuration("9007199254740991ms")).toStrictEqual({
+      ok: true,
+      value: new Duration({ milliseconds: Number.MAX_SAFE_INTEGER }),
+    });
+  });
+});
+
 describe("parseDuration from an untyped caller", () => {
   // Sabotage: handing a value that is not a string straight to the parse turns
   // the row whose string form spells a duration into a throw.
