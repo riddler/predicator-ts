@@ -3497,7 +3497,7 @@ in the reference's tracker rather than decided here.
 
 ## Amendment: a duration component past the safe integer range is refused when a text is read (2026-10-01)
 
-Status: proposed (2026-10-01)
+Status: accepted (2026-10-01; proposed 2026-10-01)
 
 Recorded for `pts-o0gr`, on the ruling to refuse such a component in both the
 cast and `parseDuration` with the existing `invalid_duration_format` reason and
@@ -3614,3 +3614,38 @@ the plain projection". `executeTagged` answers the context it halted with as
 the encoding's text on both arms, the failing arm's partial context included,
 and `execute` and `executeValue` in `src/index.ts` still answer the plain
 projection. The obligation is discharged by this change and by nothing else.
+
+## Note: the acceptance of the amendment on a duration component past the safe integer range (2026-10-01)
+
+Recorded for `pts-e1zw`. This note records that the amendment headed "a
+duration component past the safe integer range is refused when a text is read"
+moved from proposed to accepted. The conductor moved it under the flip standard
+of the campaign consent the operator adopted, 2026-10-01. It decides nothing,
+so it carries no Status line, and it removes no line. With it, no entry in this
+record reads proposed.
+
+**It shipped in `@riddler/predicator` 0.4.0.** That version is on npm, built
+from the commit tagged `v0.4.0` (`fe42eea`), and the amendment's own change,
+`f12d11f` (request 156), is in the tag. Every claim was re-checked at
+`fe42eea`, re-located by anchor, and every claim about the reference was run in
+a detached export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27,
+rather than read.
+
+**What was checked.** `readDuration` in `src/cast.ts` judges each component
+after the parse has added it up and answers nothing for one that is not a safe
+integer; a later change on the default branch, `02d4a21`, moved the fraction
+expansion into a shared helper and left that check where the amendment puts
+it. `toDuration` in `src/cast.ts` answers undefined for such a text,
+`parseDuration` in `src/index.ts` answers `invalid_duration_format`,
+`encodeInteger` in `src/tagged.ts` refuses a duration component that is not a
+safe integer, and `duration` in `src/evaluator.ts` refuses such a magnitude
+with `invalid_duration_format`, which a compiled literal written as
+`9007199254740992s` answers when it is evaluated. Run at the tag, the cast and
+`parseDuration` answered each row of the amendment's table as its two right
+columns say, and a count written with leading zeros read as its value. The
+reference answered each row as its reference column says, the cast and
+`Predicator.Duration.parse/1` alike. The two tests and the describe block the
+amendment names are in `test/cast.test.ts` and `test/parse-duration.test.ts`,
+and no row of the reference transcript carries one of the table's texts. The
+amendment headed "the out-of-range rule's sites, and the cast exemption" says
+what this one says it says of the string-to-duration parse.
