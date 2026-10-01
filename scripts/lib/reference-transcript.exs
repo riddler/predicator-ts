@@ -27,8 +27,10 @@
 # cast reads; what `JSON.stringify` answers for a value with no JSON form;
 # whether a sign before a whole date or datetime text is read; what an integer
 # key and a null key find against a map, and a null key against a duration; what
-# an arithmetic result past this package's safe integer range answers; and
-# whether two reads of the clock in one evaluation answer one instant. The
+# an arithmetic result past this package's safe integer range answers;
+# whether two reads of the clock in one evaluation answer one instant; what a
+# duration answers against a plain map; and what a date plus a duration the
+# host supplies answers. The
 # values are chosen to show the reference's own behaviour rather than to agree
 # with this package's: below two to the fifty-third a float is written in
 # whichever of the plain and exponent forms is shorter, the plain one on a tie,
@@ -322,6 +324,62 @@ clock_cases = [
   %{"id" => "clock/two-reads-in-one-evaluation", "source" => "Date.now() == Date.now()", "context" => %{}}
 ]
 
+# A DURATION AGAINST A PLAIN MAP. This package's duration is its own class,
+# which matches no plain map, so a loose comparison or an ordering of the two
+# answers the absence, a strict comparison answers false, and membership
+# finds nothing. The reference decides by how the map's keys are spelled: a
+# duration the duration opcode builds is keyed by its host language's atoms,
+# and its context normalization rewrites a duration the host supplies into a
+# map keyed by strings, which then equals a plain map holding the same eight
+# keys and values. So each operator is asked twice, once of a duration the
+# program built and once of one the host supplied, each against a plain map
+# holding the same eight keys and values: loose and strict equality and
+# inequality, two orderings, and membership. The duration is the hold period
+# of a card authorization.
+hold_policy = %{
+  "years" => 0,
+  "months" => 0,
+  "weeks" => 0,
+  "days" => 3,
+  "hours" => 8,
+  "minutes" => 0,
+  "seconds" => 0,
+  "milliseconds" => 0
+}
+
+hold_period = %{"$type" => "duration", "value" => hold_policy}
+
+duration_against_map_cases =
+  for {pair, left, context} <- [
+        {"built", "3d8h", %{"hold_policy" => hold_policy}},
+        {"supplied", "hold_period", %{"hold_period" => hold_period, "hold_policy" => hold_policy}}
+      ],
+      {operator, source} <- [
+        {"loose-eq", "#{left} == hold_policy"},
+        {"loose-ne", "#{left} != hold_policy"},
+        {"strict-eq", "#{left} === hold_policy"},
+        {"strict-ne", "#{left} !== hold_policy"},
+        {"gte", "#{left} >= hold_policy"},
+        {"lt", "#{left} < hold_policy"},
+        {"in", "#{left} in [hold_policy]"}
+      ] do
+    %{"id" => "duration-against-map/#{pair}-#{operator}", "source" => source, "context" => context}
+  end
+
+# A DATE PLUS A DURATION THE HOST SUPPLIES. The same normalization leaves the
+# reference holding a plain map where the host handed it a duration, and its
+# date arithmetic takes no map, so it refuses the sum with a type mismatch;
+# this package keeps the duration and answers the date moved on. A duration
+# the program builds moves the date on both sides, which the vendored corpus
+# pins.
+date_arithmetic_cases = [
+  %{
+    "id" => "duration-arithmetic/date-plus-a-supplied-duration",
+    "source" => "authorized_on::date + hold_period",
+    "context" => %{"authorized_on" => "2026-09-19", "hold_period" => hold_period}
+  }
+]
+
 authored =
   float_cases ++
     float_cast_back_cases ++
@@ -329,7 +387,8 @@ authored =
     offset_cases ++
     json_form_cases ++
     leading_sign_cases ++
-    map_key_cases ++ duration_field_cases ++ integer_range_cases ++ clock_cases
+    map_key_cases ++ duration_field_cases ++ integer_range_cases ++ clock_cases ++
+    duration_against_map_cases ++ date_arithmetic_cases
 
 completed =
   case Predicator.Conformance.Generator.generate(authored) do

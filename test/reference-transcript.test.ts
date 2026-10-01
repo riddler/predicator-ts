@@ -11,8 +11,10 @@
 // `JSON.stringify` answers for a value with no JSON form, whether a sign before
 // a whole date or datetime text is read, what an integer key and a null key
 // find against a map and a null key against a duration, what an arithmetic
-// result past the safe integer range answers, and whether two reads of the
-// clock in one evaluation answer one instant. The file is written by
+// result past the safe integer range answers, whether two reads of the clock
+// in one evaluation answer one instant, what a duration answers against a
+// plain map, and what a date plus a duration the host supplies answers. The
+// file is written by
 // `scripts/reference-transcript.mjs` and by nothing else; the suite never runs
 // the reference, it reads what the reference answered.
 //
@@ -25,7 +27,11 @@
 // either side that makes the two agree, since a declaration of a difference
 // that no longer exists is as false as a missing one. A row that differs is
 // never made green by editing the transcript; it is declared here, beside the
-// comment in `src/` that declares it.
+// comment in `src/` or the record's note that declares it.
+//
+// A row records the reference's answer as a result or as a refusal. A refusal
+// is compared by its reason, written as this package writes its own (see
+// `referenceAnswer` and `answer`).
 //
 // A row whose answer is the text of a JSON object is compared by the value
 // that text decodes to rather than as a string, so the order the reference
@@ -58,7 +64,7 @@ interface Declared {
   readonly reference: Value;
   /** This package's answer. */
   readonly ours: Value;
-  /** Where in `src/` the difference is declared. */
+  /** Where the difference is declared: a comment in `src/`, or a record's note. */
   readonly declaredBy: string;
 }
 
@@ -67,6 +73,14 @@ interface Declared {
 // `float-json/`, `float-concat/` and `float-cast-back/` row must agree. So must the null-key rows
 // under `map-key/`: the null value misses as a key at a map and at a duration
 // on both sides (`isMapKey` in src/evaluator.ts).
+
+/**
+ * Where the rows on a duration against a plain map, and on a date plus a
+ * duration the host supplies, are declared. No comment in `src/` declares
+ * them; the record does.
+ */
+const DURATION_NOTE =
+  "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the note on a duration the host supplies";
 
 /** An instant on the day the `datetime-offset/` rows are written on, in UTC. */
 function utc(hour: number, minute: number): PDateTime {
@@ -288,6 +302,63 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
     "clock/two-reads-in-one-evaluation",
     { reference: false, ours: true, declaredBy: "clockFunction in src/functions/date.ts" },
   ],
+  // A duration against a plain map holding the same eight keys and values.
+  // This package's duration matches no plain map, so a loose comparison and
+  // an ordering answer the absence, a strict one false, and membership finds
+  // nothing. The reference decides by how the map's keys are spelled: against
+  // a duration the program built it answers a loose comparison and an
+  // ordering with a boolean, and against one the host supplied, which its
+  // context normalization has made a plain map, every operator answers as
+  // between two equal maps. The strict comparisons and membership of the
+  // built duration agree on both sides and are not declared here.
+  [
+    "duration-against-map/built-loose-eq",
+    { reference: false, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/built-loose-ne",
+    { reference: true, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/built-gte",
+    { reference: false, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/built-lt",
+    { reference: true, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-loose-eq",
+    { reference: true, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-loose-ne",
+    { reference: false, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-strict-eq",
+    { reference: true, ours: false, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-strict-ne",
+    { reference: false, ours: true, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-gte",
+    { reference: true, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-lt",
+    { reference: false, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  ["duration-against-map/supplied-in", { reference: true, ours: false, declaredBy: DURATION_NOTE }],
+  // A date plus a duration the host supplies. The reference holds a plain map
+  // there and refuses the sum with a type mismatch; this package keeps the
+  // duration and answers the date moved on by its whole days.
+  [
+    "duration-arithmetic/date-plus-a-supplied-duration",
+    { reference: "refused: add", ours: new PDate(2026, 9, 22), declaredBy: DURATION_NOTE },
+  ],
 ]);
 
 /**
@@ -349,6 +420,20 @@ function answer(row: DecodedCase): Value {
   const decoded = decodeTagged(outcome.value as string);
   if (!decoded.ok) throw new Error(`row ${row.id} answered text the corpus decoder refused`);
   return decoded.value;
+}
+
+/**
+ * What the reference answered for a row. A row records either a result or a
+ * refusal; a refusal is written as `answer` writes this package's own, by its
+ * reason, so the two compare as one kind of answer.
+ */
+function referenceAnswer(row: DecodedCase): Value {
+  const expected = row.expectation;
+  if (expected.kind === "result") return expected.value;
+  if (!isMap(expected.value) || typeof expected.value.reason !== "string") {
+    throw new Error(`row ${row.id} records a refusal with no reason`);
+  }
+  return `refused: ${expected.value.reason}`;
 }
 
 const ROWS = rows();
@@ -425,10 +510,16 @@ describe("the reference transcript", () => {
   // Sabotage: comparing the duration row by text in `sameAnswer` turns it red on
   // the reference's answer; dropping the row from the set turns the enumeration
   // above red. Each was run and reverted.
+  //
+  // Sabotage for the duration rows, each run and reverted: letting a duration
+  // match any value in `typesMatch` turns the four loose `duration-against-map/`
+  // rows red; ordering a duration level with a plain map in `compareOrder`
+  // turns the four ordering rows red; refusing a duration added to a date in
+  // `applyAdd` turns `duration-arithmetic/date-plus-a-supplied-duration` red;
+  // and reading a recorded refusal as its raw value in `referenceAnswer` turns
+  // that row red on the reference's answer.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
-    const expected = row.expectation;
-    expect(expected.kind).toBe("result");
-    const reference = expected.value;
+    const reference = referenceAnswer(row);
     const ours = answer(row);
     const declared = DECLARED.get(id);
     if (declared === undefined) {
