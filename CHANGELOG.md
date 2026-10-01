@@ -14,6 +14,33 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.4.0] 2026-10-01
+
+A minor release. The statement grammar compiles from source: `compileProgram`,
+`compileProgramWithPositions` and `compileProgramWithSpans` are new, and
+`ParseReason` gains the three refusals only they answer. `execute` and
+`executeValue` compile a source string as a statement program, as the
+reference's do, so a source the expression grammar refused may now run, a
+source either grammar refuses may answer the program grammar's refusal, and
+`executeValue` given an expression's source now answers that expression's
+value. `executeTagged`, `durationToMilliseconds` and the `DecompileResult` type
+are new; the protected-root refusal names its root under `details.root`; and a
+duration text whose component is past the largest safe integer is refused.
+
+### Added
+
+- A `store` refused for writing into a protected root answers an `EvaluationError` that names that root under `details.root`, so a host reads the root without parsing the message; the reason and the message are unchanged, and every other refusal leaves `details` absent.
+- `durationToMilliseconds` answers a duration's length in milliseconds by the reference's weights: a week of seven days, a month of thirty and a year of three hundred and sixty five.
+- `executeTagged` on the `./tagged` subpath runs a statement program, from a compiled list or from source text, and answers the context it halted with as the tagged encoding's text on both arms, so `decodeTagged` reads every value back as the one the program bound: a float the program stored stays a float, where `execute`'s plain projection answers the integer.
+- `DecompileResult` names the result `decompile` answers - the rendered `source` on the succeeding arm, or the `ParseError` that refused the tree on the failing one - so a host can annotate it by name, as it does `ParseResult` and `CompileResult`, instead of deriving it from the function; the shape is unchanged.
+- `compileProgram`, `compileProgramWithPositions` and `compileProgramWithSpans` compile a statement program from source text - assignments, `;`-separated statements, `if`/`else`, `else if` and `while` - to the instruction list `execute` and `executeValue` run, answering the results `compile`, `compileWithPositions` and `compileWithSpans` answer, with one more table on the two located variants: `segmentPositions` or `segmentSpans`, one entry per segment of the location each `store` writes.
+- `ParseReason` gains `unexpected_else`, `unassignable_location` and `expected_open_brace`, which only the three program entry points answer; a caller that switches exhaustively on the union adds the three cases.
+
+### Changed
+
+- `execute` and `executeValue` compile a source string as a statement program, as the reference's do, where they compiled it as an expression; `evaluate` still compiles an expression. Two effects follow: a source the expression grammar refused may now run (`execute("x = 1")` binds `x`), and a source either grammar refuses may answer the program grammar's refusal, with a different message or reason (`score 3` is refused as unexpected "after statement" rather than "after expression"). One more follows from the first: `executeValue` given an expression's source now answers that expression's value, where it answered undefined. A caller that wants a source refused unless it is an expression compiles it with `compile` and passes the instruction list.
+- A duration text whose component is past the largest safe integer is refused: `::duration` answers undefined and `parseDuration` answers `invalid_duration_format`, where both used to answer a duration whose component was infinite or rounded. The reference, whose integers have no bound, answers such a text with a duration.
+
 ## [0.3.0] 2026-09-30
 
 A minor release. The vendored conformance corpus moves to the reference's
