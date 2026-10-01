@@ -40,11 +40,25 @@ export class EvaluationError {
   readonly message: string;
   /** The index of the instruction that failed, where one is responsible. */
   readonly position?: number;
+  /**
+   * Data particular to the refusal, so a caller reads it without parsing the
+   * message, which is not normative. A store into a protected root carries
+   * the root it was refused for as `root`, spelled as the protected roots
+   * list spells it. Every other refusal leaves the field absent, as
+   * `position` is absent where no instruction is responsible.
+   */
+  readonly details?: { readonly root: string };
 
-  constructor(reason: Reason, message: string, position?: number) {
+  constructor(
+    reason: Reason,
+    message: string,
+    position?: number,
+    details?: { readonly root: string },
+  ) {
     this.reason = reason;
     this.message = message;
     if (position !== undefined) this.position = position;
+    if (details !== undefined) this.details = Object.freeze({ root: details.root });
     Object.freeze(this);
   }
 }

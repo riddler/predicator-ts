@@ -1757,7 +1757,9 @@ class Machine {
     if (root !== undefined && this.settings.protectedRoots.includes(String(root))) {
       return {
         ok: false,
-        error: new EvaluationError("protected_root", `${String(root)} is a protected root`, at),
+        error: new EvaluationError("protected_root", `${String(root)} is a protected root`, at, {
+          root: String(root),
+        }),
       };
     }
     // The context is the outermost level and each segment one more, so the

@@ -21,6 +21,7 @@
 
 import { describe, expect, it } from "vitest";
 import { loadRoot, normalizeContext } from "../src/context.js";
+import { EvaluationError } from "../src/errors.js";
 import {
   compareStrings,
   compareValues,
@@ -2533,6 +2534,84 @@ describe("the six failures a well-formed store answers", () => {
       { protectedRoots: ["card"] },
     );
     expect(error.reason).toBe("protected_root");
+  });
+
+  const evaluationFailure = (program: Program, context?: unknown, options?: EvaluateOptions) => {
+    const error = failure(program, context, options);
+    if (!(error instanceof EvaluationError)) throw new Error(`answered ${error.type}`);
+    return error;
+  };
+
+  // The refusal names the protected root as data, under `details.root`, as the
+  // reference's does, so a host reads the root without parsing the message.
+  // The root is named whether the path is the root itself or a path beneath
+  // it, and the message is the one this refusal has always carried.
+  //
+  // Sabotage: constructing the refusal without its details turns this red,
+  // and so does a constructor that drops the details it is handed. Both were
+  // run and reverted.
+  it("names the protected root in the refusal's details, for the root and a path beneath it", () => {
+    const atRoot = evaluationFailure(
+      [
+        ["lit", "loan"],
+        ["lit", "renewed"],
+        ["store", 1],
+      ],
+      {},
+      { protectedRoots: ["patron", "loan"] },
+    );
+    expect(atRoot).toEqual(
+      new EvaluationError("protected_root", "loan is a protected root", 2, { root: "loan" }),
+    );
+    expect(atRoot.message).toBe("loan is a protected root");
+    expect(atRoot.details).toEqual({ root: "loan" });
+
+    const beneath = evaluationFailure(
+      [
+        ["lit", "loan"],
+        ["lit", "due"],
+        ["lit", "2026-10-15"],
+        ["store", 2],
+      ],
+      {},
+      { protectedRoots: ["loan"] },
+    );
+    expect(beneath.message).toBe("loan is a protected root");
+    expect(beneath.details).toEqual({ root: "loan" });
+  });
+
+  // An integer root is named under the decimal spelling it was matched by,
+  // which is the spelling the protected roots list carries.
+  //
+  // Sabotage: carrying the root segment as it is, without spelling it, turns
+  // this red. It was run and reverted.
+  it("names an integer root in the refusal's details under its decimal spelling", () => {
+    const error = evaluationFailure(
+      [
+        ["lit", 0],
+        ["lit", "title"],
+        ["lit", "Middlemarch"],
+        ["store", 2],
+      ],
+      {},
+      { protectedRoots: ["0"] },
+    );
+    expect(error.details).toEqual({ root: "0" });
+  });
+
+  // Details are particular to the refusal that carries them: every other
+  // refusal leaves the field absent rather than present and empty.
+  //
+  // Sabotage: assigning the field on every error, whether or not details were
+  // handed in, turns this red. It was run and reverted.
+  it("leaves details absent on a store refusal other than a protected root", () => {
+    const error = evaluationFailure([
+      ["lit", "x"],
+      ["store", 1],
+    ]);
+    expect(error.reason).toBe("insufficient_operands");
+    expect("details" in error).toBe(false);
+    expect(error.details).toBeUndefined();
   });
 
   // An integer root segment is compared with the protected roots under its
