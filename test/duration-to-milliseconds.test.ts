@@ -96,10 +96,10 @@ describe("durationToMilliseconds", () => {
   // The reference sums with integers of any size; a JavaScript number past
   // the largest safe integer is the nearest double. This pins what the
   // conversion answers there: the double the arithmetic gives, which is not
-  // the exact sum, and no refusal. That it keeps a plain number was decided
-  // under the night rule by the conductor, 2026-10-01; a component past the
-  // safe range is refused where a text is read instead, by the cast and by
-  // parseDuration.
+  // the exact sum, and no refusal. It keeps a plain number (2026-10-01)
+  // because the bound is enforced where a text is read: the cast and
+  // parseDuration refuse a component past the safe range, so a duration that
+  // reaches this conversion was built by a host and is weighed as it stands.
   // Sabotage: clamping the sum to the largest safe integer turns this red.
   it("answers the double arithmetic gives past the largest safe integer, never a throw", () => {
     const past = new Duration({ seconds: 1, milliseconds: Number.MAX_SAFE_INTEGER });

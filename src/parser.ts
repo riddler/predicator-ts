@@ -65,7 +65,11 @@ import type {
   Statement,
   WhileStatement,
 } from "./ast.js";
-import { DURATION_UNIT_TABLE } from "./duration-units.js";
+import {
+  DURATION_UNIT_TABLE,
+  expandFraction as expandFractionalComponent,
+  type UnitRow,
+} from "./duration-units.js";
 import { ParseError, type ParseReason, type Position, type Span } from "./errors.js";
 import { floatSpelling } from "./floats.js";
 import { CAST_TYPE_NAMES, type CastType } from "./instructions.js";
@@ -1421,88 +1425,31 @@ function expandComponents(
   return { ok: true, value: pairs };
 }
 
-/**
- * The exact whole milliseconds one of each unit is worth, read off the one
- * unit table every duration reader shares.
- */
-const UNIT_MILLISECONDS: ReadonlyMap<string, number> = new Map(
-  DURATION_UNIT_TABLE.map((row) => [row.suffix, row.millis]),
+/** The unit rows by the suffix a literal writes them in, from the one table. */
+const ROW_OF_SUFFIX: ReadonlyMap<string, UnitRow> = new Map(
+  DURATION_UNIT_TABLE.map((row) => [row.suffix, row]),
 );
 
 /**
- * The units a remainder decomposes into, largest first, from the same table.
+ * Expands one fractional component into whole-unit pairs, or says its
+ * fraction is not exact.
  *
- * A remainder never goes back into weeks, months or years: those three carry
- * the language's own month and year approximations, and re-introducing one
- * into a remainder that an approximation produced would be circular. So half a
- * year is a hundred and eighty-two days and twelve hours, not twenty-six weeks.
- */
-const REMAINDER_LADDER: readonly (readonly [string, number])[] = DURATION_UNIT_TABLE.filter(
-  (row) => row.remainder,
-).map((row) => [row.suffix, row.millis] as const);
-
-/**
- * The most decimal places a fraction can carry and still be exact.
- *
- * A fraction is exact when the tens in its denominator all cancel against the
- * twos and fives in its unit's millisecond value and in its own digits, and
- * digits with no trailing zero cannot supply both. The richest unit here
- * carries eleven twos, so past eleven places nothing cancels and the fraction
- * is a sub-millisecond remainder whatever its digits say. Refusing there is
- * also what keeps every product below inside the whole numbers this language
- * holds exactly.
- */
-const MOST_EXACT_PLACES = 11;
-
-/**
- * Expands one fractional component, or says its fraction is not exact.
- *
- * The arithmetic is whole numbers throughout - the digits are read as an
- * integer and scaled by a power of ten, never as a binary fraction - so the
- * component is exact or it is refused, and nothing is rounded on the way. The
- * shared factors of the unit's millisecond value and the power of ten are
- * cancelled before anything is multiplied, which is what keeps the products
- * small enough to stay exact. The integer part keeps its own unit; only the
- * remainder walks the ladder.
+ * The expansion is the one the parse behind `::duration` and `parseDuration`
+ * runs, so a literal and a parsed text expand a fraction alike; this only
+ * names each amount's unit by the suffix a literal writes. A unit the table
+ * does not know is refused as an inexact fraction would be.
  */
 function expandFraction(
   whole: number,
   digits: string,
   unit: string,
 ): readonly DurationUnit[] | undefined {
-  const multiplier = UNIT_MILLISECONDS.get(unit);
-  if (multiplier === undefined) return undefined;
-
-  // A trailing zero is a place that carries nothing: dropping it leaves the
-  // fraction's value alone and its denominator smaller.
-  const written = digits.replace(/0+$/, "");
-  if (written.length > MOST_EXACT_PLACES) return undefined;
-
-  const numerator = written === "" ? 0 : Number(written);
-  const shared = greatestCommonDivisor(multiplier, 10 ** written.length);
-  const denominator = 10 ** written.length / shared;
-  if (numerator % denominator !== 0) return undefined;
-
-  const pairs: DurationUnit[] = whole > 0 ? [{ value: whole, unit }] : [];
-  let remainder = (numerator / denominator) * (multiplier / shared);
-  for (const [ladderUnit, ladderMilliseconds] of REMAINDER_LADDER) {
-    const value = Math.floor(remainder / ladderMilliseconds);
-    remainder -= value * ladderMilliseconds;
-    if (value > 0) pairs.push({ value, unit: ladderUnit });
-  }
-
-  return pairs.length === 0 ? [{ value: 0, unit }] : pairs;
-}
-
-function greatestCommonDivisor(left: number, right: number): number {
-  let a = left;
-  let b = right;
-  while (b !== 0) {
-    const next = a % b;
-    a = b;
-    b = next;
-  }
-  return a;
+  const row = ROW_OF_SUFFIX.get(unit);
+  if (row === undefined) return undefined;
+  return expandFractionalComponent(whole, digits, row)?.map((expanded) => ({
+    value: expanded.amount,
+    unit: expanded.row.suffix,
+  }));
 }
 
 /**
