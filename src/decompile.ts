@@ -163,7 +163,7 @@ const SPACING_TEXT = {
  * refused here exactly when `compile` refuses the same source for its depth,
  * with the same reason, message, position and span.
  */
-type DecompileResult =
+export type DecompileResult =
   | { readonly ok: true; readonly source: string }
   | { readonly ok: false; readonly error: ParseError };
 
