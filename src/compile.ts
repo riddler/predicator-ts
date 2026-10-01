@@ -185,8 +185,10 @@ function compileProgramAll(source: string): ProgramEmitResult {
 }
 
 /**
- * Compiles a statement program into the instruction list `evaluate`
- * consumes.
+ * Compiles a statement program into the instruction list `execute` and
+ * `executeValue` run. It is the compilation those two perform on a source
+ * string, so a program they are handed as text and the list this answers for
+ * the same text run alike.
  *
  * A program is one or more statements separated by `;`, with one trailing
  * `;` allowed. A statement is an assignment to a location - an identifier,

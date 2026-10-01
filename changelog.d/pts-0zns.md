@@ -1,0 +1,3 @@
+### Changed
+
+- `execute` and `executeValue` compile a source string as a statement program, as the reference's do, where they compiled it as an expression; `evaluate` still compiles an expression. Two effects follow: a source the expression grammar refused may now run (`execute("x = 1")` binds `x`), and a source either grammar refuses may answer the program grammar's refusal, with a different message or reason (`score 3` is refused as unexpected "after statement" rather than "after expression"). One more follows from the first: `executeValue` given an expression's source now answers that expression's value, where it answered undefined. A caller that wants a source refused unless it is an expression compiles it with `compile` and passes the instruction list.

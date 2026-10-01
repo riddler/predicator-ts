@@ -267,12 +267,13 @@ bound is what makes that refusal a property of the source rather than of the
 machine that compiled it.
 
 `evaluate`, `execute` and `executeValue` each take that source text directly as
-well, in place of the instruction list, and compile it before running it. The
-string is compiled as an EXPRESSION at all three: a source that needs the
-statement grammar is refused identically at every one of them. A caller with
-a statement program to run compiles it with `compileProgram`, under
-[Statement programs](#statement-programs) below, and passes the instruction
-list.
+well, in place of the instruction list, and compile it before running it, as
+the reference implementation's three do. `evaluate` compiles the string as an
+EXPRESSION, so a source that needs the statement grammar is refused there.
+`execute` and `executeValue` compile it as a statement program, the
+compilation `compileProgram` performs under
+[Statement programs](#statement-programs) below, so the same source runs
+there, and an expression's source runs as a program of one statement.
 
 ```ts
 import { evaluate, execute } from "@riddler/predicator";
@@ -291,9 +292,8 @@ if (!held.ok || held.value !== true) {
 
 // A source that does not compile comes back on the failing arm these three
 // already had, carrying the compiler's own refusal rather than a rewrapping of
-// it. `execute` is no exception: it compiles an expression too, so an
-// assignment is refused here exactly as it is at `evaluate`.
-const assigned = execute("x = 1");
+// it. `evaluate` compiles an expression, so an assignment is refused there.
+const assigned = evaluate("x = 1");
 
 if (assigned.ok) {
   throw new Error("an assignment is not an expression");
@@ -309,6 +309,13 @@ if (assigned.error.reason !== "assignment_in_expression") {
 
 if (assigned.error.position.column !== 3) {
   throw new Error("the refusal points at the `=` the grammar had no room for");
+}
+
+// `execute` compiles the same text as a statement program, and runs it.
+const bound = execute("x = 1");
+
+if (!bound.ok || bound.context.x !== 1) {
+  throw new Error("an assignment is a statement, and execute runs it");
 }
 ```
 
