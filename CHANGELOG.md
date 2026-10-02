@@ -14,6 +14,23 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.4.1] 2026-10-01
+
+A patch release. Two lists or two maps now compare their members as the
+reference compares them: members holding the null value at the same places
+are equal, absent members at the same places are equal, and a strict
+comparison of a null member with an absent one answers false. Orderings that
+step past such equal leading members move with it. No public name is added,
+removed or renamed.
+
+### Changed
+
+- Two lists or two maps that hold the null value at the same places now compare equal, as the reference compares them: `==`, `===`, `in` and `contains` answer true and `!=` and `!==` answer false, where `{line2: null} == {line2: null}` and `[null] === [null]` answered false before.
+- Two lists or two maps whose members are absent at the same places, such as `[undefined] == [undefined]` or `{line2: referrer} == {line2: referrer}` with `referrer` unbound, now compare equal under `==`, `!=`, `in` and `contains`, as the reference compares them.
+- A strict comparison of a member holding the null value with an absent member, such as `{line2: undefined} === {line2: null}` or `[undefined] === [null]`, now answers false, where it answered true.
+- As a consequence of member equality, an ordering of two lists whose leading members are equal lists or maps holding the null value steps past them: `[[null], 1] < [[null], 2]` and `[{line2: null}, 1] < [{line2: null}, 2]` now answer true, where they answered undefined.
+- The same holds for an ordering of two lists whose leading members are equal lists or maps holding an absent member, and under every ordering operator: `[[undefined], 1] < [[undefined], 2]` and `[{line2: undefined}, 1] > [{line2: undefined}, 2]` now answer true and false where they answered undefined, and where the absent member is an unbound name, as in `[[referrer], 1] < [[referrer], 2]` with `referrer` unbound, the ordering now answers a value where it answered an `unbound_variable` error.
+
 ## [0.4.0] 2026-10-01
 
 A minor release. The statement grammar compiles from source: `compileProgram`,
