@@ -30,7 +30,7 @@ import {
   evaluateToValue,
   resolveOptions,
 } from "../src/evaluator.js";
-import { evaluate } from "../src/index.js";
+import { contextPut, evaluate } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
 import { DEPTH_LIMIT } from "../src/nesting.js";
 import { decodeTagged } from "../src/tagged.js";
@@ -2185,6 +2185,36 @@ describe("the store write path", () => {
         value: ["insufficient_funds", { code: "expired_card" }, "do_not_honor"],
       });
     }
+  });
+
+  // A literal map is the operand as the program carried it too, so one of its
+  // own properties can hold the language's undefined. Writing through such a
+  // property reads it as the absence and vivifies it, as a host's context with
+  // the same shape does after the value boundary has normalized it.
+  //
+  // Sabotage: reading the map's own property as it is, without reading the
+  // language's undefined as the absence, turns this red: the write refuses the
+  // property as not a container. It was run and reverted.
+  it("writes through an undefined property of a literal map", () => {
+    const outcome = evaluateToValue([
+      ["lit", "patron"],
+      ["lit", { hold: undefined, loans: 2 } as unknown as Value],
+      ["store", 1],
+      ["lit", "patron"],
+      ["lit", "hold"],
+      ["lit", "title"],
+      ["lit", "Dune"],
+      ["store", 3],
+      ["load", "patron"],
+    ]);
+    const written = { hold: { title: "Dune" }, loans: 2 };
+    expect(outcome).toEqual({ ok: true, value: written });
+    expect(
+      contextPut({ patron: { hold: undefined, loans: 2 } }, ["patron", "hold", "title"], "Dune"),
+    ).toEqual({
+      ok: true,
+      context: { patron: written },
+    });
   });
 
   // Sabotage: descending into a map's slot by replacing it falsifies the rule
