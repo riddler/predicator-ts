@@ -520,9 +520,10 @@ describe("the reference transcript", () => {
   // and reading a recorded refusal as its raw value in `referenceAnswer` turns
   // that row red on the reference's answer.
   //
-  // Sabotage for the `member-equality/` rows, each run and reverted: reading
-  // each member in `valuesEqual` and `strictlyEqual` with the fallback that
-  // turns a stored null into the absence turns red every row whose answer the
+  // Sabotage for the `member-equality/` rows, each run and reverted: putting
+  // back the four member reads `valuesEqual` and `strictlyEqual` had before
+  // these rows (each member read with `?? Undefined`, and `valuesEqual` called
+  // on the pair instead of `membersEqual`) turns red every row whose answer the
   // member rule moved; comparing two absent members with `valuesEqual` in
   // `membersEqual` turns red the rows it moved for an absent member.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
