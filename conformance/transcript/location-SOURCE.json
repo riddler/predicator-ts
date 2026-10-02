@@ -1,0 +1,22 @@
+{
+  "repo": "riddler/predicator-ex",
+  "tag": "v9.4.2",
+  "sha": "d8067df4deac1306f8eb2a9276a92be64abed7d5",
+  "corpus_hash": "sha256:bb60ec82faba2e82ef1e7abaac8d26257db2a77cd4ce0c083b683c5bc063fd43",
+  "elixir": "1.18.3",
+  "otp": "27",
+  "isa_version": 6,
+  "sources_from": "scripts/lib/location-sources.mjs",
+  "counts": {
+    "context": 36,
+    "context_assign": 31,
+    "context_location": 57,
+    "location_error": 54,
+    "parse_error": 5,
+    "path": 17,
+    "put": 24,
+    "rows": 112
+  },
+  "generator": "node scripts/reference-location.mjs --from <export of riddler/predicator-ex at v9.4.2> --tag v9.4.2",
+  "transcript_hash": "sha256:c2c74794521380f303c68c7dc880e280cfea48fd8414c7c80e84b2ea5004fa80"
+}
