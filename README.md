@@ -70,7 +70,7 @@ the Development section below is how to provision them.
 ## The entry points
 
 ```ts
-import { compile, decompile, durationToMilliseconds, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
+import { compile, contextAssign, contextLocation, contextPut, decompile, durationToMilliseconds, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
 import { decodeTagged, encodeTagged, evaluateTagged, executeTagged } from "@riddler/predicator/tagged";
 ```
 
@@ -78,8 +78,9 @@ import { decodeTagged, encodeTagged, evaluateTagged, executeTagged } from "@ridd
   boundary, the compilation of an expression's or a statement program's source
   text into an instruction list, the evaluation and the run of such a list, the
   rendering of a parsed expression back to source text, the reading of a
-  duration from its literal spelling and its length in milliseconds, and the
-  version of the instruction set this build implements.
+  duration from its literal spelling and its length in milliseconds, the
+  resolution and writing of an assignment's location in a host's own data,
+  and the version of the instruction set this build implements.
 - **`@riddler/predicator/tagged`** is the tagged-value subpath: a codec for the
   conformance corpus's tagged encoding, and the one evaluation and the one
   statement run that speak it.
@@ -661,6 +662,70 @@ arm in one case, a context the value boundary refused, which is answered before
 any program runs. And `executeValue` answers the absence both when the program
 had no expression statement and when the last one's own value was an absence,
 which the result does not distinguish.
+
+## Writing a location
+
+A host that keeps its own data - a statechart's datamodel, say - writes an
+assignment's location into it without running a program. `contextLocation`
+resolves a location's source text to the path it names, `contextPut` writes a
+value at a path, and `contextAssign` does both. The two that answer a context
+take it first, and `contextLocation`, which only reads it, takes the source
+first.
+
+```ts
+import { contextAssign, contextLocation, contextPut, Float, float, Undefined } from "@riddler/predicator";
+
+// A library's datamodel: the patron's holds, and which hold the step is on.
+const datamodel = { i: 0, patron: { holds: ["atlas"], fines: float(2) } };
+
+const located = contextLocation("patron.holds[i]", datamodel);
+
+if (!located.ok || located.path.join("/") !== "patron/holds/0") {
+  throw new Error("a bracket key's variable is read from the context");
+}
+
+// The location is resolved against the context before the write, and the
+// answer is a new context; the caller's is never written into.
+const moved = contextAssign(datamodel, "patron.holds[i]", "codex");
+
+if (!moved.ok) {
+  throw new Error("a hold that exists can be replaced");
+}
+
+// The answered context holds this package's own values rather than their
+// plain projection, so a float keeps its brand when the datamodel threads it
+// back in, and a list padded past its end holds the absence.
+const patron = moved.context.patron as { holds: unknown[]; fines: unknown };
+
+if (!(patron.fines instanceof Float)) {
+  throw new Error("an integral float keeps its brand through a write");
+}
+
+const padded = contextPut(moved.context, ["patron", "holds", 2], "ledger");
+
+if (!padded.ok || (padded.context.patron as { holds: unknown[] }).holds[1] !== Undefined) {
+  throw new Error("a list written past its end is padded with the absence");
+}
+
+// A refusal is a value: a `LocationError` with a closed reason and details a
+// host reads without parsing the message.
+const through = contextAssign(datamodel, "patron.fines.total", 3);
+
+if (through.ok || through.error.type !== "LocationError" || through.error.reason !== "not_a_container") {
+  throw new Error("a path cannot pass through a float");
+}
+```
+
+A missing, null or absent slot on the way is created - a list when the next
+segment is an integer, a map otherwise - and the leaf is always overwritten.
+Nothing else is destroyed to make room: a path through a scalar, a string key
+against a list, a negative index, and a number in a hand-built path that is not
+a safe integer are refused. The context and the value go in through the same
+host boundary as `execute`'s context, so a value the domain has no member for
+answers the `EvaluationError` that boundary answers.
+`docs/adr/0005-the-location-surface.md` is the record, with the reasons, the
+details each one carries, and the places this surface declares it differs from
+the reference.
 
 ## The value domain
 

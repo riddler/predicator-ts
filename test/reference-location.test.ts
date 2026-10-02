@@ -7,10 +7,10 @@
 // source to a path, `Predicator.ContextLocation.put/3` writing a value at a
 // path, or `Predicator.context_assign/4` doing both. The reference's
 // conformance corpus carries no location case, so this file is the only
-// evidence of what those functions answer. This package has no location
-// surface for it to be diffed against yet; what these cases hold is the
-// evidence itself, so that whatever is later diffed against it is diffed
-// against the reference's answers and nothing else:
+// evidence of what those functions answer. `test/location.test.ts` diffs this
+// package's location surface against it; what the cases here hold is the
+// evidence itself, so that the surface is diffed against the reference's
+// answers and nothing else:
 //
 //   - the file is the one its SOURCE.json records, byte for byte, so a row
 //     edited by hand turns the hash assertion red;

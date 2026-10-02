@@ -79,7 +79,8 @@ import { SOURCE_DEPTH_LIMIT } from "./nesting.js";
 import { Float, Undefined, type Value } from "./values.js";
 
 /** The message a numeric literal outside the domain's range is refused with. */
-const NUMBER_OUT_OF_RANGE = "Number literal is outside the range this implementation can represent";
+export const NUMBER_OUT_OF_RANGE =
+  "Number literal is outside the range this implementation can represent";
 
 /** A program with both side tables over it, or the one refusal that stopped it. */
 export type EmitResult =

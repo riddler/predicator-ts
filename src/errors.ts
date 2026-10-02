@@ -16,6 +16,9 @@
  * handles.
  */
 
+import type { Ast } from "./decompile.js";
+import type { Value } from "./values.js";
+
 /**
  * The reason an error carries.
  *
@@ -112,6 +115,61 @@ export class UndefinedVariableError {
 
 /** Any error an evaluation can answer, discriminated by `type`. */
 export type PredicatorError = EvaluationError | TypeMismatchError | UndefinedVariableError;
+
+/**
+ * Why a location was refused, as a closed union of the reference's seven
+ * tokens, spelled as the reference spells them.
+ *
+ * Five are answered while a location's source is resolved to a path, and two
+ * while a value is written at a path. Like `ParseReason` it is closed, so a
+ * caller that switches on every member is told by the typechecker if the set
+ * ever grows.
+ */
+export type LocationReason =
+  // Resolving a location's source to a path.
+  | "not_assignable"
+  | "invalid_node"
+  | "undefined_variable"
+  | "invalid_key"
+  | "computed_key"
+  // Writing a value at a path.
+  | "not_a_container"
+  | "invalid_index";
+
+/**
+ * A location the location surface refused: a source that names no place to
+ * write, or a path whose write would pass through something that is not a
+ * container.
+ *
+ * It is its own error type and deliberately NOT a member of `PredicatorError`,
+ * for the reason `ParseError` is not: that union is the evaluation contract,
+ * and a refused location is not an evaluation outcome. A caller narrows on
+ * `type`. Like the others it is a value and never thrown.
+ *
+ * `details` carries what a caller reads without parsing the message, under
+ * property names that are this package's camelCase spellings of the
+ * reference's keys; `docs/adr/0005-the-location-surface.md` maps each one.
+ * Each value is a member of the value domain, except `node` and `expression`,
+ * which carry this package's opaque syntax tree. The message is this
+ * package's own sentence and is not normative.
+ */
+export class LocationError {
+  readonly type = "LocationError";
+  readonly reason: LocationReason;
+  readonly message: string;
+  readonly details: { readonly [key: string]: Value | Ast };
+
+  constructor(
+    reason: LocationReason,
+    message: string,
+    details: { readonly [key: string]: Value | Ast },
+  ) {
+    this.reason = reason;
+    this.message = message;
+    this.details = Object.freeze({ ...details });
+    Object.freeze(this);
+  }
+}
 
 /**
  * A place in source text: a line and a column, both 1-based.
