@@ -17,7 +17,7 @@
  */
 
 import { isPlainMap, setKey } from "./maps.js";
-import { fromHost, type Refusal, Undefined, type Value } from "./values.js";
+import { fromHost, isInteger, type Refusal, Undefined, type Value } from "./values.js";
 
 /** What a load of an absent root does. */
 export type UnboundPolicy = "undefined" | "error";
@@ -112,11 +112,14 @@ export function loadRoot(context: Context, name: string, onUnbound: UnboundPolic
 // ---------------------------------------------------------------------------
 
 /**
- * One segment of a store's path: a string key or an integer index.
+ * One segment of a write's path: a string key or an integer index.
  *
- * The type is the fence rather than a check inside the write: a value of any
- * other type is not a `PathSegment`, and `store` refuses such a segment as a
- * type mismatch before it builds a path out of one.
+ * The `store` opcode refuses a segment of any other type as a type mismatch
+ * before it builds a path out of one, so the type is the fence on that route.
+ * A path a host hands the location surface has had no such check, and a
+ * number in it need not be an integer, so the write itself also refuses a
+ * segment that is neither a string nor a safe integer where it reaches one;
+ * `fenced` below says how.
  */
 export type PathSegment = string | number;
 
@@ -132,17 +135,32 @@ export const INVALID_INDEX = "invalid_index";
 /** Why a write refused. */
 export type WriteRefusal = typeof NOT_ASSIGNABLE | typeof NOT_A_CONTAINER | typeof INVALID_INDEX;
 
-/** What a write produced: a new context, or the reason it refused. */
+/**
+ * Where a refused write stopped: the 0-based index in the path of the segment
+ * that failed, and the value that segment met - the scalar it could not pass
+ * through, or the list or map that refused the segment. An empty path, which
+ * names no segment at all, carries none.
+ */
+export interface WriteFault {
+  readonly pathIndex: number;
+  readonly holder: Value;
+}
+
+/** What a write produced: a new context, or the reason it refused and where. */
 export type WriteOutcome =
   | { readonly ok: true; readonly context: Context }
-  | { readonly ok: false; readonly reason: WriteRefusal };
+  | { readonly ok: false; readonly reason: WriteRefusal; readonly fault?: WriteFault };
 
 type MapValue = { [key: string]: Value };
 type Container = MapValue | Value[];
 
 type SlotOutcome =
   | { readonly ok: true; readonly value: Value }
-  | { readonly ok: false; readonly reason: WriteRefusal };
+  | {
+      readonly ok: false;
+      readonly reason: typeof NOT_A_CONTAINER | typeof INVALID_INDEX;
+      readonly fault: WriteFault;
+    };
 
 /**
  * The key a segment names in a map.
@@ -157,7 +175,7 @@ type SlotOutcome =
  * way; either way the key is fixed by the integer alone, with no formatting
  * choice at the call site.
  */
-function mapKey(segment: PathSegment): string {
+function mapKey(segment: string | number): string {
   return typeof segment === "string" ? segment : String(segment);
 }
 
@@ -169,39 +187,78 @@ function padded(list: readonly Value[], index: number): Value[] {
 }
 
 /**
- * What the slot the path has reached must come to hold.
- *
- * At the leaf that is the value being written, whatever the slot held before:
- * the leaf is always overwritten. Above the leaf the occupant decides. A map
- * or a list is descended into and never replaced; `null` and the absence are
- * vivified, as a list when the next segment is an integer and a map otherwise,
- * because writing through a null is an ordinary traversal here rather than the
- * refusal it is in some other languages; and any other scalar is a refusal,
- * since there is nothing to descend into.
+ * The refusal for a segment that is neither a string nor a safe integer: a
+ * fraction, a number that is not finite, a float, or anything else a host
+ * put in a path. It is refused where the write reaches it, before anything is
+ * written there: against a list as a key a list cannot take, the reference's
+ * answer for a key that is not an integer, and against a map as an index that
+ * names no location, because a map's keys here are strings and such a segment
+ * has no spelling the read side would find again. Without it a list would be
+ * padded out to a fraction's length and given a string property.
  */
-function descend(occupant: Value, rest: readonly PathSegment[], value: Value): SlotOutcome {
-  if (rest.length === 0) return { ok: true, value };
-  if (Array.isArray(occupant) || isPlainMap(occupant)) return putIn(occupant, rest, value);
-  if (occupant === null || occupant === Undefined) {
-    const vivified: Container = typeof rest[0] === "string" ? {} : [];
-    return putIn(vivified, rest, value);
-  }
-  return { ok: false, reason: NOT_A_CONTAINER };
+function fenced(container: Container, pathIndex: number): SlotOutcome {
+  return {
+    ok: false,
+    reason: Array.isArray(container) ? NOT_A_CONTAINER : INVALID_INDEX,
+    fault: { pathIndex, holder: container },
+  };
 }
 
 /**
- * Writes a value at a path inside one container, answering a NEW container.
+ * What the slot the path has reached must come to hold.
+ *
+ * `next` is the index in the path of the segment after the one whose slot
+ * this is. At the leaf that is the value being written, whatever the slot
+ * held before: the leaf is always overwritten. Above the leaf the occupant
+ * decides. A map or a list is descended into and never replaced; `null` and
+ * the absence are vivified, as a list when the next segment is an integer and
+ * a map otherwise, because writing through a null is an ordinary traversal
+ * here rather than the refusal it is in some other languages; and any other
+ * scalar is a refusal, blamed on the segment whose slot it fills, since there
+ * is nothing to descend into.
+ */
+function descend(
+  occupant: Value,
+  path: readonly unknown[],
+  next: number,
+  value: Value,
+): SlotOutcome {
+  if (next === path.length) return { ok: true, value };
+  if (Array.isArray(occupant) || isPlainMap(occupant)) return putIn(occupant, path, next, value);
+  if (occupant === null || occupant === Undefined) {
+    const vivified: Container = isInteger(path[next]) ? [] : {};
+    return putIn(vivified, path, next, value);
+  }
+  return {
+    ok: false,
+    reason: NOT_A_CONTAINER,
+    fault: { pathIndex: next - 1, holder: occupant },
+  };
+}
+
+/**
+ * Writes a value at the path's segments from `index` on, inside one
+ * container, answering a NEW container.
  *
  * Nothing reachable from the container handed in is mutated: each level copies
  * the level it descends into, so a refusal deeper down leaves no partial write
  * behind and a context a caller still holds is untouched.
  */
-function putIn(container: Container, path: readonly PathSegment[], value: Value): SlotOutcome {
-  const segment = path[0] as PathSegment;
-  const rest = path.slice(1);
+function putIn(
+  container: Container,
+  path: readonly unknown[],
+  index: number,
+  value: Value,
+): SlotOutcome {
+  const segment = path[index];
+  if (typeof segment !== "string" && !isInteger(segment)) return fenced(container, index);
   if (Array.isArray(container)) {
-    if (typeof segment === "string") return { ok: false, reason: NOT_A_CONTAINER };
-    if (segment < 0) return { ok: false, reason: INVALID_INDEX };
+    if (typeof segment === "string") {
+      return { ok: false, reason: NOT_A_CONTAINER, fault: { pathIndex: index, holder: container } };
+    }
+    if (segment < 0) {
+      return { ok: false, reason: INVALID_INDEX, fault: { pathIndex: index, holder: container } };
+    }
     const next = padded(container, segment);
     // The padding guarantees the index exists, but not that it holds a value
     // of the domain. A list pushed by `lit` is the operand as the program
@@ -209,14 +266,14 @@ function putIn(container: Container, path: readonly PathSegment[], value: Value)
     // copy `padded` makes turns a hole into undefined too. The coalesce reads
     // either as the absence, the value a slot the padding added holds, and a test in
     // `test/evaluator.test.ts` writes through such a slot.
-    const written = descend(next[segment] ?? Undefined, rest, value);
+    const written = descend(next[segment] ?? Undefined, path, index + 1, value);
     if (!written.ok) return written;
     next[segment] = written.value;
     return { ok: true, value: next };
   }
   const key = mapKey(segment);
   const occupant = Object.hasOwn(container, key) ? (container[key] ?? Undefined) : Undefined;
-  const written = descend(occupant, rest, value);
+  const written = descend(occupant, path, index + 1, value);
   if (!written.ok) return written;
   const next: MapValue = { ...container };
   setKey(next, key, written.value);
@@ -229,8 +286,14 @@ function putIn(container: Container, path: readonly PathSegment[], value: Value)
  * The context's own roots are the outermost map, so a path of one segment
  * writes a root and a longer one traverses from there under the rules
  * `descend` states. An empty path names no location at all and is refused. One
- * arrives from a hand-built `["store", 0]`; whether a source a compiler accepts
- * can also produce one is not established here.
+ * arrives from a hand-built `["store", 0]`, or from a host calling the
+ * location surface with one; whether a source a compiler accepts can also
+ * produce one is not established here.
+ *
+ * This is the one write path: the `store` opcode and the location surface
+ * both reach it, so a statement and a host's write cannot disagree about
+ * what a path writes. A refusal says which segment failed and what it met, so
+ * the location surface can describe it; the opcode reads only the reason.
  *
  * The protected-root check is NOT here. It belongs to the opcode, which runs
  * it after segment validation and before reaching this function, so a write a
@@ -242,7 +305,7 @@ export function writePath(
   value: Value,
 ): WriteOutcome {
   if (path.length === 0) return { ok: false, reason: NOT_ASSIGNABLE };
-  const written = putIn(context.asMap(), path, value);
-  if (!written.ok) return { ok: false, reason: written.reason };
+  const written = putIn(context.asMap(), path, 0, value);
+  if (!written.ok) return { ok: false, reason: written.reason, fault: written.fault };
   return { ok: true, context: new Context(new Map(Object.entries(written.value as MapValue))) };
 }

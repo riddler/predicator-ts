@@ -1,6 +1,7 @@
 /**
  * The main entry point: the value domain, the host boundary, compilation from
- * source text, evaluation, and the rendering direction back to source.
+ * source text, evaluation, the rendering direction back to source, and the
+ * location surface that resolves and writes the place an assignment names.
  *
  * A host writing a context reaches for `float()` and the absence singleton,
  * and a host reading a plain result back holds a date, a datetime or a
@@ -47,9 +48,17 @@ export type { UnboundPolicy } from "./context.js";
 export type { Ast, DecompileOptions, DecompileResult } from "./decompile.js";
 export { decompile } from "./decompile.js";
 export { durationToMilliseconds } from "./duration-units.js";
-export type { ParseReason, Position, PredicatorError, Reason, Span } from "./errors.js";
+export type {
+  LocationReason,
+  ParseReason,
+  Position,
+  PredicatorError,
+  Reason,
+  Span,
+} from "./errors.js";
 export {
   EvaluationError,
+  LocationError,
   ParseError,
   TypeMismatchError,
   UndefinedVariableError,
@@ -63,6 +72,8 @@ export type {
 } from "./evaluator.js";
 export type { Instruction, Program } from "./instructions.js";
 export { isaVersion } from "./instructions.js";
+export type { AssignResult, LocationPath, LocationResult, PutResult } from "./location.js";
+export { contextAssign, contextLocation, contextPut } from "./location.js";
 export * from "./values.js";
 
 /**
@@ -313,8 +324,9 @@ export function parse(source: string): ParseResult {
   const parsed = parseTokens(scanned.tokens);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   // Sealing the tree into the handle. This is the producing half of the
-  // pair, and `decompile` is the reading half; nowhere else in the package
-  // crosses between the two.
+  // pair, and `decompile` is the reading half. The one other crossing is the
+  // location surface, which seals a node into a refusal's details the same
+  // way, so that what a caller holds there is a tree `decompile` reads.
   return { ok: true, ast: parsed.ast as unknown as Ast };
 }
 
