@@ -30,6 +30,7 @@ import {
   float,
   LocationError,
   ParseError,
+  type PutResult,
   Undefined,
   type Value,
 } from "../src/index.js";
@@ -481,6 +482,46 @@ describe("the run-time fence on a path a host builds", () => {
           expect(error.details.location, what).toBe(`fines.${text}`);
           expect(sameValue(error.details.index as Value, carried), what).toBe(true);
         }
+      }
+    }
+  });
+
+  // Sabotage, through scripts/sabotage.mjs: the segment spelling made to
+  // convert every segment with String() turns this red on the first
+  // not-threw assertion. It was run and restored.
+  it("answers, and never throws, for a segment that cannot be converted to text", () => {
+    const noPrototype = Object.create(null) as unknown as string;
+    const throwingText = {
+      toString(): string {
+        throw new Error("a segment's own conversion ran");
+      },
+    } as unknown as string;
+    // A throw is caught here only so that it fails on the assertion below
+    // rather than out of the test.
+    const attempt = (run: () => PutResult): PutResult | "threw" => {
+      try {
+        return run();
+      } catch {
+        return "threw";
+      }
+    };
+    for (const [what, segment] of [
+      ["an object with no prototype", noPrototype],
+      ["an object whose conversion throws", throwingText],
+    ] as const) {
+      const onRoot = attempt(() => contextPut({}, [segment], 1));
+      expect(onRoot, what).not.toBe("threw");
+      expect(onRoot !== "threw" && onRoot.ok, what).toBe(false);
+      if (onRoot !== "threw" && !onRoot.ok) {
+        expect((onRoot.error as LocationError).reason, what).toBe("invalid_index");
+        expect((onRoot.error as LocationError).details.location, what).toBe("(an object)");
+      }
+      const onList = attempt(() => contextPut({ holds: ["atlas"] }, ["holds", segment], 1));
+      expect(onList, what).not.toBe("threw");
+      expect(onList !== "threw" && onList.ok, what).toBe(false);
+      if (onList !== "threw" && !onList.ok) {
+        expect((onList.error as LocationError).reason, what).toBe("not_a_container");
+        expect((onList.error as LocationError).details.location, what).toBe("holds.(an object)");
       }
     }
   });

@@ -65,6 +65,10 @@ other function on this entry point does (ADR-0001's paragraph opening
 thrown, and so is a value to write that it refuses. What is outside that
 promise is what is outside it everywhere here: host code that throws while the
 boundary reads what the host handed it, such as a getter, propagates unchanged.
+A path segment of any kind is answered too: one that is not a primitive is
+described in a refusal's `location`, never converted to text, since a
+conversion would run the host's code or throw for an object with no
+prototype.
 
 ### The answered context is in the domain, not projected
 
@@ -180,7 +184,9 @@ property.
 The fenced segment is carried in `details` as the member of the domain the
 boundary reads it as - a fraction is a float - or as the absence when the
 domain has no member for it, as for a number that is not finite. The
-`location` spells it after a dot, a float with its point.
+`location` spells it after a dot: a float with its point, another primitive
+as its text, and a list, a function or another object as `(a list)`,
+`(a function)` or `(an object)`.
 
 ### One write path
 

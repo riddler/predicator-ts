@@ -14,7 +14,11 @@
  * a new one, and `contextLocation` takes the source first because it only
  * reads the context - the opposite of `evaluate(source, context)`.
  *
- * Every function answers a value and never throws. The one error of the
+ * Every function answers a value and never throws, whatever a host puts in
+ * a path: a segment that is not a primitive is described, never converted.
+ * Outside that promise, as everywhere in this package, is host code that
+ * throws while the boundary reads what the host handed it, such as a getter
+ * or a proxy trap, whose error propagates unchanged. The one error of the
  * evaluation union this surface answers is the `EvaluationError` the host
  * boundary refuses a value with: a context, or a value to write, the domain
  * has no member for, or a write that would nest the context past the depth
@@ -277,17 +281,21 @@ function resolve(node: Node, context: Context): LocationResult {
 /**
  * How a location error spells one segment of the path it names: a key after
  * a dot, or at the root bare, and an integer in brackets. A segment that is
- * neither is spelled after a dot as its text, a float with its point.
+ * neither is spelled after a dot: a float with its point, any other primitive
+ * as its text, and anything else by a description of what it is. Such a
+ * segment is never converted to text, because a conversion runs the host's
+ * own code or, for an object with no prototype, throws.
  */
 function segmentText(segment: unknown, at: number): string {
   if (isInteger(segment)) return `[${segment}]`;
-  const text =
-    typeof segment === "string"
-      ? segment
-      : segment instanceof Float
-        ? floatText(segment)
-        : String(segment);
-  return at === 0 ? text : `.${text}`;
+  const text = at === 0 ? "" : ".";
+  if (typeof segment === "string") return text + segment;
+  if (segment instanceof Float) return text + floatText(segment);
+  if (typeof segment === "function") return `${text}(a function)`;
+  if (typeof segment === "object" && segment !== null) {
+    return text + (Array.isArray(segment) ? "(a list)" : "(an object)");
+  }
+  return text + String(segment);
 }
 
 /** The location a refused write names: the path up to and including the failing segment. */
