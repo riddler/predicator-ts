@@ -83,6 +83,14 @@ interface Declared {
 const DURATION_NOTE =
   "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the note on a duration the host supplies";
 
+/**
+ * Where the rows on a duration against a plain map under `>`, `<=` and
+ * `contains` are declared: a later note in the same record, which extends the
+ * first one's table to those operators.
+ */
+const DURATION_REMAINING_NOTE =
+  "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the note on the remaining operators against a plain map";
+
 /** An instant on the day the `datetime-offset/` rows are written on, in UTC. */
 function utc(hour: number, minute: number): PDateTime {
   return new PDateTime(Date.UTC(2026, 8, 19, hour, minute, 0) / 1000, 0);
@@ -310,7 +318,7 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   // a duration the program built it answers a loose comparison and an
   // ordering with a boolean, and against one the host supplied, which its
   // context normalization has made a plain map, every operator answers as
-  // between two equal maps. The strict comparisons and membership of the
+  // between two equal maps. The strict comparisons and both memberships of the
   // built duration agree on both sides and are not declared here.
   [
     "duration-against-map/built-loose-eq",
@@ -327,6 +335,14 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   [
     "duration-against-map/built-lt",
     { reference: true, ours: Undefined, declaredBy: DURATION_NOTE },
+  ],
+  [
+    "duration-against-map/built-gt",
+    { reference: false, ours: Undefined, declaredBy: DURATION_REMAINING_NOTE },
+  ],
+  [
+    "duration-against-map/built-lte",
+    { reference: true, ours: Undefined, declaredBy: DURATION_REMAINING_NOTE },
   ],
   [
     "duration-against-map/supplied-loose-eq",
@@ -353,6 +369,18 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
     { reference: false, ours: Undefined, declaredBy: DURATION_NOTE },
   ],
   ["duration-against-map/supplied-in", { reference: true, ours: false, declaredBy: DURATION_NOTE }],
+  [
+    "duration-against-map/supplied-gt",
+    { reference: false, ours: Undefined, declaredBy: DURATION_REMAINING_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-lte",
+    { reference: true, ours: Undefined, declaredBy: DURATION_REMAINING_NOTE },
+  ],
+  [
+    "duration-against-map/supplied-contains",
+    { reference: true, ours: false, declaredBy: DURATION_REMAINING_NOTE },
+  ],
   // A date plus a duration the host supplies. The reference holds a plain map
   // there and refuses the sum with a type mismatch; this package keeps the
   // duration and answers the date moved on by its whole days.
@@ -519,6 +547,12 @@ describe("the reference transcript", () => {
   // `applyAdd` turns `duration-arithmetic/date-plus-a-supplied-duration` red;
   // and reading a recorded refusal as its raw value in `referenceAnswer` turns
   // that row red on the reference's answer.
+  //
+  // Sabotage for the `gt`, `lte` and `contains` rows beside them, each run and
+  // reverted: ordering a duration level with a plain map at the head of
+  // `compareOrder` turns all eight ordering rows red, the four `gt` and `lte`
+  // rows among them; letting `contains` in `membership` find a duration in any
+  // plain map turns both `contains` rows red.
   //
   // Sabotage for the `member-equality/` rows, each run and reverted: putting
   // back the four member reads `valuesEqual` and `strictlyEqual` had before

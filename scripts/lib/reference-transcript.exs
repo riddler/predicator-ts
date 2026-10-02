@@ -335,8 +335,9 @@ clock_cases = [
 # keys and values. So each operator is asked twice, once of a duration the
 # program built and once of one the host supplied, each against a plain map
 # holding the same eight keys and values: loose and strict equality and
-# inequality, two orderings, and membership. The duration is the hold period
-# of a card authorization.
+# inequality, each of the four orderings, and membership from either side, as
+# `in` and as `contains`. The duration is the hold period of a card
+# authorization.
 hold_policy = %{
   "years" => 0,
   "months" => 0,
@@ -362,7 +363,10 @@ duration_against_map_cases =
         {"strict-ne", "#{left} !== hold_policy"},
         {"gte", "#{left} >= hold_policy"},
         {"lt", "#{left} < hold_policy"},
-        {"in", "#{left} in [hold_policy]"}
+        {"in", "#{left} in [hold_policy]"},
+        {"gt", "#{left} > hold_policy"},
+        {"lte", "#{left} <= hold_policy"},
+        {"contains", "[hold_policy] contains #{left}"}
       ] do
     %{"id" => "duration-against-map/#{pair}-#{operator}", "source" => source, "context" => context}
   end
