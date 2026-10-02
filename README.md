@@ -801,7 +801,7 @@ runs of one list under different options may legitimately differ.
 | `now` | the system clock | The clock a time-dependent instruction reads, read at most once per run so that two of them agree |
 | `random` | the host's own | The source of randomness |
 | `onUnbound` | `"undefined"` | Whether a load of a root the context did not bind pushes the absence or fails at the load |
-| `protectedRoots` | empty | Context roots a `store` may not write, refused with `protected_root` |
+| `protectedRoots` | empty | Context roots a `store` may not write, refused with `protected_root`; the refusal's `details.root` names the refused root |
 
 The request for the corpus's tagged encoding is not on that type. It belongs to
 `TaggedEvaluateOptions`, which the subpath exports and which extends the type
