@@ -383,6 +383,12 @@ const DURATION_KEYS = [
  * a value that is present and empty, so it is equal to itself and to nothing
  * else. Both behaviours are the reference's and both are load-bearing, so the
  * difference between them is a rule rather than an oversight.
+ *
+ * Inside a list or a map the null value and the absence compare as the
+ * reference's term equality compares them: a member holding the null value
+ * equals a member holding the null value, and an absent member equals an
+ * absent member (see `membersEqual`). Only the top-level pair keeps the rule
+ * above.
  */
 export function valuesEqual(left: Value, right: Value): boolean {
   if (left === Undefined || right === Undefined) return false;
@@ -400,7 +406,7 @@ export function valuesEqual(left: Value, right: Value): boolean {
   if (Array.isArray(left) && Array.isArray(right)) {
     return (
       left.length === right.length &&
-      left.every((item, at) => valuesEqual(item, right[at] ?? Undefined))
+      left.every((item, at) => membersEqual(item, heldMember(right[at])))
     );
   }
   if (isPlainMap(left) && isPlainMap(right)) {
@@ -408,10 +414,35 @@ export function valuesEqual(left: Value, right: Value): boolean {
     if (keys.length !== Object.keys(right).length) return false;
     return keys.every(
       (key) =>
-        Object.hasOwn(right, key) && valuesEqual(left[key] ?? Undefined, right[key] ?? Undefined),
+        Object.hasOwn(right, key) && membersEqual(heldMember(left[key]), heldMember(right[key])),
     );
   }
   return false;
+}
+
+/**
+ * One member of a list or a map, read as it is held.
+ *
+ * A stored null value stays the null value here. Only a read that finds no
+ * value at all answers the absence, as `readMember` does, so a member holding
+ * the null value is never compared as though it were missing.
+ */
+function heldMember(member: Value | undefined): Value {
+  return member === undefined ? Undefined : member;
+}
+
+/**
+ * Loose equality between two members of a list or a map.
+ *
+ * The reference compares the members of two containers by term, so two absent
+ * members are the same member there, where two absent values at the top level
+ * are not equal at all. Every other pair of members is decided as
+ * `valuesEqual` decides it, so a date or a datetime member keeps this
+ * package's chronological rule rather than the reference's term comparison.
+ */
+function membersEqual(left: Value, right: Value): boolean {
+  if (left === Undefined || right === Undefined) return left === right;
+  return valuesEqual(left, right);
 }
 
 /**
@@ -450,14 +481,14 @@ export function strictlyEqual(left: Value, right: Value): boolean {
   if (Array.isArray(left) || Array.isArray(right)) {
     if (!(Array.isArray(left) && Array.isArray(right))) return false;
     if (left.length !== right.length) return false;
-    return left.every((item, at) => strictlyEqual(item, right[at] ?? Undefined));
+    return left.every((item, at) => strictlyEqual(item, heldMember(right[at])));
   }
   if (isPlainMap(left) && isPlainMap(right)) {
     const keys = Object.keys(left);
     if (keys.length !== Object.keys(right).length) return false;
     return keys.every(
       (key) =>
-        Object.hasOwn(right, key) && strictlyEqual(left[key] ?? Undefined, right[key] ?? Undefined),
+        Object.hasOwn(right, key) && strictlyEqual(heldMember(left[key]), heldMember(right[key])),
     );
   }
   return false;
