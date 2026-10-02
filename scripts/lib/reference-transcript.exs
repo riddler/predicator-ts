@@ -391,9 +391,10 @@ date_arithmetic_cases = [
 # spelled `undefined` and as an unbound name; the null value against an absent
 # member; a map against a map with the key missing; mixed containers and the
 # null value; a date, a datetime and a duration member that compare equal on
-# both sides; and two orderings whose first members are a list and a map
-# holding the null value, which an ordering walks with member equality. The
-# fields are a signup's billing and shipping addresses.
+# both sides; and orderings whose first members are a list and a map holding
+# the null value or an absent member, which an ordering walks with member
+# equality, under each of the four ordering operators. The fields are a
+# signup's billing and shipping addresses.
 member_equality_cases =
   for {{source, context}, at} <-
         Enum.with_index(
@@ -656,7 +657,29 @@ member_equality_cases =
             {~S|1 in undefined|, %{}},
             {~S|[undefined] contains undefined|, %{}},
             {~S|referrer === referrer|, %{}},
-            {~S|holds in [holds]|, %{"holds" => nil}}
+            {~S|holds in [holds]|, %{"holds" => nil}},
+            {~S|[[undefined], 1] < [[undefined], 2]|, %{}},
+            {~S|[[undefined], 1] > [[undefined], 2]|, %{}},
+            {~S|[[undefined], 1] <= [[undefined], 1]|, %{}},
+            {~S|[[undefined], 1] >= [[undefined], 1]|, %{}},
+            {~S|[{line2: undefined}, 1] < [{line2: undefined}, 2]|, %{}},
+            {~S|[{line2: undefined}, 1] > [{line2: undefined}, 2]|, %{}},
+            {~S|[{line2: undefined}, 1] <= [{line2: undefined}, 1]|, %{}},
+            {~S|[{line2: undefined}, 1] >= [{line2: undefined}, 1]|, %{}},
+            {~S|[[referrer], 1] < [[referrer], 2]|, %{}},
+            {~S|[[referrer], 1] > [[referrer], 2]|, %{}},
+            {~S|[[referrer], 1] <= [[referrer], 1]|, %{}},
+            {~S|[[referrer], 1] >= [[referrer], 1]|, %{}},
+            {~S|[{line2: referrer}, 1] < [{line2: referrer}, 2]|, %{}},
+            {~S|[{line2: referrer}, 1] > [{line2: referrer}, 2]|, %{}},
+            {~S|[{line2: referrer}, 1] <= [{line2: referrer}, 1]|, %{}},
+            {~S|[{line2: referrer}, 1] >= [{line2: referrer}, 1]|, %{}},
+            {~S|[[null], 1] > [[null], 2]|, %{}},
+            {~S|[[null], 1] <= [[null], 1]|, %{}},
+            {~S|[[null], 1] >= [[null], 1]|, %{}},
+            {~S|[{line2: null}, 1] > [{line2: null}, 2]|, %{}},
+            {~S|[{line2: null}, 1] <= [{line2: null}, 1]|, %{}},
+            {~S|[{line2: null}, 1] >= [{line2: null}, 1]|, %{}}
           ],
           1
         ) do

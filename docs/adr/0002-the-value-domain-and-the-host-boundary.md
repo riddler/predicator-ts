@@ -3714,6 +3714,9 @@ the table below as its last column says.
 | `[[null]]` and `[null]` | `contains` | false | true | true |
 | `[[null], 1]` and `[[null], 2]` | `<` | absence | true | true |
 | `[{line2: null}, 1]` and `[{line2: null}, 2]` | `<` | absence | true | true |
+| `[[undefined], 1]` and `[[undefined], 2]` | `<` | absence | true | true |
+| `[{line2: undefined}, 1]` and `[{line2: undefined}, 2]` | `<` | absence | true | true |
+| `[[referrer], 1]` and `[[referrer], 2]`, `referrer` unbound | `<` | `unbound_variable` error | true | true |
 
 An inequality answers the negation of the equality beside it in every row,
 before and after.
@@ -3727,6 +3730,20 @@ does not. A leading list or map that holds the null value now steps past where
 it stopped the ordering before, so the last two rows of the table answer true
 where they answered the absence. `compareOrder`'s own reads of the members it
 walks are unchanged.
+
+**More orderings move than the two the heading above names.** The same
+stepping-past applies when the leading list or map holds an absent member,
+spelled `undefined` or written as an unbound name, and under every ordering
+operator. Over a leading `[null]`, `{line2: null}`, `[undefined]` or
+`{line2: undefined}`, `<` and `>` between the list ending in 1 and the list
+ending in 2 answer true and false, and `<=` and `>=` between a list and itself
+answer true, where each answered the absence; the reference answers the same
+at `v9.4.2`. Where the absent member is an unbound name (`[[referrer], 1]`
+and `[{line2: referrer}, 1]` with `referrer` unbound), each of the four
+orderings answered an `unbound_variable` error before this change, because
+`halt` in `src/evaluator.ts` reports a result of the absence as the error of
+the unbound name the program loaded; it now answers the value, as the
+reference does. An error answer became a value there.
 
 ### What this does not decide
 
@@ -3760,6 +3777,11 @@ the top-level null value and absence, and the date, datetime and duration
 members that agree. "member equality inside lists and maps" in
 `test/member-equality.test.ts` asks each of the same sources against the same
 context and holds the reference's answer.
+The rows `member-equality/260` through `member-equality/281`, in the same
+file and the same table, carry the orderings of the paragraph headed "More
+orderings move", the table's last three rows among them, which the rows
+`member-equality/001` through `member-equality/259` do not carry; each is
+regenerated at `v9.4.2` and each agrees.
 
 Consequences. A host comparing two lists or two maps that hold the null value
 at the same places gets true from `==`, `===`, `in` and `contains` where it got
@@ -3768,3 +3790,8 @@ a member holding the null value with an absent member answers false where it
 answered true. The two orderings above answer true where they answered the
 absence. No exported signature changes, no reason token is added, and no
 opcode changes.
+
+Consequences, continued. The orderings over a leading list or map holding an
+absent member answer as the previous section says: a value where they
+answered the absence, and, where the absent member is an unbound name, a
+value where they answered an `unbound_variable` error.

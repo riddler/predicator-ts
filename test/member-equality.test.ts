@@ -13,16 +13,19 @@
 // The rows go beyond the members that moved: an equal and an unequal pair
 // beside each, the strict family beside the loose one, membership both ways,
 // the top-level null value and absence that do not move, and date, datetime and
-// duration members that compare equal on both sides. Two orderings are here
+// duration members that compare equal on both sides. Orderings are here
 // because an ordering of two lists walks their leading members with member
-// equality, so a leading list or map that holds the null value now steps past
-// rather than stopping the ordering.
+// equality, so a leading list or map that holds the null value, or holds an
+// absent member, now steps past rather than stopping the ordering: `<`, `>`,
+// `<=` and `>=` over each, the absent member spelled `undefined` and as an
+// unbound name, which stopped the ordering with an unbound-variable error.
 //
-// Sabotage: restoring the reads that turned a stored null member into the
-// absence (`?? Undefined` on each member read in `valuesEqual` and
-// `strictlyEqual`, in src/evaluator.ts) turns this table red on the member
-// rows, and so does comparing two absent members with `valuesEqual` itself
-// rather than by identity in `membersEqual`. Each was run and reverted.
+// Sabotage: putting back the four member reads `valuesEqual` and
+// `strictlyEqual` had before this table (each member read with `?? Undefined`,
+// and `valuesEqual` called on the pair instead of `membersEqual`, in
+// src/evaluator.ts) turns this table red on the rows whose answer moved, and
+// so does comparing two absent members with `valuesEqual` itself rather than
+// by identity in `membersEqual`. Each was run and reverted.
 
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/index.js";
@@ -341,6 +344,28 @@ const ROWS: readonly Row[] = [
   ["[undefined] contains undefined", {}, undefined],
   ["referrer === referrer", {}, true],
   ["holds in [holds]", { holds: null }, true],
+  ["[[undefined], 1] < [[undefined], 2]", {}, true],
+  ["[[undefined], 1] > [[undefined], 2]", {}, false],
+  ["[[undefined], 1] <= [[undefined], 1]", {}, true],
+  ["[[undefined], 1] >= [[undefined], 1]", {}, true],
+  ["[{line2: undefined}, 1] < [{line2: undefined}, 2]", {}, true],
+  ["[{line2: undefined}, 1] > [{line2: undefined}, 2]", {}, false],
+  ["[{line2: undefined}, 1] <= [{line2: undefined}, 1]", {}, true],
+  ["[{line2: undefined}, 1] >= [{line2: undefined}, 1]", {}, true],
+  ["[[referrer], 1] < [[referrer], 2]", {}, true],
+  ["[[referrer], 1] > [[referrer], 2]", {}, false],
+  ["[[referrer], 1] <= [[referrer], 1]", {}, true],
+  ["[[referrer], 1] >= [[referrer], 1]", {}, true],
+  ["[{line2: referrer}, 1] < [{line2: referrer}, 2]", {}, true],
+  ["[{line2: referrer}, 1] > [{line2: referrer}, 2]", {}, false],
+  ["[{line2: referrer}, 1] <= [{line2: referrer}, 1]", {}, true],
+  ["[{line2: referrer}, 1] >= [{line2: referrer}, 1]", {}, true],
+  ["[[null], 1] > [[null], 2]", {}, false],
+  ["[[null], 1] <= [[null], 1]", {}, true],
+  ["[[null], 1] >= [[null], 1]", {}, true],
+  ["[{line2: null}, 1] > [{line2: null}, 2]", {}, false],
+  ["[{line2: null}, 1] <= [{line2: null}, 1]", {}, true],
+  ["[{line2: null}, 1] >= [{line2: null}, 1]", {}, true],
 ];
 
 describe("member equality inside lists and maps", () => {
