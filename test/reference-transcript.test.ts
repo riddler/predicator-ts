@@ -13,8 +13,9 @@
 // find against a map and a null key against a duration, what an arithmetic
 // result past the safe integer range answers, whether two reads of the clock
 // in one evaluation answer one instant, what a duration answers against a
-// plain map, and what a date plus a duration the host supplies answers. The
-// file is written by
+// plain map, what a date plus a duration the host supplies answers, and how
+// two lists or two maps compare when a member holds the null value or is
+// absent. The file is written by
 // `scripts/reference-transcript.mjs` and by nothing else; the suite never runs
 // the reference, it reads what the reference answered.
 //
@@ -518,6 +519,12 @@ describe("the reference transcript", () => {
   // `applyAdd` turns `duration-arithmetic/date-plus-a-supplied-duration` red;
   // and reading a recorded refusal as its raw value in `referenceAnswer` turns
   // that row red on the reference's answer.
+  //
+  // Sabotage for the `member-equality/` rows, each run and reverted: reading
+  // each member in `valuesEqual` and `strictlyEqual` with the fallback that
+  // turns a stored null into the absence turns red every row whose answer the
+  // member rule moved; comparing two absent members with `valuesEqual` in
+  // `membersEqual` turns red the rows it moved for an absent member.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const reference = referenceAnswer(row);
     const ours = answer(row);

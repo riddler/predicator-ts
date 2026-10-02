@@ -3649,3 +3649,122 @@ amendment names are in `test/cast.test.ts` and `test/parse-duration.test.ts`,
 and no row of the reference transcript carries one of the table's texts. The
 amendment headed "the out-of-range rule's sites, and the cast exemption" says
 what this one says it says of the string-to-duration parse.
+
+## Amendment: a member holding the null value, or absent, compares as the reference compares it (2026-10-01)
+
+Status: proposed (2026-10-01)
+
+Recorded for `pts-pyzw`. This amendment is appended, and removes no line
+above. Code is cited as this change leaves it, on a branch cut from
+`a004ad5`. Every run of the reference below was made at predicator-ex
+`v9.4.2` (`d8067df`) in a detached export (Elixir 1.18.3, OTP 27).
+
+What this amends. No passage above says how two lists or two maps compare
+member by member: the Decision leaves every comparison rule but the numeric
+pair to section 5 of the reference's `docs/isa.md`, and that section calls
+equality between two maps "well-defined and portable" without spelling the
+member rule out. This package answered it otherwise than the reference for a
+member holding the null value and for an absent member, so the rule is stated
+here.
+
+### Two members holding the null value are equal, and so are two absent members
+
+**Inside a list or a map, the null value and the absence compare as the
+reference compares them.** Under loose equality and inequality and under
+membership (`in` and `contains`), a member holding the null value equals a
+member holding the null value, an absent member equals an absent member, and
+the null value and the absence are unequal as members. Under strict equality
+and inequality, a member holding the null value equals one holding the null
+value in a list as in a map, and the null value and the absence are unequal as
+members. `valuesEqual` in `src/evaluator.ts` reads each member through
+`heldMember` and compares two members through `membersEqual`, which answers
+identity when either member is the absence and `valuesEqual` otherwise;
+`strictlyEqual` in the same file reads each member through `heldMember`.
+
+**The top-level pair keeps its rule.** `null == null` and a loose comparison of
+two absences still answer the absence, as section 5's four-row matrix for the
+null value says; membership asked about the absence still answers the
+absence; and `1 in [undefined]` still answers false. The rule above is about
+members only.
+
+**Why.** The reference compares two lists or two plain maps under a loose
+operator with its host language's term equality (`compare_values/3` in
+`lib/predicator/evaluator.ex` at `v9.4.2`, the `types_match` clause), under a
+strict operator with its strict term equality (the `STRICT_EQ` and
+`STRICT_NE` clauses of the same function), and for membership the same way
+(`values_equal?/2`, the `types_match` clause). Term equality holds a nil
+member equal to a nil member and an absent member equal to an absent member.
+This package read each member with a fallback that turned a stored null into
+the absence, and held two absences unequal, so its answer depended on which
+of the two a member held. Run at the tag, the reference answered every row of
+the table below as its last column says.
+
+| Pair | Operator | Before | Now | Reference |
+|---|---|---|---|---|
+| `{line2: null}` and `{line2: null}` | `==` | false | true | true |
+| `{line2: null}` and `{line2: null}` | `===` | true | true | true |
+| `[null]` and `[null]` | `==` | false | true | true |
+| `[null]` and `[null]` | `===` | false | true | true |
+| `{line2: undefined}` and `{line2: undefined}` | `==` | false | true | true |
+| `[undefined]` and `[undefined]` | `===` | true | true | true |
+| `{line2: undefined}` and `{line2: null}` | `==` | false | false | false |
+| `{line2: undefined}` and `{line2: null}` | `===` | true | false | false |
+| `[undefined]` and `[null]` | `===` | true | false | false |
+| `{line2: null}` in `[{line2: null}]` | `in` | false | true | true |
+| `[[null]]` and `[null]` | `contains` | false | true | true |
+| `[[null], 1]` and `[[null], 2]` | `<` | absence | true | true |
+| `[{line2: null}, 1]` and `[{line2: null}, 2]` | `<` | absence | true | true |
+
+An inequality answers the negation of the equality beside it in every row,
+before and after.
+
+### Two orderings move with member equality
+
+**This is a consequence of the rule above, not a separate decision.**
+`compareOrder` in `src/evaluator.ts` walks two lists from the front, steps past
+each leading pair that `valuesEqual` holds equal, and orders the first pair it
+does not. A leading list or map that holds the null value now steps past where
+it stopped the ordering before, so the last two rows of the table answer true
+where they answered the absence. `compareOrder`'s own reads of the members it
+walks are unchanged.
+
+### What this does not decide
+
+**A leading member that is the null value itself.** The reference answers
+`[null, 1] < [null, 2]` true and this package answers the absence, because the
+null value has no order here and `compareOrder` reads it as it did before.
+This amendment does not change it.
+
+**A date or a datetime member.** Such a member keeps this package's
+chronological rule, and a duration member keeps its field-by-field rule
+(`membersEqual` delegates to `valuesEqual`). The reference compares a date or
+a datetime member by term, so `{opened_on: #2026-03-01#} ==
+{opened_on: #2026-03-01T00:00:00Z#}` answers false there and true here, as it
+did before this change, and so do two datetimes written to different
+precision. A date, a datetime or a duration member that is equal on both
+sides is in the rows below and agrees.
+
+**Ordering two maps, and the literal map's projection of an absent member.**
+The first stays the decline `compareOrder` documents. The second is what
+`evaluate` hands back for a map literal with an absent member: the reference
+keeps the key and this package drops it, and nothing here touches the
+projection.
+
+### What pins it
+
+The rows `member-equality/001` through `member-equality/259` in
+`conformance/transcript/transcript.json`, regenerated at `v9.4.2`; none is
+declared in `test/reference-transcript.test.ts`, so each must agree. They
+carry every row of the table above, an equal and an unequal pair beside each,
+the top-level null value and absence, and the date, datetime and duration
+members that agree. "member equality inside lists and maps" in
+`test/member-equality.test.ts` asks each of the same sources against the same
+context and holds the reference's answer.
+
+Consequences. A host comparing two lists or two maps that hold the null value
+at the same places gets true from `==`, `===`, `in` and `contains` where it got
+false, and false from `!=` and `!==` where it got true. A strict comparison of
+a member holding the null value with an absent member answers false where it
+answered true. The two orderings above answer true where they answered the
+absence. No exported signature changes, no reason token is added, and no
+opcode changes.
