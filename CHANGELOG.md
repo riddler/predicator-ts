@@ -14,6 +14,22 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.5.0] 2026-10-02
+
+A minor release. The location surface is new: `contextLocation` resolves an
+assignment's location source to a path, `contextPut` writes a value at a path
+and answers the new context, and `contextAssign` does both in one, as the
+reference's location functions do; a refused location is a `LocationError`
+with a closed `LocationReason`, and every result is a value, never a throw.
+The located compile results and the tagged execution result are now named on
+their entry points. No public name is removed or renamed, and no existing
+answer changes.
+
+### Added
+
+- `contextLocation`, `contextPut` and `contextAssign` resolve an assignment's location to a path, write a value at a path, and do both in one, answering a context of the package's own values; a refused location is a `LocationError` with a closed `LocationReason`, and `LocationPath`, `LocationResult`, `PutResult` and `AssignResult` name the results.
+- `CompileProgramWithPositionsResult` and `CompileProgramWithSpansResult` name what `compileProgramWithPositions` and `compileProgramWithSpans` answer, and `TaggedExecution` on the `./tagged` subpath names what `executeTagged` answers.
+
 ## [0.4.1] 2026-10-01
 
 A patch release. Two lists or two maps now compare their members as the
