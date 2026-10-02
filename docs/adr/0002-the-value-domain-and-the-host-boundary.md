@@ -3842,3 +3842,45 @@ whose source names `v9.4.2`, none is declared in
 maps" is in `test/member-equality.test.ts`. Between `v0.4.0` and `v0.4.1` only
 `src/evaluator.ts` changed under `src/`, adding no export, reason token or
 opcode.
+
+## Note: the remaining operators against a plain map (2026-10-02)
+
+Recorded for `pts-mhnc`. This note is appended, and removes no line above. It
+changes no answer and decides no new rule: it extends the table of the note
+headed "a duration the host supplies, against a plain map and added to a
+date" to the three operators that table left out, `>`, `<=` and `contains`,
+and declares the differences they show, under the same ruling to declare and
+keep this package's answers (ruled by the operator, 2026-10-01). Code is cited
+as read at `a147ddb`; every claim about the reference was run in a detached
+export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27, rather than
+read.
+
+The rows ask the same duration of three days and eight hours against the same
+plain map, once built (`3d8h`) and once supplied by the host:
+
+| Operator | Built: reference | Supplied: reference | Here, both |
+|---|---|---|---|
+| `>` | false | false | the absence |
+| `<=` | true | true | the absence |
+| a one-item list `contains` the duration | false | true | false |
+
+Here the answers follow from the same code the earlier note cites:
+`compareOrder` in `src/evaluator.ts` answers none for an ordering of a
+duration and a plain map, so both orderings answer the absence, and
+`membership` compares through `valuesEqual` whichever side the list is on, so
+`contains` finds nothing, as `in` does. For a built duration `contains` agrees,
+as `in` does; every other cell of this table differs.
+
+With these, the rows whose ids begin `duration-against-map/` in
+`conformance/transcript/transcript.json` are twenty, ten operators asked of
+each duration, where the earlier note's sentence "The rows are the fourteen
+whose ids begin `duration-against-map/`" counted the seven it named. Of the
+twenty, `test/reference-transcript.test.ts` declares the sixteen that differ,
+the earlier note's eleven and these five, with both answers; the four that
+agree are the built duration's strict comparisons, `in` and `contains`.
+
+No row added here is a refusal, so `duration-arithmetic/date-plus-a-supplied-duration`
+stays the transcript's one row whose reference answer is a refusal, and the
+suite still compares a refusal by its reason alone. Comparing a refusal's
+type beside its reason is left until the transcript holds a second refusal
+row.
