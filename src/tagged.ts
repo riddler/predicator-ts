@@ -733,7 +733,7 @@ export function evaluateTagged(
  * not compile never runs, and that arm carries no context: there is nothing it
  * bound.
  */
-type TaggedExecution =
+export type TaggedExecution =
   | { readonly ok: true; readonly context: string }
   | {
       readonly ok: false;

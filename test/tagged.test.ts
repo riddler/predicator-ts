@@ -8,6 +8,7 @@ import {
   evaluateTagged,
   executeTagged,
   type TaggedEvaluateOptions,
+  type TaggedExecution,
 } from "../src/tagged.js";
 import {
   Duration,
@@ -741,6 +742,15 @@ describe("executeTagged", () => {
     const lateFee = decodedContext(outcome.context).late_fee;
     expect(isFloat(lateFee)).toBe(true);
     expect(lateFee).toEqual(float(2));
+  });
+
+  // The answer has a name on this subpath, so a host holding one writes its
+  // type rather than reading it off the function. Sabotage: declaring the type
+  // without `export` turns the typecheck stage red on this test's import. It
+  // was run and reverted.
+  it("answers the subpath's own result type", () => {
+    const outcome: TaggedExecution = executeTagged("holds = 1");
+    expect(outcome).toEqual({ ok: true, context: '{"holds":1}' });
   });
 
   it("runs a compiled program the same way it runs its source", () => {
