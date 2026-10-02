@@ -53,14 +53,35 @@ That is a check on the text. On the last of those three there is also a check
 on a run: `scripts/hermes-conformance.mjs` bundles both conformance surfaces
 and the vendored corpus into one self-contained file, runs it on the
 JavaScript engine React Native uses, and diffs the two reports against a run
-of the same corpus on the server runtime in the same invocation. Both
-surfaces diffed clean, row for row. What answered is the standalone
-command-line build of that engine, release `0.12.0` at bytecode version `96`,
-which is an older release than the one a current React Native ships - so the
-run is evidence about that engine family and about this package's use of the
-language, rather than a run on the exact build an application ships. It is
-run by hand and is not a stage of the gate; `conformance/README.md` says what
-it needs and what it bounds.
+of the same corpus on the server runtime in the same invocation. It is run
+by hand and is not a stage of the gate; `conformance/README.md` says what it
+needs and what it bounds.
+
+Run on 2026-10-02, on this source as it stood just before the version moved
+to 0.5.0: the vendored corpus at tier 9, 262 cases. The evaluator surface
+answered 257 rows on the server runtime and 257 on the engine, the compiler
+surface 215 and 215, and both surfaces diffed clean, row for row, with zero
+differences. What answered is the standalone command-line build of that
+engine from the archive published with its `v0.12.0` release, which reports
+release `0.12.0` at bytecode version `89`. That is an older release than the
+one a current React Native ships, so the run is evidence about that engine
+family and about this package's use of the language, rather than a run on the
+exact build an application ships.
+
+The run covers what the corpus covers. On the evaluator surface each case is
+an instruction list run through `evaluateTagged`, the corpus's statement
+instruction lists (`store` and `pop`) among them; on the compiler surface each
+case is expression source run through `compile`. No corpus case compiles
+statement source or runs `execute`, and the location surface
+(`contextLocation`, `contextPut`, `contextAssign`) is not in the bundle the
+engine runs, so this run is no evidence about those functions on that engine.
+
+The earlier run behind this paragraph, on 2026-09-20 before the first
+publish, also diffed clean on both surfaces, and it reported bytecode version
+`96`. That number was right for the build it ran on, which was a different
+one: the archive published with the engine's `v0.13.0` release, whose VM also
+reports release `0.12.0`. Both builds name themselves `0.12.0`; the bytecode
+version is what tells them apart.
 
 `engines.node` in `package.json` is `>=20`, and that is the floor a
 consumer's runtime has to clear. It is not the toolchain: what builds and
