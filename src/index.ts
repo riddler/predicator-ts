@@ -32,6 +32,8 @@ import { parse as parseTokens } from "./parser.js";
 import { type Duration, toHost } from "./values.js";
 
 export type {
+  CompileProgramWithPositionsResult,
+  CompileProgramWithSpansResult,
   CompileResult,
   CompileWithPositionsResult,
   CompileWithSpansResult,

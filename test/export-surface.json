@@ -2,6 +2,8 @@
   ".": [
     "AssignResult",
     "Ast",
+    "CompileProgramWithPositionsResult",
+    "CompileProgramWithSpansResult",
     "CompileResult",
     "CompileWithPositionsResult",
     "CompileWithSpansResult",
@@ -73,6 +75,7 @@
     "EncodeReason",
     "EncodeResult",
     "TaggedEvaluateOptions",
+    "TaggedExecution",
     "decodeTagged",
     "encodeTagged",
     "evaluateTagged",

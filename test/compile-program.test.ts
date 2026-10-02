@@ -26,6 +26,8 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  type CompileProgramWithPositionsResult,
+  type CompileProgramWithSpansResult,
   type CompileResult,
   type CompileWithPositionsResult,
   type CompileWithSpansResult,
@@ -253,6 +255,19 @@ describe("the three entry points answer their expression counterparts' unions", 
     const spanned: CompileWithSpansResult = compileProgramWithSpans("renewals = 0");
     const refused: CompileResult = compileProgram("3 = renewals");
     expect([plain.ok, pointed.ok, spanned.ok, refused.ok]).toEqual([true, true, true, false]);
+  });
+
+  // The located results have names of their own on the main entry point, so a
+  // host holding one writes its type rather than reading it off the function.
+  // The succeeding arm names the segment table the expression result lacks.
+  // Sabotage: dropping the two names from the main entry's re-export turns the
+  // typecheck stage red on this test's imports. It was run and reverted.
+  it("are named by the main entry point's own result types", () => {
+    const pointed: CompileProgramWithPositionsResult =
+      compileProgramWithPositions("loan.renewals = 0");
+    const spanned: CompileProgramWithSpansResult = compileProgramWithSpans("loan.renewals = 0");
+    expect(pointed.ok ? pointed.segmentPositions.size : null).toBe(1);
+    expect(spanned.ok ? spanned.segmentSpans.size : null).toBe(1);
   });
 
   it("refuse as values, never by throwing", () => {

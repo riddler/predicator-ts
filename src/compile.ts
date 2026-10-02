@@ -70,7 +70,7 @@ export type CompileWithSpansResult =
  * arm, so a value of it is also a value of that type, and a caller that
  * handles the expression entry point's answer handles this one unchanged.
  */
-type CompileProgramWithPositionsResult =
+export type CompileProgramWithPositionsResult =
   | {
       readonly ok: true;
       readonly instructions: Program;
@@ -85,7 +85,7 @@ type CompileProgramWithPositionsResult =
  * writes. It is `CompileWithSpansResult` with one more table, as the type
  * above is `CompileWithPositionsResult` with one more.
  */
-type CompileProgramWithSpansResult =
+export type CompileProgramWithSpansResult =
   | {
       readonly ok: true;
       readonly instructions: Program;
