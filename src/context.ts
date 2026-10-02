@@ -272,6 +272,15 @@ function putIn(
     return { ok: true, value: next };
   }
   const key = mapKey(segment);
+  // An own property can hold the language's undefined, and one that does is
+  // read as the absence, so the write vivifies it as it vivifies a key the map
+  // does not hold. What reaches this is a map pushed by `lit` with such a
+  // property, which the evaluator does not normalize, stored into the context
+  // and then written through by a later `store`; a test in
+  // `test/evaluator.test.ts` writes through one. A host's context and a host's
+  // value do not reach it: the value boundary turns a bare undefined into the
+  // absence before either is written. A null occupant is coalesced too, which
+  // changes nothing, because `descend` vivifies a null as it does the absence.
   const occupant = Object.hasOwn(container, key) ? (container[key] ?? Undefined) : Undefined;
   const written = descend(occupant, path, index + 1, value);
   if (!written.ok) return written;
