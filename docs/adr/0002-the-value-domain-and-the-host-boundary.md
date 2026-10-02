@@ -3652,7 +3652,7 @@ what this one says it says of the string-to-duration parse.
 
 ## Amendment: a member holding the null value, or absent, compares as the reference compares it (2026-10-01)
 
-Status: proposed (2026-10-01)
+Status: accepted (2026-10-02; proposed 2026-10-01)
 
 Recorded for `pts-pyzw`. This amendment is appended, and removes no line
 above. Code is cited as this change leaves it, on a branch cut from
@@ -3795,3 +3795,50 @@ Consequences, continued. The orderings over a leading list or map holding an
 absent member answer as the previous section says: a value where they
 answered the absence, and, where the absent member is an unbound name, a
 value where they answered an `unbound_variable` error.
+
+## Note: the acceptance of the amendment on a member holding the null value, or absent (2026-10-02)
+
+This note records that the amendment headed "a member holding the null value,
+or absent, compares as the reference compares it" moved from proposed to
+accepted. The conductor moved it under the flip standard of the campaign
+consent the operator adopted, 2026-10-01. It decides nothing, so it carries no
+Status line, and it removes no line. With it, no entry in this record reads
+proposed.
+
+**It shipped in `@riddler/predicator` 0.4.1.** That version is on npm, built
+from the commit tagged `v0.4.1` (`568f4c5`), and the amendment's own change,
+`4537104` and `8cf5f0f` (request 166), is in the tag; no commit after it
+touches `src/`. Every claim was re-checked at `568f4c5`, re-located by anchor,
+and every claim about this package's answers was run against the published
+0.4.0 and 0.4.1 builds, and every claim about the reference in a detached
+export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27, rather than
+read.
+
+**What was checked.** `membersEqual` in `src/evaluator.ts` answers identity
+when either member is the absence and `valuesEqual` otherwise, and `heldMember`
+keeps a stored null value. `valuesEqual` and `strictlyEqual` read both members
+of a map through `heldMember`, and the right-hand member of a list; a list's
+left-hand member is the element itself, which a `Value` is never left
+undefined as, so the read is the same. Membership calls `valuesEqual` on each
+element, and `compareOrder` steps past a pair `valuesEqual` holds equal, its
+own member reads unchanged since `v0.4.0`. `halt` reports a result of the
+absence as the unbound name's error. Run against both builds, every row of the
+amendment's table answered its Before and Now columns, and its inequalities
+the negation; the orderings over a leading list or map holding the null value
+or an absent member answered as the paragraph headed "More orderings move"
+says, the four operators over `[[referrer], 1]` and `[{line2: referrer}, 1]`
+included, an `unbound_variable` error at 0.4.0 and a value at 0.4.1. The
+top-level null value and absence, `[null, 1] < [null, 2]`, the date and
+datetime members, two maps under `<`, and the map literal holding an absent
+member answered as the section headed "What this does not decide" says, here
+and in the reference. At the tag, the reference compares a matched pair by
+term in the `types_match` clause of `compare_values/3`, strictly in its
+`STRICT_EQ` and `STRICT_NE` clauses, and for membership in the `types_match`
+clause of `values_equal?/2`; section 5 of its `docs/isa.md` carries the
+"well-defined and portable" sentence and the null value's four-row matrix. The
+rows `member-equality/001` through `member-equality/281` are in the transcript,
+whose source names `v9.4.2`, none is declared in
+`test/reference-transcript.test.ts`, and "member equality inside lists and
+maps" is in `test/member-equality.test.ts`. Between `v0.4.0` and `v0.4.1` only
+`src/evaluator.ts` changed under `src/`, adding no export, reason token or
+opcode.
