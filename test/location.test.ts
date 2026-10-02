@@ -450,6 +450,73 @@ describe("one write path for a statement and for contextAssign", () => {
   });
 });
 
+describe("a write under the key that names the prototype accessor", () => {
+  // Every expectation below spells the key as a computed key on purpose:
+  // written as a plain literal key it would be the prototype-setting syntax
+  // and would build a map without it, which is the confusion under test.
+
+  /** Whether a map holds this key as its own member, with its prototype untouched. */
+  function holdsOwnKey(map: unknown, value: Value): boolean {
+    if (map === null || typeof map !== "object") return false;
+    // The member is read through its descriptor, which reaches the own
+    // property and never the accessor the key also names.
+    const member = Object.getOwnPropertyDescriptor(map, "__proto__");
+    return (
+      Object.getPrototypeOf(map) === Object.prototype &&
+      member !== undefined &&
+      sameValue(member.value as Value, value)
+    );
+  }
+
+  // Sabotage, through scripts/sabotage.mjs: the map arm of the shared write
+  // made to write its key with a plain assignment rather than through
+  // setKey turns this test and the next one red, and so does the same
+  // change to the context's own map projection. Each was run and restored.
+  it("contextPut writes the key as an own member, at the root and nested", () => {
+    const patron = { name: "Ada" };
+    const context = { patron };
+    const root = contextPut(context, ["__proto__"], "atlas");
+    expect(root.ok).toBe(true);
+    if (root.ok) {
+      expect(holdsOwnKey(root.context, "atlas")).toBe(true);
+      expect(Object.keys(root.context)).toEqual(["patron", "__proto__"]);
+    }
+    const nested = contextPut(context, ["patron", "__proto__"], { title: "codex" });
+    expect(nested.ok).toBe(true);
+    if (nested.ok) {
+      const written = nested.context.patron;
+      expect(holdsOwnKey(written, { title: "codex" })).toBe(true);
+      expect(written).toStrictEqual({ name: "Ada", ["__proto__"]: { title: "codex" } });
+      // The answered context goes back in unchanged and the key reads back.
+      const again = contextPut(nested.context, ["patron", "__proto__", "title"], "atlas");
+      expect(again.ok).toBe(true);
+      if (again.ok) expect(holdsOwnKey(again.context.patron, { title: "atlas" })).toBe(true);
+    }
+    // The context handed in, and the prototype every map shares, are untouched.
+    expect(context).toStrictEqual({ patron: { name: "Ada" } });
+    expect(Object.hasOwn(patron, "__proto__")).toBe(false);
+    expect(Object.hasOwn(Object.prototype, "title")).toBe(false);
+  });
+
+  it("an assignment statement writes the key as an own member, at the root and nested", () => {
+    const context = { patron: { name: "Ada" } };
+    const root = execute("__proto__ = 'atlas'", context);
+    expect(root.ok).toBe(true);
+    if (root.ok) expect(holdsOwnKey(root.context, "atlas")).toBe(true);
+    const nested = execute("patron.__proto__ = 'codex'", context);
+    expect(nested.ok).toBe(true);
+    if (nested.ok) {
+      const written = (nested.context as { [key: string]: Value }).patron;
+      expect(holdsOwnKey(written, "codex")).toBe(true);
+      expect(written).toStrictEqual({ name: "Ada", ["__proto__"]: "codex" });
+    }
+    const assigned = contextAssign(context, "patron.__proto__", "codex");
+    expect(assigned.ok).toBe(true);
+    if (assigned.ok) expect(holdsOwnKey(assigned.context.patron, "codex")).toBe(true);
+    expect(context).toStrictEqual({ patron: { name: "Ada" } });
+  });
+});
+
 describe("the run-time fence on a path a host builds", () => {
   const segments: readonly (readonly [string, unknown, string, Value])[] = [
     ["a fraction", 1.5, "1.5", float(1.5)],
