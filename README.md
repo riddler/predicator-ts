@@ -77,11 +77,10 @@ statement source or runs `execute`, and the location surface
 engine runs, so this run is no evidence about those functions on that engine.
 
 The earlier run behind this paragraph, on 2026-09-20 before the first
-publish, also diffed clean on both surfaces, and it reported bytecode version
-`96`. That number was right for the build it ran on, which was a different
-one: the archive published with the engine's `v0.13.0` release, whose VM also
-reports release `0.12.0`. Both builds name themselves `0.12.0`; the bytecode
-version is what tells them apart.
+publish, also diffed clean on both surfaces, and it reported release `0.12.0`
+at bytecode version `96`. The run above reports `89` from the `v0.12.0`
+archive, so the earlier run answered from a different build that names itself
+by the same release; the bytecode version is what tells them apart.
 
 `engines.node` in `package.json` is `>=20`, and that is the floor a
 consumer's runtime has to clear. It is not the toolchain: what builds and
