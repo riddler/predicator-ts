@@ -1,6 +1,6 @@
 # ADR-0005: The location surface - resolve a location to a path, write a value at a path, and both in one
 
-Status: proposed (2026-10-02)
+Status: accepted (2026-10-02; proposed 2026-10-02)
 
 ## Context
 
@@ -333,3 +333,69 @@ contextAssign(datamodel, "patron.fines.total", 3);
   `toHost`.
 - This record stays proposed until the code that implements it ships in a
   published version of this package.
+
+## Note: this record's acceptance (2026-10-02)
+
+Recorded for `pts-8ehs`. This note records that the record above moved from
+proposed to accepted. The conductor moved it under the flip standard of the
+campaign consent the operator adopted, 2026-10-01. It decides nothing, so it
+carries no Status line, and it removes no line. The Consequences bullet
+saying this record stays proposed until the code that implements it ships in
+a published version of this package is met by that version, named below, and
+is left as written.
+
+**It shipped in `@riddler/predicator` 0.5.0.** That version is on npm, its
+`latest` tag, built from the commit tagged `v0.5.0` (`36c23a5`), which is the
+default branch's head as this note is written; the published package names
+that commit as its source. The surface landed in `b947e7f`; of the commits
+after it, `839f3ae` (a segment that is not a primitive is described, never
+converted) changed this record and `src/location.ts` together, `9bc3d78`
+added a comment and a test beside the map arm of the shared write and changed
+no answer, and `afaff54` added tests only. Every claim was re-checked at
+`36c23a5`, re-located by anchor; every claim about this package's answers was
+run against both the build of that commit and the published 0.5.0 package,
+and every claim about the reference was read at its tag `v9.4.2` (`d8067df`)
+or in the location transcript generated there.
+
+**What was checked.** The main entry point exports `contextLocation`,
+`contextPut`, `contextAssign`, the class `LocationError` and the five type
+names, and `test/export-surface.json` pins them; the Typespecs section matches
+`src/location.ts` and `src/errors.ts` declaration for declaration.
+`LocationReason` is the reference's seven `error_type` atoms in
+`lib/predicator/errors/location_error.ex`, and `PredicatorError` is still
+`EvaluationError | TypeMismatchError | UndefinedVariableError`. Each
+reference constructor in that file carries exactly the details keys the
+mapping table lists for its reason. The "Argument order" admonition is in the
+documentation of `context_assign/4` in `lib/predicator.ex`, quoted as the
+record quotes it, and the reference's function heads guard on a binary
+source and a list path, as the record says. Run against both builds: the
+worked example answers each line it shows, the float keeping its brand and
+the padded slot holding the absence; a bracket key bound to `1.0` resolves to
+the integer 1 and one bound to `float(1)` answers `invalid_key`; an unbound
+or null key answers `undefined_variable`, an arithmetic key `computed_key`,
+and an object literal or a membership test `invalid_node`; a literal, a call
+and a list literal answer `not_assignable` with the `expressionType` and the
+`value` the reference writes, an empty path answers it as the reference does,
+and a path that is not a list answers it with `"location path"`; a
+fractional segment answers `not_a_container` against a list and
+`invalid_index` against a map, and a negative index `invalid_index`; a source
+that is not a string answers the `ParseError` an empty source answers, an
+integer literal past the safe range `number_out_of_range`, and a context or a
+value the boundary refuses the `EvaluationError` with the message the record
+quotes; `len(loans)[i]` with `i` unbound is refused for the key; and an
+answered context runs unchanged through `execute`. `contextPut` and
+`contextAssign` write through `writePath` in `src/context.ts`, which `store`
+in `src/evaluator.ts` also calls after the same guards in the same order, and
+`src/evaluator.ts` is unchanged between `v0.4.1` and `v0.5.0`, so no answer or
+message of `store` moved. `fenced` in `src/context.ts` refuses a segment that
+is neither a string nor a safe integer as the record says. The transcript's
+source names `v9.4.2` and `d8067df`; it holds every row id the record names,
+the thirteen rows the record names as carrying a syntax tree are exactly the
+rows whose details the transcript carries as text, and
+`test/location.test.ts` declares exactly the three rows the record names as
+declared, compares the path, the context, or the reason and the mapped
+details of every other row, does not compare the `inspect` text, and pins the
+plain-number key, the path through a duration, the depth limit and the shared
+write. The other names 0.5.0 adds to the main entry point are the two located
+compile results, which are not this surface and do not touch what this record
+decides.

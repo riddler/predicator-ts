@@ -6,7 +6,7 @@
 | [0002](0002-the-value-domain-and-the-host-boundary.md) | The value domain in TypeScript, and the host boundary | accepted |
 | [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | accepted |
 | [0004](0004-the-compiler-surface.md) | The compiler surface | accepted |
-| [0005](0005-the-location-surface.md) | The location surface | proposed |
+| [0005](0005-the-location-surface.md) | The location surface | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences). A record that states a public signature adds a Typespecs
