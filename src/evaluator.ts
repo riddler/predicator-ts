@@ -563,7 +563,10 @@ export function compareStrings(left: string, right: string): number {
  * only the ordering operators that have nothing to say.
  *
  * Two lists are walked from the front, as the reference walks them. A leading
- * pair that is equal is stepped past. A date member against a datetime member
+ * pair that is equal is stepped past. A member holding the null value is read
+ * as the null value, never as the absence: two such members are stepped past,
+ * and one against any other member is placed where the reference's term order
+ * places it (see `nullMemberOrder`). A date member against a datetime member
  * is ordered as the reference's term order places it, the date first whatever
  * the two instants are, while a date and a datetime at the top level are
  * ordered by instant. Two maps are stepped past when they are equal with their
@@ -594,8 +597,12 @@ export function compareOrder(left: Value, right: Value): number | undefined {
   if (Array.isArray(left) && Array.isArray(right)) {
     const shared = Math.min(left.length, right.length);
     for (let at = 0; at < shared; at += 1) {
-      const a = left[at] ?? Undefined;
-      const b = right[at] ?? Undefined;
+      const a = heldMember(left[at]);
+      const b = heldMember(right[at]);
+      if (a === null || b === null) {
+        if (a === b) continue;
+        return a === null ? nullMemberOrder(b) : -nullMemberOrder(a);
+      }
       if (isDateAgainstDateTime(a, b)) return a instanceof PDate ? -1 : 1;
       if (isPlainMap(a) && isPlainMap(b) ? looseEqual(a, b, true) : valuesEqual(a, b)) continue;
       const order = compareOrder(a, b);
@@ -605,6 +612,21 @@ export function compareOrder(left: Value, right: Value): number | undefined {
     return left.length < right.length ? -1 : 1;
   }
   return undefined;
+}
+
+/**
+ * Where a list member holding the null value orders against another member
+ * that does not hold it: 1 when the null value orders after that member, -1
+ * when before.
+ *
+ * The reference orders two lists by its runtime's term order, and that order
+ * places the null value after a number and after false, and before true, a
+ * string, a list, a map, a date, a datetime, a duration and an absent member.
+ * Only a member is placed this way. At the top level the null value has no
+ * order, on both sides, and a comparison over it answers an absence.
+ */
+function nullMemberOrder(other: Value): number {
+  return isNumeric(other) || other === false ? 1 : -1;
 }
 
 /**
