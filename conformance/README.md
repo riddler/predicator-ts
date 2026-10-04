@@ -198,6 +198,39 @@ The proof it produces is against the standalone command-line build of that
 engine, which is an older release than the one current React Native ships, and
 the script's header says what that bounds.
 
+### A loop gives every closure one binding on that engine (2026-10-04)
+
+The standalone build does not give each iteration of a loop its own binding
+of a `let` or `const` loop variable: every closure made in the loop body reads
+the variable's last value. `scripts/hermes-loop-binding.mjs` is the run that
+shows it. It hands one text to the VM and to the server runtime and prints what
+each answers. Run on 2026-10-04 with the VM at Hermes release 0.12.0, the
+server runtime at Node v24.21.0 and the bundler at esbuild 0.28.2, it printed:
+
+| Each closure, read after its loop | Server runtime | The VM |
+|---|---|---|
+| `for (const name of ["patron", "loan", "hold"])` | `patron,loan,hold` | `hold,hold,hold` |
+| `for (let index = 0; index < 3; index++)` | `0,1,2` | `3,3,3` |
+| `for (const key in { patron, loan, hold })` | `patron,loan,hold` | `hold,hold,hold` |
+| the bundler's namespace object, each export read by name | `patron,loan,hold` | `patron,patron,patron` |
+| the exports copied into a plain object, each read by name | `patron,loan,hold` | `patron,loan,hold` |
+
+The bundler output shape that depends on it is the bundler's CommonJS
+namespace object. Asked for an immediately invoked bundle bound to a global
+name (`format: "iife"` with `globalName`), the bundler returns the module's
+exports through its CommonJS helper, which defines one getter per export
+inside a `for (let key of ...)` loop, each getter closing over `key`. On this
+VM every getter then reads the last name the loop saw, so every export of the
+namespace object answers one value: here `patron`, the last of the three
+names in the order the helper walks them. The symptom is not a crash. A run
+built that way reports every export as the same function, which reads as a
+defect in this package and is the harness's. So the two engine runs here do
+not ask for a global name: each entry copies the module's exports into a plain
+object (`{ ...namespace }`), which reaches no such helper, and the last row
+above is that shape answering correctly on both engines. A newer release of
+the engine may bind per iteration; the run above is evidence about the release
+it names, and the script is there to run again.
+
 ## The contract
 
 The upstream `conformance/README.md` is the corpus contract - the two surfaces,
