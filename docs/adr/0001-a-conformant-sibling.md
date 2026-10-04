@@ -470,3 +470,61 @@ member). A line scanner cannot tell where such an interface lands.
 `test/engine-neutrality.test.ts` pins the spellings that fire, and lookalikes
 of them that stay quiet, in the block for a global augmentation in shipped
 source.
+
+## Note: a Node global reached the ways a DOM global is, and a global object in parentheses (2026-10-04)
+
+The note above on a DOM global reached through the global object or an
+optional chain says what the DOM rule fires on, and that the Node rule
+(`usedAsBareGlobal`) is unchanged by it. The Node rule then fired only on a
+name in the Node global list followed directly by a dot and a word
+character, or by an opening bracket, so an optional-chaining dot, a space
+before the dot and a dollar sign after it let a Node global through, as
+they had let a DOM global through before that note. A Node global written
+as a member of `globalThis` or `self` was quiet too, and so, under both
+rules, was a member of either of those two written in parentheses. This
+note records where the two rules now fire. It changes nothing the Decision
+says, and it widens what each rule catches without narrowing anything it
+caught before. Code is cited as this change leaves it, on a branch cut from
+`bde8fca`. Covering the parenthesised global object rather than naming it
+as out of reach was decided by the conductor under a standing consent,
+2026-10-03.
+
+**One pattern for both rules.** The Node rule now takes the DOM rule's
+pattern (`usedAsBareOrGlobalObjectMember`), and `usedAsBareGlobal` is gone.
+So what the note above says the DOM rule fires on, and what it says stays
+quiet, now holds for a name in the Node global list as well: the
+optional-chaining dot, a space before the dot, a dollar sign after it, and
+a member of `globalThis`, or of a `self` that is not itself a member,
+through a dot or an optional-chaining dot with any space before it.
+
+**A global object in parentheses.** The global object before the member
+(`globalObject`) may also be `globalThis` or `self` wrapped in parentheses,
+with any space inside them, unless the parentheses close a call's
+arguments. A name in either list written as a member of that, through the
+same dot or optional-chaining dot, fires its rule.
+
+**What stays quiet.** A member named for a Node global on some other object,
+through each of the anchors above, a parenthesised object that is not one
+of those two included, and a member of a call's result when `globalThis` or
+`self` is the call's argument. Space after the dot still does not count as an
+anchor, so an English sentence with a Node global's name before its full
+stop stays quiet, and so does a global object's name in parentheses at the
+end of a sentence.
+
+**Still not caught.** What the note above lists for the DOM rule now holds
+for the Node rule too: a computed access through the global object, a
+`self` reached as a member of `globalThis`, and a member chain the
+formatter splits across lines. A global's own name wrapped in parentheses
+before its dot is not caught by either rule, and neither is a global object
+wrapped in more than one pair of parentheses.
+
+**Still fires, and that is accepted.** Prose that writes a Node global's
+name with a space and then a dot after it fires the Node rule, as the same
+prose already fired the DOM rule; the formatter never writes that space in
+code, and prose rarely does. A field named `globalThis` on some other object
+is read as the global object, under both rules, as it was under the DOM rule
+before this note.
+
+`test/engine-neutrality.test.ts` pins the spellings that fire, and
+lookalikes of them that stay quiet, in the blocks for a DOM global and for
+a Node global reached another way.

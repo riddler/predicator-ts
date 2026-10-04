@@ -360,9 +360,10 @@ describe("prose and plausible identifiers do not fire the check", () => {
     },
   );
 
-  // Sabotage: dropping the `(?<![.\w$])` lookbehind from the builtin-global
-  // rule in scripts/engine-neutrality.mjs turns the first two lines red, and
-  // dropping it from the DOM rule turns the three options-object lines red.
+  // Sabotage: dropping the leading `(?<![.\w$])` lookbehind from
+  // `usedAsBareOrGlobalObjectMember` in scripts/engine-neutrality.mjs, which
+  // the Node rule and the DOM rule share, turns the first two lines and the
+  // three options-object lines red.
   it.each(plausibleEvaluatorCode.map((line, i) => [i, line] as const))(
     "evaluator identifier %i stays clean",
     (_i, line) => {
@@ -425,6 +426,9 @@ const domGlobalSpellings: readonly (readonly [string, string])[] = [
   ["an optional-chaining index", "const a = window?.[key];"],
   ["space before the dot", "const a = window .innerWidth;"],
   ["a dollar sign after the dot", "const a = window.$loans;"],
+  ["a member of self in parentheses", "const a = (self).window.innerWidth;"],
+  ["an optional-chained member of self in parentheses", "const a = ( self )?.document.title;"],
+  ["a member of globalThis in parentheses", "const a = (globalThis).document.title;"],
 ];
 
 // The other side: the same spellings on a field of some other object, which
@@ -436,17 +440,22 @@ const domGlobalLookalikes: readonly (readonly [string, string])[] = [
   ["an optional-chained field of an options object", "const a = velocity?.window?.minutes;"],
   ["a field with space before the dot", "const a = patron.window .minutes;"],
   ["prose with space after the dot", "// Renewals within the window. Documents are due."],
+  ["a parenthesised options object", "const a = (wizard).document.title;"],
+  ["a call's result with self as its argument", "const a = wrap(self).window.minutes;"],
 ];
 
 describe("a DOM global reached another way", () => {
-  // Sabotage: in scripts/engine-neutrality.mjs, dropping `self` from
-  // `globalObjectMember` turns the two self lines red; dropping its `\??`
-  // turns the optional-chained globalThis line red; dropping its `\s*` turns
-  // the space-before-the-dot globalThis line red; dropping the `\??` from the
-  // DOM rule's dotted anchor turns the optional-chaining dot line red; dropping
-  // the `\s*\?\.\[` arm turns the optional-chaining index line red; dropping
-  // the `\s*` from the dotted anchor turns the space-before-the-dot line red;
-  // and narrowing `[\w$]` after the dot to `\w` turns the dollar sign line red.
+  // Sabotage: in scripts/engine-neutrality.mjs, dropping the bare `self` arm
+  // from `globalObject` turns the two self lines red; dropping the `\??` from
+  // `globalObjectMember` turns the optional-chained globalThis line red;
+  // dropping its `\s*` turns the space-before-the-dot globalThis line red;
+  // dropping the `\??` from the shared rule's dotted anchor turns the
+  // optional-chaining dot line red; dropping the `\s*\?\.\[` arm turns the
+  // optional-chaining index line red; dropping the `\s*` from the dotted
+  // anchor turns the space-before-the-dot line red; narrowing `[\w$]` after
+  // the dot to `\w` turns the dollar sign line red; and dropping the
+  // parenthesised arm from `globalObject` turns the three parentheses lines
+  // red.
   it.each(domGlobalSpellings)("fires on %s", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(status, line).toBe(1);
@@ -454,11 +463,74 @@ describe("a DOM global reached another way", () => {
   });
 
   // Sabotage: in scripts/engine-neutrality.mjs, dropping the `(?<![.\w$])`
-  // lookbehind in front of `self` in `globalObjectMember` turns the self field
-  // line and the word ending in self red, dropping it from the DOM rule turns
-  // every field line red, and allowing space after the dot in the DOM rule's
-  // anchor turns the prose line red.
+  // lookbehind in front of the bare `self` arm of `globalObject` turns the self
+  // field line and the word ending in self red, dropping it from the front of
+  // `usedAsBareOrGlobalObjectMember` turns every field line red, dropping the
+  // `(?<![\w$.)\]])` lookbehind in front of the parenthesised arm of
+  // `globalObject` turns the call's result line red, and allowing space after
+  // the dot in the shared rule's anchor turns the prose line red.
   it.each(domGlobalLookalikes)("leaves %s alone", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(output, line).toContain("clean");
+    expect(status, line).toBe(0);
+  });
+});
+
+// The Node rule takes the DOM rule's pattern, so a Node global written with
+// an anchor the formatter does not produce, or reached through the global
+// object, is still the Node global. Each line fires the Node rule and nothing
+// else, once.
+const nodeGlobalSpellings: readonly (readonly [string, string])[] = [
+  ["an optional-chaining dot", "const a = process?.env.HOME;"],
+  ["an optional-chaining index", "const a = process?.[key];"],
+  ["space before the dot", "const a = process .env.HOME;"],
+  ["a dollar sign after the dot", "const a = Buffer.$loans;"],
+  ["a member of globalThis", "const a = globalThis.process.env.HOME;"],
+  ["an optional-chained member of globalThis", "const a = globalThis?.Buffer.from(text);"],
+  ["a member of self", "const a = self.process.env.HOME;"],
+  ["a member of globalThis in parentheses", "const a = (globalThis).process.env.HOME;"],
+];
+
+// The other side: a member named for a Node global on an options object,
+// through each of the same anchors, and prose with space after a dot.
+const nodeGlobalLookalikes: readonly (readonly [string, string])[] = [
+  ["a field named for a Node global", "const a = options.process.env;"],
+  ["an optional-chained field named for a Node global", "const a = options?.process.env;"],
+  ["an optional-chained index on such a field", "const a = options?.process?.[key];"],
+  ["a field with space before the dot", "const a = loan.global .frame;"],
+  ["a field with a dollar sign after the dot", "const a = hold.Buffer.$size;"],
+  ["a parenthesised options object", "const a = (options).process.env;"],
+  [
+    "a call's result with the global object as its argument",
+    "const a = String(globalThis).process.id;",
+  ],
+  ["a field named self on an options object", "const a = patron.self.process.id;"],
+  ["prose with space after the dot", "// Each loan moves through one process. Environments vary."],
+];
+
+describe("a Node global reached another way", () => {
+  // Sabotage: in scripts/engine-neutrality.mjs, restoring the Node rule to
+  // its own narrower `(?<![.\w$])(?:...)(?:\.\w|\[)` pattern turns every line
+  // here red; dropping the `\??` from the dotted anchor of
+  // `usedAsBareOrGlobalObjectMember` turns the optional-chaining dot line red;
+  // dropping its `\s*\?\.\[` arm turns the optional-chaining index line red;
+  // dropping the `\s*` before the dot turns the space-before-the-dot line red;
+  // narrowing `[\w$]` after the dot to `\w` turns the dollar sign line red;
+  // and dropping the parenthesised arm from `globalObject` turns the
+  // parentheses line red.
+  it.each(nodeGlobalSpellings)("fires on %s", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(status, line).toBe(1);
+    expect(firedRules(output), line).toEqual(["node-global"]);
+  });
+
+  // Sabotage: in scripts/engine-neutrality.mjs, dropping the leading
+  // `(?<![.\w$])` lookbehind from `usedAsBareOrGlobalObjectMember` turns
+  // every field line red, dropping the `(?<![\w$.)\]])` lookbehind in front
+  // of the parenthesised arm of `globalObject` turns the call's result line
+  // red, and allowing space after the dot in its anchor turns the prose line
+  // red.
+  it.each(nodeGlobalLookalikes)("leaves %s alone", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(output, line).toContain("clean");
     expect(status, line).toBe(0);
