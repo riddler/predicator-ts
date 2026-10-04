@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileProgram, type EvaluateOptions } from "../src/index.js";
+import { compileProgram, type EvaluateOptions, type EvaluateResult } from "../src/index.js";
 import {
   type DecodeReason,
   decodeTagged,
@@ -7,6 +7,7 @@ import {
   encodeTagged,
   evaluateTagged,
   executeTagged,
+  type ProjectedEvaluation,
   type TaggedEvaluateOptions,
   type TaggedExecution,
 } from "../src/tagged.js";
@@ -711,6 +712,18 @@ describe("evaluateTagged", () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     expect(outcome.error.type).toBe("UndefinedVariableError");
+  });
+
+  // The answer has a name on this subpath, so a host holding one writes its
+  // type rather than reading it off the function, and the same value is one
+  // member of what the main entry point's `evaluate` answers. Sabotage:
+  // dropping the type's re-export from the subpath turns the export-surface
+  // pin red on its assertion and the typecheck stage red on this import.
+  it("answers the subpath's own evaluation result type", () => {
+    const outcome: ProjectedEvaluation = evaluateTagged([["load", "holds"]], { holds: 1 });
+    expect(outcome).toEqual({ ok: true, value: 1 });
+    const widened: EvaluateResult = outcome;
+    expect(widened).toBe(outcome);
   });
 
   it("takes an options object written for the main entry point too", () => {

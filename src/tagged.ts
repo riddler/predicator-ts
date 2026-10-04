@@ -45,6 +45,15 @@ import { DEPTH_LIMIT, enterContainer, type PlaceCount, visitPlace } from "./nest
 import { Duration, Float, PDate, PDateTime, toHost, Undefined, type Value } from "./values.js";
 
 /**
+ * What `evaluateTagged` answers, named on this subpath so a host can write it.
+ * The main entry point's `EvaluateResult` is this type with a `ParseError` arm
+ * added, the arm a source text fails on; this entry point takes no source
+ * text, so it answers none, and every value of this type is also an
+ * `EvaluateResult`.
+ */
+export type { ProjectedEvaluation };
+
+/**
  * Why a text could not be decoded. `"depth_limit_exceeded"` is a text whose
  * brackets and braces nest past the depth limit this package declares.
  */
