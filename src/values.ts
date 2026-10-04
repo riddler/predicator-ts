@@ -393,7 +393,13 @@ function normalize(
   if (value === undefined) return Undefined;
   if (value === Undefined) return Undefined;
 
-  if (value instanceof Float) return value;
+  if (value instanceof Float) {
+    // Every float this package builds is finite, but the class's test asks
+    // only that the field be a number, so a host-built object can carry NaN or
+    // an infinity there. It is refused as a raw number that is not finite is.
+    if (!Number.isFinite(floatMagnitude(value))) throw new RefusalSignal("non_finite_number");
+    return value;
+  }
   if (value instanceof PDate || value instanceof PDateTime || value instanceof Duration) {
     return value;
   }
@@ -473,7 +479,9 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  *
  * An integral number inside the safe range normalizes to an integer; a host
  * that means a float writes `float(n)`. An integral number outside the safe
- * range is refused rather than rounded, and so is a non-finite one. A value
+ * range is refused rather than rounded, and so is a non-finite one. So is a
+ * float whose field is not finite: no float this package builds carries one,
+ * and only an object a host built to the float class's shape can. A value
  * with no row at all - a function, a symbol other than the absence singleton,
  * a `Map`, a `Set`, a class instance this package did not define - is refused
  * too.

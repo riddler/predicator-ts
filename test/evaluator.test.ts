@@ -20,13 +20,14 @@
 // the test was watched going red, and the mutation was reverted.
 
 import { describe, expect, it } from "vitest";
-import { loadRoot, normalizeContext } from "../src/context.js";
+import { Context, loadRoot, normalizeContext } from "../src/context.js";
 import { EvaluationError } from "../src/errors.js";
 import {
   compareStrings,
   compareValues,
   DEFAULT_LOOP_BUDGET,
   type EvaluateOptions,
+  evaluateProgram,
   evaluateToValue,
   resolveOptions,
 } from "../src/evaluator.js";
@@ -2925,11 +2926,28 @@ describe("the number a float carries, to the machine", () => {
   // assertion red, and building the float with the constructor rather than
   // through the numeric result turns the second red with the float class's
   // own error. Both were run and reverted.
+  //
+  // A context a host hands in no longer carries a float whose field is not
+  // finite, because the value boundary refuses one; the second assertion
+  // binds it into a context the boundary never saw, through the machine's own
+  // entry point, so that it still reaches the negation it pins.
   it("negates the field, and refuses a field the domain has no float for", () => {
     const negated = (fine: Float): Value | string =>
       readOver([["load", "fine"], ["unary_minus"]], { fine });
     expect(negated(forgedFloat(1.5, () => 7))).toStrictEqual(float(-1.5));
-    expect(negated(forgedFloat(Number.NaN, () => 1))).toBe("refused: non_finite_number");
+    const unchecked = new Context(new Map([["fine", forgedFloat(Number.NaN, () => 1) as Value]]));
+    let answered: string;
+    try {
+      const outcome = evaluateProgram(
+        [["load", "fine"], ["unary_minus"]],
+        unchecked,
+        resolveOptions(),
+      );
+      answered = outcome.ok ? "ok" : `refused: ${outcome.error.reason}`;
+    } catch (thrown) {
+      answered = `threw: ${(thrown as Error).message}`;
+    }
+    expect(answered).toBe("refused: non_finite_number");
   });
 
   // Sabotage: truncating `value.valueOf()` in the integer cast turns this red.
@@ -2958,5 +2976,83 @@ describe("the number a float carries, to the machine", () => {
         { fine: forgedFloat(-1.5, () => 7) },
       ),
     ).toStrictEqual(float(1.5));
+  });
+});
+
+describe("a float whose field is not finite, where a host's float enters", () => {
+  // The value classes' instanceof test asks only that a float's field be a
+  // number, so an object a host built to that shape can carry NaN or an
+  // infinity there. Admitted, it made equality between it and itself answer
+  // false. A host's float enters the machine at two places, the context and a
+  // literal operand, and each refuses one with the reason a plain number that
+  // is not finite already carries there.
+  //
+  // Sabotage: admitting a float as itself in `normalize` in `src/values.ts`
+  // without testing its field turns this red, the context binding it and the
+  // comparison answering false. It was run and reverted.
+  it("refuses a NaN-field float in a context, before equality is asked", () => {
+    for (const field of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const fine = forgedFloat(field, () => 1);
+      const program: Program = [
+        ["load", "fine"],
+        ["load", "fine"],
+        ["compare", "EQ"],
+      ];
+      expect(readOver(program, { fine })).toBe("refused: non_finite_number");
+      expect(readOver(program, { patron: { loans: [{ fine }] } })).toBe(
+        "refused: non_finite_number",
+      );
+      const published = evaluate(program, { fine });
+      expect(published.ok).toBe(false);
+      if (published.ok) continue;
+      expect(published.error.type).toBe("EvaluationError");
+      expect(published.error.reason).toBe("non_finite_number");
+    }
+  });
+
+  // Sabotage: removing the float arm from `literalFault` in
+  // `src/evaluator.ts` turns this red, the operand pushed and the comparison
+  // answering false at the top, and the nested operands answering ok. It was
+  // run and reverted.
+  it("refuses one in a literal operand, wherever the operand carries it", () => {
+    for (const field of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const fine = forgedFloat(field, () => 1);
+      for (const operand of [fine, [2, fine], { patron: { holds: [{ fine }] } }]) {
+        const program = [
+          ["lit", operand],
+          ["lit", operand],
+          ["compare", "EQ"],
+        ] as Program;
+        for (const outcome of [evaluateToValue(program), evaluate(program, {})]) {
+          expect(outcome.ok).toBe(false);
+          if (outcome.ok) continue;
+          expect(outcome.error.type).toBe("EvaluationError");
+          expect(outcome.error.reason).toBe("non_finite_number");
+          expect(outcome.error.position).toBe(0);
+        }
+      }
+    }
+  });
+
+  // What the refusal does not reach: a forged float whose field is finite is
+  // still admitted at both places, and a float this package built is too.
+  it("still admits a float whose field is finite at both places", () => {
+    const fine = forgedFloat(2.5, () => 1);
+    const program: Program = [
+      ["load", "fine"],
+      ["load", "fine"],
+      ["compare", "EQ"],
+    ];
+    expect(readOver(program, { fine })).toBe(true);
+    expect(
+      readOver(
+        [
+          ["lit", fine],
+          ["lit", float(2.5)],
+          ["compare", "EQ"],
+        ] as Program,
+        {},
+      ),
+    ).toBe(true);
   });
 });

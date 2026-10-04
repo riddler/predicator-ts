@@ -376,6 +376,49 @@ describe("fromHost", () => {
   });
 });
 
+describe("a float whose field is not finite, at the value boundary", () => {
+  // Every float this package builds carries a finite field, because the float
+  // class refuses anything else. The class's instanceof test asks only that
+  // the field be a number, so an object a host built to that shape can carry
+  // NaN or an infinity there, and before this boundary refused one it entered
+  // the domain as itself, where equality between it and itself answered false.
+  // It is refused where a host's float enters, as a plain number that is not
+  // finite already is, and with the same reason.
+  //
+  // Sabotage: admitting a float as itself in `normalize` without testing its
+  // field turns this red, the normalization answering ok. It was run and
+  // reverted.
+  it("refuses a forged float carrying NaN or an infinity, with the boundary's reason", () => {
+    for (const field of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const forged = forgedFloat(field, () => 1);
+      expect(forged instanceof Float).toBe(true);
+      expect(refusalOf(forged)).toBe("non_finite_number");
+    }
+  });
+
+  // The walk reaches every float a list or a map holds, so the refusal is
+  // answered wherever the value carries one, not only at its top.
+  //
+  // Sabotage: the same admission without the test turns this red too. It was
+  // run and reverted.
+  it("refuses one wherever a structure carries it", () => {
+    const forged = forgedFloat(Number.NaN, () => 1);
+    expect(refusalOf({ patron: { fine: forged } })).toBe("non_finite_number");
+    expect(refusalOf({ loans: [{ fee: forgedFloat(Number.POSITIVE_INFINITY, () => 1) }] })).toBe(
+      "non_finite_number",
+    );
+    expect(refusalOf([1, [forged]])).toBe("non_finite_number");
+  });
+
+  // What the refusal does not reach: a forged float whose field is finite is
+  // still the float the test admits, and is admitted as itself.
+  it("still admits a forged float whose field is finite, as itself", () => {
+    const forged = forgedFloat(2.5, () => 1);
+    expect(normalized(forged)).toBe(forged);
+    expect(normalized(float(2.5))).toStrictEqual(float(2.5));
+  });
+});
+
 describe("toHost", () => {
   // Sabotage: projecting a Float as itself turns this red.
   it("loses the brand on a float and nothing else", () => {
