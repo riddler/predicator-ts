@@ -95,6 +95,20 @@ differences. That run compares the two engines; that the location rows answer
 as the reference did, and that the statement programs compile as it compiled
 them, is what the suite checks on the server runtime.
 
+Run again on 2026-10-04, on this source as it stood just before the version
+moved to 0.6.0, at `9a2fb80`: the source of the run above plus the two source
+changes made after it, the fraction expander's bound computed from the unit
+table and the exported name for `evaluateTagged`'s result type. The same four
+reports on the same engine build (release `0.12.0`, bytecode version `89`): the
+evaluator surface answered 257 rows on the server runtime and 257 on the
+engine, the compiler surface 215 and 215, the location run 112 and 112 and the
+statement run 64 and 64, all four with zero differences. The corpus is the
+same tier 9, 262 cases, as in the runs above. What it covers is what the four
+reports run: the corpus cases as the 2026-10-02 paragraph describes them, the
+three location functions with each transcript row's inputs, and the statement
+programs through `executeTagged`. Like every run here, it is a run on the
+standalone build named above, not on the engine an application ships.
+
 `engines.node` in `package.json` is `>=20`, and that is the floor a
 consumer's runtime has to clear. It is not the toolchain: what builds and
 gates this repository is the one node and the one pnpm `mise.toml` pins, and

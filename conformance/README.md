@@ -206,6 +206,25 @@ The proof it produces is against the standalone command-line build of that
 engine, which is an older release than the one current React Native ships, and
 the script's header says what that bounds.
 
+### The run before 0.6.0 (2026-10-04)
+
+Run on 2026-10-04 on the source at `9a2fb80`, as it stood just before the
+version moved to 0.6.0, with the VM at Hermes release 0.12.0, bytecode version
+89, and the server runtime at Node v24.21.0. The corpus was tier 9, 262 cases;
+beside it ran the 112 location transcript rows and the 64 statement programs.
+It printed:
+
+| Report | Server runtime | The VM | Differences |
+|---|---|---|---|
+| evaluator | 257 rows | 257 rows | 0 |
+| compiler | 215 rows | 215 rows | 0 |
+| location | 112 rows | 112 rows | 0 |
+| statement | 64 rows | 64 rows | 0 |
+
+The README records this run beside the earlier ones: the 2026-09-20 and
+2026-10-02 runs of the two corpus surfaces, and the first run of all four
+reports, at `c901cc0`. Every one of them diffed clean.
+
 ### A loop gives every closure one binding on that engine (2026-10-04)
 
 The standalone build does not give each iteration of a loop its own binding
