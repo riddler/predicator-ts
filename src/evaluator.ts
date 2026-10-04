@@ -652,7 +652,10 @@ const LITERAL_CONTAINER_LIMIT = 65536;
  * safe range, and a number that is not finite, for which the domain has no
  * member at all. A finite number that is not integral carries neither and is
  * not refused here; the record says why. A `Float` is a leaf, like every other
- * class the machine holds, so only a raw number reaches either test. The walk
+ * class the machine holds, so only a raw number reaches the safe-range test;
+ * a float's field is tested for being finite, because the class's test asks
+ * only that it be a number and an object a host built to that shape can carry
+ * NaN or an infinity there, which no float this package builds does. The walk
  * descends every list and every object `isPlainMap` reads as a map, and treats
  * every other member as a leaf. It
  * follows each own string-keyed DATA property of a container, enumerable or
@@ -685,6 +688,9 @@ function literalFault(
     return Number.isInteger(value) && !Number.isSafeInteger(value)
       ? "integer_out_of_range"
       : undefined;
+  }
+  if (value instanceof Float) {
+    return Number.isFinite(floatMagnitude(value)) ? undefined : "non_finite_number";
   }
   if (value === null || typeof value !== "object") return undefined;
   if (!Array.isArray(value) && !isPlainMap(value)) return undefined;
@@ -1389,8 +1395,11 @@ class Machine {
    * same way and in the same places, with the reason the value boundary
    * carries at that bound, `"non_finite_number"`: the domain has no member for
    * it, and admitting one let a `::float` cast of it raise the float class's
-   * error out of an entry point, where errors are values. A finite number that
-   * is not integral is neither of those and is still admitted; the record says
+   * error out of an entry point, where errors are values. A float whose field
+   * is not finite, which only an object a host built to the float class's shape
+   * can carry, is refused the same way and with the same reason, as the context
+   * refuses one. A finite number that is not integral is neither of those and
+   * is still admitted; the record says
    * why, and the store's segment check is where the machine refuses it. The
    * shape is checked first, so an operand that fails both answers the shape's
    * reason. The walk that looks for such a number also follows the data

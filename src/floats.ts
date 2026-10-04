@@ -54,7 +54,10 @@ export function floatText(value: Float): string {
  * necessarily finite, because the test does not ask that, so a writer whose
  * output has no text for a non-finite number checks before it spells one, and
  * a reader that builds a new float from it goes through the check that
- * refuses a non-finite result.
+ * refuses a non-finite result. The two places a host's float enters the
+ * machine, context normalization and a literal operand, refuse one whose
+ * field is not finite, so these checks are reached only by a float handed to
+ * a writer or a reader some other way.
  * The field is the one `shareAcrossCopies` names for `Float` in `./values.ts`.
  */
 export function floatMagnitude(value: Float): number {
