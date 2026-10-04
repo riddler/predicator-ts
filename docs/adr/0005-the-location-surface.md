@@ -399,3 +399,43 @@ plain-number key, the path through a duration, the depth limit and the shared
 write. The other names 0.5.0 adds to the main entry point are the two located
 compile results, which are not this surface and do not touch what this record
 decides.
+
+## Note: the reference resolves an out-of-range integer as a bracket key, not as the root (2026-10-04)
+
+Recorded for `pts-bgmk`. It decides nothing, so it carries no Status line, and
+it removes no line. It says which input the last sentence of the paragraph
+opening "Three inputs get answers of this package's own" is true of, and it
+gives the section on the answered context the anchor its cite of an ADR-0002
+amendment lacks.
+
+**The reference resolves an out-of-range integer only where it is a bracket
+key.** That paragraph says the reference, whose integers are unbounded,
+resolves such an integer. That holds for a bracket key: `resolve_bracket_key`
+in `lib/predicator/context_location.ex` at `v9.4.2` takes an integer literal,
+or a minus over one, as the segment whatever its size, so
+`holds[99999999999999999999]` resolves there to the path
+`["holds", 99999999999999999999]`. It does not hold for the location's root:
+`do_resolve_base` in the same file refuses an integer literal at the root, as
+it refuses every node it reads as a literal value there, as `not_assignable`,
+with `expression_type` `"literal value"` and the literal as `value`, which is
+the answer the transcript row `location/integer-literal` holds for `42`, and a
+root of `99999999999999999999` answers that same refusal with the unbounded
+integer as its value. Here both inputs answer
+`number_out_of_range`, as the paragraph says: `bracketKey` and `rootRefusal` in
+`src/location.ts` (read at `bff95e9`) refuse an integer literal outside the
+safe range through `outOfRange`, and the test "refuses a numeric literal the
+domain cannot represent as compile does" in `test/location.test.ts` (read at
+`bff95e9`) pins the key, the negated key and the root. So at a bracket key the
+two packages differ in kind, a path against a refusal; at the root both
+refuse, under different reasons and error classes, a `ParseError` here against
+a `LocationError` there. No transcript row carries an out-of-range integer: the
+reference's answers for `holds[99999999999999999999]`,
+`holds[-99999999999999999999]` and `99999999999999999999` were read by running
+the reference built at `v9.4.2` (`d8067df`) on those three sources.
+
+**The amendment the answered context departs from, by anchor.** The section
+"The answered context is in the domain, not projected" names that amendment
+by its heading text. It is ADR-0002's
+[amendment on the three questions the statement-mode note holds](0002-the-value-domain-and-the-host-boundary.md#amendment-the-three-questions-the-statement-mode-note-holds-2026-09-17),
+and the rule this record departs from is that amendment's section
+[The main entry point's returned context is a plain projected object](0002-the-value-domain-and-the-host-boundary.md#the-main-entry-points-returned-context-is-a-plain-projected-object).
