@@ -68,19 +68,32 @@ one a current React Native ships, so the run is evidence about that engine
 family and about this package's use of the language, rather than a run on the
 exact build an application ships.
 
-The run covers what the corpus covers. On the evaluator surface each case is
-an instruction list run through `evaluateTagged`, the corpus's statement
-instruction lists (`store` and `pop`) among them; on the compiler surface each
-case is expression source run through `compile`. No corpus case compiles
-statement source or runs `execute`, and the location surface
-(`contextLocation`, `contextPut`, `contextAssign`) is not in the bundle the
-engine runs, so this run is no evidence about those functions on that engine.
+The 2026-10-02 run covered what the corpus covers. On the evaluator surface
+each case is an instruction list run through `evaluateTagged`, the corpus's
+statement instruction lists (`store` and `pop`) among them; on the compiler
+surface each case is expression source run through `compile`. No corpus case
+compiles statement source or runs `execute`, and the location surface
+(`contextLocation`, `contextPut`, `contextAssign`) was not in the bundle the
+engine ran, so that run is no evidence about those functions on that engine.
 
 The earlier run behind this paragraph, on 2026-09-20 before the first
 publish, also diffed clean on both surfaces, and it reported release `0.12.0`
 at bytecode version `96`. The run above reports `89` from the `v0.12.0`
 archive, so the earlier run answered from a different build that names itself
 by the same release; the bytecode version is what tells them apart.
+
+From 2026-10-04 the bundle carries two more reports beside the corpus's: every
+row of the location transcript, handed to the location function the row names
+with the row's own inputs, and every authored statement program, compiled and
+run through `executeTagged` against one context. Each is diffed between the two
+engines row by row, as a corpus surface is. Run on 2026-10-04, on the source at
+`c901cc0` with that change and on the same engine build (release `0.12.0`,
+bytecode version `89`): the evaluator surface answered 257 rows on the server
+runtime and 257 on the engine, the compiler surface 215 and 215, the location
+run 112 and 112 and the statement run 64 and 64, all four with zero
+differences. That run compares the two engines; that the location rows answer
+as the reference did, and that the statement programs compile as it compiled
+them, is what the suite checks on the server runtime.
 
 `engines.node` in `package.json` is `>=20`, and that is the floor a
 consumer's runtime has to clear. It is not the toolchain: what builds and

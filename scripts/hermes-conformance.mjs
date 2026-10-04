@@ -20,6 +20,14 @@
 // non-zero on the first surface whose reports differ, naming every row that
 // diverged.
 //
+// TWO RUNS BESIDE THE CORPUS. The corpus has no case for the location surface
+// and none that compiles statement source, so the bundle carries two more
+// reports: every row of the location transcript, handed to the location
+// function the row names, and every authored statement program, compiled and
+// run through `executeTagged`. Both are `test/conformance/engine-surfaces.ts`,
+// and each is diffed between the engines exactly as a surface is. Neither is
+// compared with the reference here; the suite does that on the server runtime.
+//
 // WHAT IT BUILDS, AND WHY THE VM NEEDS A BUNDLE AT ALL. The VM has no module
 // loader and no filesystem: there is no `require`, no `import`, and nothing to
 // read the vendored corpus off disk with. So the run is bundled into one
@@ -69,6 +77,7 @@ import { createRequire } from "node:module";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadCases, loadManifest } from "./lib/corpus.mjs";
+import { PROGRAM_SOURCES } from "./lib/program-sources.mjs";
 
 const repoRoot = fileURLToPath(new URL("../", import.meta.url));
 
@@ -149,13 +158,23 @@ function resolveTools(toolsDir) {
   return { root, vm, esbuild, babel, classes };
 }
 
-/** The entry both engines run, and the corpus it carries. */
-function writeSources(outDir, tier, corpus) {
+/**
+ * The entry both engines run, and the data it carries: the corpus, the
+ * location transcript's lines and the authored statement programs.
+ */
+function writeSources(outDir, tier, corpus, locationLines, programs) {
   mkdirSync(outDir, { recursive: true });
   const runner = join(repoRoot, "test", "conformance", "runner.js");
+  const surfaces = join(repoRoot, "test", "conformance", "engine-surfaces.js");
   writeFileSync(
     join(outDir, "corpus-data.ts"),
-    `export const tier = ${tier};\nexport const corpus = ${JSON.stringify(corpus)};\n`,
+    [
+      `export const tier = ${tier};`,
+      `export const corpus = ${JSON.stringify(corpus)};`,
+      `export const locationLines = ${JSON.stringify(locationLines)};`,
+      `export const programs = ${JSON.stringify(programs)};`,
+      ``,
+    ].join("\n"),
     "utf8",
   );
   // `print` is the VM's only output channel and the only one it has; a server
@@ -165,13 +184,16 @@ function writeSources(outDir, tier, corpus) {
     join(outDir, "entry.ts"),
     [
       `import { runCompiler, runEvaluator } from ${JSON.stringify(runner)};`,
-      `import { corpus, tier } from "./corpus-data.js";`,
+      `import { runLocation, runStatements } from ${JSON.stringify(surfaces)};`,
+      `import { corpus, locationLines, programs, tier } from "./corpus-data.js";`,
       ``,
       `const emit =`,
       `  typeof print === "function" ? print : (line) => { console.log(line); };`,
       ``,
       `emit(JSON.stringify(runEvaluator(tier, corpus)));`,
       `emit(JSON.stringify(runCompiler(tier, corpus)));`,
+      `emit(JSON.stringify(runLocation(locationLines)));`,
+      `emit(JSON.stringify(runStatements(programs)));`,
       ``,
     ].join("\n"),
     "utf8",
@@ -220,11 +242,16 @@ function lower(babel, classes, source) {
   return lowered.code;
 }
 
-/** Reads two reports out of an engine's output, one per line. */
+/** The reports an engine prints, one per line: the two corpus surfaces, then the two runs beside them. */
+const REPORT_COUNT = 4;
+
+/** Reads the reports out of an engine's output, one per line. */
 function readReports(text, engine) {
   const lines = text.split("\n").filter((line) => line.trim() !== "");
-  if (lines.length !== 2) {
-    throw new Error(`${engine} printed ${lines.length} lines where two reports were expected`);
+  if (lines.length !== REPORT_COUNT) {
+    throw new Error(
+      `${engine} printed ${lines.length} lines where ${REPORT_COUNT} reports were expected`,
+    );
   }
   return lines.map((line) => JSON.parse(line));
 }
@@ -285,7 +312,18 @@ async function main() {
   const corpus = { manifest, cases };
   process.stdout.write(`corpus: tier ${tier}, ${cases.length} cases, ${manifest.corpus_hash}\n`);
 
-  const entry = writeSources(outDir, tier, corpus);
+  const locationLines = readFileSync(
+    join(repoRoot, "conformance", "transcript", "location.json"),
+    "utf8",
+  )
+    .split("\n")
+    .filter((line) => line.trim() !== "");
+  const programs = PROGRAM_SOURCES.map(({ id, source }) => ({ id, source }));
+  process.stdout.write(
+    `beside it: ${locationLines.length} location transcript rows, ${programs.length} statement programs\n`,
+  );
+
+  const entry = writeSources(outDir, tier, corpus, locationLines, programs);
   const nodeBundle = await bundle(tools.esbuild, entry, join(outDir, "on-node.mjs"), false);
   const builtForVM = await bundle(tools.esbuild, entry, join(outDir, "on-vm.js"), true);
   const vmBundle = join(outDir, "on-vm-lowered.js");
@@ -329,11 +367,11 @@ async function main() {
   }
   if (differing > 0) {
     process.stderr.write(
-      `${differing} of ${nodeReports.length} surfaces differ; each difference above is a finding\n`,
+      `${differing} of ${nodeReports.length} reports differ; each difference above is a finding\n`,
     );
     process.exit(1);
   }
-  process.stdout.write("both surfaces agree, row for row\n");
+  process.stdout.write("every report agrees, row for row\n");
 }
 
 await main();
