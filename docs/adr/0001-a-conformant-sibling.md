@@ -448,13 +448,17 @@ and the global scope's name with any space between them, followed by any
 space and an opening brace on the same line. It also fires on the global
 scope's name opening a line after any space, followed by any space and an
 opening brace, which is how the block is written nested inside an ambient
-module declaration. With the rule in place, the probed file above fails the
-stage.
+module declaration. The compiler reads a block comment as space, so wherever
+the rule allows space it also allows a block comment that closes on the same
+line (`spaceOrBlockComment`): between the two keywords, before the brace, and
+before and after the nested name. With the rule in place, the probed file
+above fails the stage.
 
 **What stays quiet.** Prose that names the two keywords with no brace after
-them, a field or a binding named for the global scope, and the nested name
-and its brace when anything other than space comes before them on the line,
-a comment included.
+them, a block comment between them included, a field or a binding named for
+the global scope, and the nested name and its brace when anything other than
+space and block comments comes before them on the line, a line comment
+included.
 
 **Still not caught.** A brace moved to the line after the keywords, which
 the formatter does not write. An interface written at the top level of a
