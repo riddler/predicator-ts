@@ -1891,3 +1891,24 @@ refusal. The tests the amendment names are under "a source string at execute
 and executeValue is a statement program" in `test/index.test.ts`.
 `EvaluationError` in `src/errors.ts` carries an instruction index as its
 position, and `conformance/` is unchanged by the change.
+
+## Note: the program-mode amendment's split, stated plainly (2026-10-04)
+
+The amendment above headed "`execute` and `executeValue` compile a source
+string as a statement program" opens its decision by describing the wiring:
+which helper takes the compiler as an argument, which entry point hands it
+which compiler, and the reference's call chain. This note restates the split
+that decision makes, citing each function once. It changes no decision and
+removes no line; the amendment's table of what a host sees change, and every
+paragraph after it, stand as written. Code is cited as read at `f125888`.
+
+**The split.** Given a source string, `evaluate` compiles it with `compile`,
+as an expression; `execute` and `executeValue` compile it with
+`compileProgram`, as a statement program. Given an instruction list, each of
+the three runs it as it did before the amendment. The three entry points are
+in `src/index.ts` and the two compilers in `src/compile.ts`.
+
+**The reference splits the same way at `v9.4.2`.** In `lib/predicator.ex`,
+`Predicator.evaluate/3` parses a source string as an expression, and
+`Predicator.execute/3` and `Predicator.execute_value/3` parse one as a
+program.
