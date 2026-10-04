@@ -570,6 +570,15 @@ const globalMergeSpellings: readonly (readonly [string, string])[] = [
     'declare module "loans" {\n  global {\n    interface Array<T> {\n      at(index: number): T | undefined;\n    }\n  }\n}',
   ],
   ["the nested form with no space before the brace", "  global{"],
+  // The compiler reads a block comment as space, so each of these is still
+  // the block.
+  ["a block comment between the keywords", "declare /* x */ global {"],
+  ["a block comment before the brace", "declare global /* x */ {"],
+  ["a block comment before the nested brace", "  global /* x */ {"],
+  [
+    "a block comment before the nested name",
+    'declare module "loans" {\n  /* x */ global {\n    interface Array<T> {\n      at(index: number): T | undefined;\n    }\n  }\n}',
+  ],
 ];
 
 // The other side: text that mentions the global scope without opening a block
@@ -582,23 +591,31 @@ const globalMergeLookalikes: readonly (readonly [string, string])[] = [
   ["a binding named for the keywords", "const declareGlobal = { patron: 3 };"],
   ["a module declaration with no global block", 'declare module "loans" {'],
   ["an interface at the top level of a module", "interface Hold { readonly patron: string; }"],
+  ["prose with a block comment between the keywords", "// We never declare /* x */ global types."],
+  ["a line comment after a block comment", "/* holds */ // A nested global { block is refused."],
+  [
+    "a block comment naming the scope before code",
+    "/* the global scope */ const holds = { patron: 1 };",
+  ],
 ];
 
 describe("a global augmentation in shipped source", () => {
   // Sabotage: in scripts/engine-neutrality.mjs, deleting the `global-merge`
-  // rule turns every line here red; deleting its second arm turns the two
-  // nested lines red; dropping the `\s*` before the first arm's brace turns
-  // the three lines with a space before that brace red; and dropping the
-  // `\s*` before the second arm's brace turns the spaced nested line red.
+  // rule turns every line here red; deleting its second arm turns the four
+  // nested lines red; and narrowing any one `spaceOrBlockComment` in the
+  // pattern to plain space turns the block comment line at that place red -
+  // between the keywords, before the first arm's brace, before the nested
+  // name, or before the nested brace.
   it.each(globalMergeSpellings)("fires on %s", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(status, line).toBe(1);
     expect(firedRules(output), line).toEqual(["global-merge"]);
   });
 
-  // Sabotage: in scripts/engine-neutrality.mjs, dropping the `\s*\{` anchor
-  // from the first arm of the `global-merge` pattern turns the prose line
-  // red, and dropping the `^` from its second arm turns the comment line red.
+  // Sabotage: in scripts/engine-neutrality.mjs, dropping the brace anchor
+  // from the first arm of the `global-merge` pattern turns the two prose
+  // lines red, and letting any text come before the nested name, instead of
+  // space and block comments only, turns the two line comment lines red.
   it.each(globalMergeLookalikes)("leaves %s alone", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(output, line).toContain("clean");

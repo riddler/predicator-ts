@@ -292,6 +292,10 @@ const usedAsBareOrGlobalObjectMember = (alternation) =>
 // shipped source has no reason to reuse it.
 const calledAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})\(`;
 
+// Space as the compiler reads it between two tokens on one line: whitespace,
+// or a block comment that closes on the same line.
+const spaceOrBlockComment = String.raw`(?:\s|/\*.*?\*/)`;
+
 const rules = [
   {
     id: "dom-global",
@@ -471,12 +475,20 @@ const rules = [
     // which is how the block is written nested inside an ambient module
     // declaration. The anchor is the opening brace on the same line, which is
     // where the formatter puts it, so prose that says a module declares
-    // nothing global stays quiet. A brace moved to the next line is not
+    // nothing global stays quiet. The compiler reads a block comment as
+    // space, so wherever the pattern allows space it allows a block comment
+    // closed on the same line too: between the two keywords, before the
+    // brace, and before the nested name. Nothing else may come before the
+    // nested name on its line, which keeps a line comment that writes the
+    // name and a brace quiet. A brace moved to the next line is not
     // caught, and neither is an interface written at the top level of a file
     // that has no import or export, or of a declaration file, which the
     // compiler also merges into the global scope; nothing in the line says
     // where such an interface lands.
-    pattern: /\bdeclare\s+global\s*\{|^\s*global\s*\{/g,
+    pattern: new RegExp(
+      String.raw`\bdeclare${spaceOrBlockComment}+global${spaceOrBlockComment}*\{|^${spaceOrBlockComment}*global${spaceOrBlockComment}*\{`,
+      "g",
+    ),
     why: "shipped source may not merge declarations into the global scope; a member the target lacks would then typecheck and ship",
     documentedBy:
       "This module augments no global scope, so no library interface gains a member the source typecheck does not name.",
