@@ -13,9 +13,10 @@
 // find against a map and a null key against a duration, what an arithmetic
 // result past the safe integer range answers, whether two reads of the clock
 // in one evaluation answer one instant, what a duration answers against a
-// plain map, what a date plus a duration the host supplies answers, and how
-// two lists or two maps compare when a member holds the null value or is
-// absent. The file is written by
+// plain map, what a date plus a duration the host supplies answers, how two
+// lists or two maps compare when a member holds the null value or is absent,
+// and how a date member compares with a datetime member, and a datetime member
+// with one written to another precision. The file is written by
 // `scripts/reference-transcript.mjs` and by nothing else; the suite never runs
 // the reference, it reads what the reference answered.
 //
@@ -90,6 +91,23 @@ const DURATION_NOTE =
  */
 const DURATION_REMAINING_NOTE =
   "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the note on the remaining operators against a plain map";
+
+/**
+ * Where the `date-member/` rows on two datetimes written to different
+ * precision are declared: the amendment on a date member against a datetime
+ * member, in the record. A datetime here carries no precision, so the
+ * reference tells the two apart and this package cannot.
+ */
+const PRECISION_NOTE =
+  "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the amendment on a date member against a datetime member, the section on precision";
+
+/**
+ * Where the `date-member/` rows on an ordering that meets two maps are
+ * declared: the same amendment, which keeps this package's step past two maps
+ * whose only difference is a date member against a datetime member.
+ */
+const MAP_ORDER_NOTE =
+  "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the amendment on a date member against a datetime member, the section on ordering two maps";
 
 /** An instant on the day the `datetime-offset/` rows are written on, in UTC. */
 function utc(hour: number, minute: number): PDateTime {
@@ -388,6 +406,26 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
     "duration-arithmetic/date-plus-a-supplied-duration",
     { reference: "refused: add", ours: new PDate(2026, 9, 22), declaredBy: DURATION_NOTE },
   ],
+  // An ordering that meets two maps whose only difference is a date member
+  // against a datetime member. The reference orders the two maps by term, the
+  // date member first; this package does not order two maps, and steps past
+  // these two as it did before the date member was told from the datetime
+  // member, so the later members decide.
+  ["date-member/040", { reference: false, ours: true, declaredBy: MAP_ORDER_NOTE }],
+  ["date-member/042", { reference: false, ours: true, declaredBy: MAP_ORDER_NOTE }],
+  ["date-member/044", { reference: false, ours: true, declaredBy: MAP_ORDER_NOTE }],
+  // Two datetimes written to different precision. The reference keeps a
+  // datetime's precision and compares it as part of the value, as a member and
+  // under strict equality at the top level; a datetime here carries no
+  // precision, so the two are one value.
+  ["date-member/045", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
+  ["date-member/046", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
+  ["date-member/047", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
+  ["date-member/048", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
+  ["date-member/049", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
+  ["date-member/050", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
+  ["date-member/052", { reference: true, ours: false, declaredBy: PRECISION_NOTE }],
+  ["date-member/054", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
 ]);
 
 /**
@@ -560,6 +598,15 @@ describe("the reference transcript", () => {
   // on the pair instead of `membersEqual`) turns red every row whose answer the
   // member rule moved; comparing two absent members with `valuesEqual` in
   // `membersEqual` turns red the rows it moved for an absent member.
+  //
+  // Sabotage for the `date-member/` rows, each run and reverted: answering
+  // `valuesEqual` for a date member against a datetime member in
+  // `membersEqual` turns red every member row that answers false; dropping the
+  // date member's place first in `compareOrder` turns red the list orderings
+  // that reach such a pair; comparing two maps by `valuesEqual` in the
+  // ordering walk turns red the map orderings, the declared ones because this
+  // package's answer moved; and answering a level pair of lists rather than stepping past
+  // it turns `date-member/043` and `date-member/044` red.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const reference = referenceAnswer(row);
     const ours = answer(row);
