@@ -14,6 +14,37 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.6.0] 2026-10-04
+
+A minor release. `ProjectedEvaluation` on the `./tagged` subpath names what
+`evaluateTagged` answers. Some answers change: a host `Date` is named a
+datetime; a date member against a datetime member, and a list ordering that
+meets a member holding the null value, answer as the reference does;
+`decompile` renders an out-of-range integer literal outside a duration as
+written; a result, a context or a `JSON.stringify` argument past the place
+budget is refused; and a forged float whose field is not finite is refused
+where it enters. A revoked proxy as a `contextPut` path segment answers a
+`LocationError` where it threw, and two location refusal messages take the
+right article. No public name is removed or renamed.
+
+### Added
+
+- `ProjectedEvaluation` on the `./tagged` subpath names what `evaluateTagged` answers; it is the main entry point's `EvaluateResult` without the `ParseError` arm, so every value of it is also an `EvaluateResult`, and no answer changes.
+
+### Changed
+
+- `typeName` answers `"datetime"` for a host `Date`, the member `fromHost` admits it as, where it answered `"map"`; so the `JSON.stringify` builtin, handed a host `Date` in a literal operand (as the operand or inside a list or map it holds), refuses with "JSON.stringify has no JSON form for a datetime" where its refusal named a map. A `Map`, a `Set` or a class instance still answers `"map"`, and a `Date` that comes in through the context is unaffected.
+- Inside a list or a map, a date member against a datetime member is unequal whatever instants the two name, as the reference compares it: `==`, `in` and `contains` answer false where they answered true for such a pair at the same instant, `!=` answers true, and an ordering of two lists whose walk reaches such a pair puts the date member first where it ordered the two by instant or answered the absence; a date and a datetime compared at the top level answer as before, and two datetimes written to different precision stay one value here (a declared divergence).
+- An ordering of two lists that meets a member holding the null value answers a boolean, as the reference orders it, where it answered the absence: two such members at the same place are stepped past, and one against another member orders after a number and after false and before every other value; where the walk met an unbound name against such a member it answers a boolean where it answered an `unbound_variable` error, and an ordering of the null value at the top level still answers the absence.
+- `decompile` renders an integer literal outside a duration past the safe-integer bound with the digits it was written with, leading zeros dropped, as the reference renders its exact integer, where it rendered the host's rounded value (`99999999999999999999` as `100000000000000000000`, a longer run as `Infinity` or in exponent form); `compile` still refuses such a source with `number_out_of_range`, and a decimal literal past the finite range still renders as `Infinity.0`, a declared divergence, since the reference raises while parsing it.
+- A program whose plain result, statement-run context or value, or `JSON.stringify` argument has more places than the place budget (one million, each place counted once for each path that reaches it) is refused with `place_budget_exceeded`, where it answered after work that doubled with every shared level; `evaluate`, `execute`, `executeValue`, `evaluateTagged`'s default and the `JSON.stringify` builtin count before they project or write, and a failed statement run keeps its own error and leaves a context past the budget off.
+- An object a host built to the float class's shape whose field is NaN or an infinity is refused with `non_finite_number` wherever a host's value enters (a context, a `contextPut` value, a value a host function answers) and in a literal operand, where it was admitted and compared unequal to itself; such an object used as a `contextPut` path segment is carried in the error's details as the absence, where it was carried as itself, with the location text and the message unchanged; a float built with `float()` or by the package is never affected.
+
+### Fixed
+
+- `contextPut` answers a `LocationError` for a revoked proxy as a path segment, where it threw: `not_a_container` against a list and `invalid_index` elsewhere, as for any segment that is neither a string nor a safe integer, the segment described in `location` and carried as the absence.
+- A `LocationError` message writes its noun with the article it is said with: "not an arithmetic expression" and "not an undefined", where it wrote "not a"; the reason and the details are unchanged.
+
 ## [0.5.0] 2026-10-02
 
 A minor release. The location surface is new: `contextLocation` resolves an
