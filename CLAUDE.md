@@ -320,8 +320,11 @@ drift fails the gate and nothing is fixed silently, so run
   a reader checking a claim this repository makes reads those comments as
   their documentation. Dated correction and note blocks are exempt: there the
   id is the only trace of why a paragraph moved.
-- **Examples and fixtures use the family's two canonical domains** - credit-card
-  processing, and a signup wizard with A/B testing - and no others.
+- **New examples and fixtures use the family's library world** - a patron, a
+  copy, a loan, a hold, a branch. Credit-card processing and the signup wizard
+  with A/B testing, the two domains this repository used before, are
+  fixture-only: an example or fixture already written in either stays as it
+  is, transcript rows included, and nothing new is written in either.
 - **Commit messages**: title < 50 chars, simple present tense ("Adds ...",
   "Fixes ..."), body wrapped at ~72 chars. No AI attribution trailers.
 - **ASCII hyphens.** Plain `-` in prose, never an em dash or an en dash, and no
