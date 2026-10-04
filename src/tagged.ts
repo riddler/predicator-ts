@@ -35,6 +35,7 @@ import {
   evaluateToValue,
   executeToContext,
   type ProjectedEvaluation,
+  projectionFault,
 } from "./evaluator.js";
 import { floatMagnitude, floatText } from "./floats.js";
 import type { Program } from "./instructions.js";
@@ -701,7 +702,9 @@ export interface TaggedEvaluateOptions extends EvaluateOptions {
  * list.
  *
  * Under the default the result is the plain projection, exactly as the main
- * entry point answers it. Requested with the encoding, the result is the text
+ * entry point answers it, a result past the place budget refused as
+ * `"place_budget_exceeded"` before it is projected. Requested with the
+ * encoding, the result is the text
  * of that encoding - so an absence comes back as its tag rather than as the
  * language's own absence, which is a distinct thing from the null a null
  * result encodes to. A value the encoding cannot carry is a failure, not a
@@ -715,7 +718,11 @@ export function evaluateTagged(
 ): ProjectedEvaluation {
   const outcome = evaluateToValue(instructions, context, options);
   if (!outcome.ok) return outcome;
-  if (options?.tagged !== true) return { ok: true, value: toHost(outcome.value) };
+  if (options?.tagged !== true) {
+    const tooMany = projectionFault(outcome.value, "the result");
+    if (tooMany !== undefined) return { ok: false, error: tooMany };
+    return { ok: true, value: toHost(outcome.value) };
+  }
   const encoded = encodeTagged(outcome.value);
   if (encoded.ok) return { ok: true, value: encoded.text };
   return {

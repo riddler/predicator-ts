@@ -38,7 +38,7 @@
 import type { HostFunction } from "../evaluator.js";
 import { floatText } from "../floats.js";
 import { isPlainMap } from "../maps.js";
-import { DEPTH_LIMIT } from "../nesting.js";
+import { DEPTH_LIMIT, type PlaceCount, visitPlace } from "../nesting.js";
 import { Float, typeName, Undefined, type Value } from "../values.js";
 import { builtin, isString, refuse } from "./support.js";
 
@@ -82,8 +82,22 @@ import { builtin, isString, refuse } from "./support.js";
  * in lists or maps. Refusing there also bounds this walk's own recursion,
  * which otherwise descends once per level and exhausts the call stack, with
  * the engine's own overflow message as the reason.
+ *
+ * A VALUE OF MORE PLACES THAN `PLACE_BUDGET` IS REFUSED with the reason
+ * `"place_budget_exceeded"`, the reason the value boundary and the tagged
+ * encoder give a value past the same budget. The text holds a member's text at
+ * each place the member appears, so a value built from a list or map that two
+ * paths share grows with the number of paths rather than the number of
+ * containers. `places` counts every place this call has visited, a leaf as
+ * much as a list or a map, once for each path that reaches it, and the walk
+ * stops at the first place past the budget. A program reaches it by storing,
+ * again and again, a list that holds a root twice under that same root.
+ *
+ * Exported for the suite, which hands in its own count to read how many places
+ * one call visited.
  */
-function serialize(value: Value, level = 1): string {
+export function serialize(value: Value, level = 1, places: PlaceCount = { visited: 0 }): string {
+  if (visitPlace(places)) refuse("place_budget_exceeded");
   if (value === null) return "null";
   if (value === Undefined) refuse("JSON.stringify has no JSON form for an absence");
   // An integral float keeps its point, as the reference's serializer keeps it:
@@ -94,13 +108,13 @@ function serialize(value: Value, level = 1): string {
   if (typeof value === "string") return JSON.stringify(value);
   if (Array.isArray(value)) {
     if (level > DEPTH_LIMIT) refuse("depth_limit_exceeded");
-    return `[${value.map((member) => serialize(member, level + 1)).join(",")}]`;
+    return `[${value.map((member) => serialize(member, level + 1, places)).join(",")}]`;
   }
   if (isPlainMap(value)) {
     if (level > DEPTH_LIMIT) refuse("depth_limit_exceeded");
     const keys = Object.keys(value).sort();
     const members = keys.map(
-      (key) => `${JSON.stringify(key)}:${serialize(value[key] ?? null, level + 1)}`,
+      (key) => `${JSON.stringify(key)}:${serialize(value[key] ?? null, level + 1, places)}`,
     );
     return `{${members.join(",")}}`;
   }

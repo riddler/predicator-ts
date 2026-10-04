@@ -76,7 +76,13 @@ import {
   type Program,
 } from "./instructions.js";
 import { setKey } from "./maps.js";
-import { DEPTH_LIMIT, type NestingReason, nestingFault } from "./nesting.js";
+import {
+  DEPTH_LIMIT,
+  type NestingReason,
+  nestingFault,
+  PLACE_BUDGET,
+  placesPastBudget,
+} from "./nesting.js";
 import {
   Duration,
   Float,
@@ -2138,6 +2144,24 @@ export function nestingError(
       ? `${subject} contains itself`
       : `${subject} nests past the depth limit of ${DEPTH_LIMIT}`;
   return new EvaluationError(reason, message, position);
+}
+
+/**
+ * The failure answered for a value whose projection back to host values would
+ * visit more places than the place budget, or nothing when it would not.
+ *
+ * The projection builds a copy at each place a value appears and refuses
+ * nothing, so an entry point that can refuse asks this before it projects.
+ * `subject` names what was refused, for the message; the reason token,
+ * `"place_budget_exceeded"`, is the contract, and it is the one the value
+ * boundary and the tagged encoder give a value past the same budget.
+ */
+export function projectionFault(value: unknown, subject: string): EvaluationError | undefined {
+  if (!placesPastBudget(value, isPlainMap)) return undefined;
+  return new EvaluationError(
+    "place_budget_exceeded",
+    `${subject} has more places than the place budget of ${PLACE_BUDGET}`,
+  );
 }
 
 /**

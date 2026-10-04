@@ -3884,3 +3884,105 @@ stays the transcript's one row whose reference answer is a refusal, and the
 suite still compares a refusal by its reason alone. Comparing a refusal's
 type beside its reason is left until the transcript holds a second refusal
 row.
+
+## Note: the projection and the JSON serializer are bounded by the place budget (2026-10-04)
+
+Recorded for `pts-av9e`. This note is appended, and removes no line above.
+It records the decision the amendment on the visited-place budget left open
+under its heading "What this does not reach": copies stay at each place, and
+a visited-place budget per walk refuses past it, in the entry points that
+project and in the JSON serializer (decided by the conductor under a standing
+consent, 2026-10-03). The projection itself, `toHost` in `src/values.ts`, is
+unchanged: it gains no guard, no reason token and no change of return type
+(decided by the conductor under a standing consent, 2026-10-04). Code on the
+default branch is cited as read at `6fc34ab`; `placesPastBudget` in
+`src/nesting.ts`, `projectionFault` in `src/evaluator.ts`, and the `places`
+count of `serialize` in `src/functions/json.ts` are what this same change
+adds, cited by name.
+
+### Copies stay
+
+**The projection and the JSON serializer still answer at each place a value
+appears.** `toHost` builds a copy at each place, and `serialize` writes a
+member's text at each place. Neither remembers a container it has already
+answered, because remembering one would hand a host one object at two places,
+or change the text, where today it gets a copy or the text at each.
+
+### A budget of visited places per walk, counted before the projection
+
+**Each entry point that projects counts the places of what it is about to
+project, and refuses a value past `PLACE_BUDGET` as `"place_budget_exceeded"`
+rather than projecting it.** `placesPastBudget` in `src/nesting.ts` counts a
+place as the amendment on the visited-place budget defines one, with
+`visitPlace`, and stops at the first place past the budget, so it visits no
+more than one place past it whatever the value holds. `projectionFault` in
+`src/evaluator.ts` answers the `EvaluationError` an entry point returns. Each
+value an entry point projects is counted on its own: a result, a value and a
+context are three walks with a count each. Per entry point:
+
+| Entry point | What it counts | Past the budget |
+|---|---|---|
+| `evaluate` in `src/index.ts` | the result | refused, the failing arm |
+| `evaluateTagged` in `src/tagged.ts`, under the default | the result | refused, the failing arm |
+| `evaluateTagged`, asked for the encoding | nothing new: `encodeTagged` counts as it writes | refused, as the amendment on the visited-place budget says |
+| `execute` in `src/index.ts`, a run that halted | the context | refused, with no context |
+| `execute`, a run that failed | the context | the run's own error, with the context left off |
+| `executeValue` in `src/index.ts`, a run that halted | the value, then the context | refused; a value past the budget keeps a context within it |
+| `executeValue`, a run that failed | the context | the run's own error, with the context left off |
+
+A run that failed keeps its own error as the answer and leaves a context past
+the budget off, as `executeTagged` in `src/tagged.ts` already leaves off a
+context it cannot encode. `projectContext` in `src/evaluator.ts` answers a
+context with no failing arm, so it refuses nothing either; its callers count
+the context before they call it.
+
+**The JSON serializer counts its own places.** `serialize` in
+`src/functions/json.ts` counts every place it writes against one count for
+the call and refuses past the budget with the reason `"place_budget_exceeded"`,
+the token the value boundary and the tagged encoder give a value past the same
+budget, so `JSON.stringify` answers it as an `EvaluationError` at the call's
+instruction.
+
+**A value within the budget answers exactly what it answered before.** The
+count reads nothing the projection does not read and builds nothing. A value
+past the budget that the projection answered after work that doubled with
+every shared level is now refused; a program builds one by storing, again and
+again, a list that holds a root twice under that same root.
+
+### How the earlier sentences read
+
+- **"The projection itself, `toHost` in `src/values.ts`, gains no guard."**, in
+  the amendment on cycles, nesting and the one depth limit, still holds:
+  `toHost` counts nothing, and the entry points count before they call it, as
+  that sentence's own "every entry point above checks what it hands to the
+  projection" already has them do for a nesting fault.
+- **"The projection refuses nothing, and applies no depth limit of its
+  own."**, in the note on the projection as an export, and **"The projection
+  refuses nothing, and still refuses nothing."**, in the amendment on what the
+  writers read from a float, both still hold of `toHost`. The refusals this
+  note adds are the entry points' own, on result types that have a failing
+  arm, which is where that note puts a refusal.
+- **"The projection, `toHost` in `src/values.ts`, and the JSON serializer,
+  `serialize` in `src/functions/json.ts`, count no places."**, in the
+  amendment on the visited-place budget, is true of `toHost` and no longer
+  true of `serialize`; read that paragraph's "neither walk is bounded by this
+  budget" as scoped by this note: the serializer counts its places, and the
+  projection is bounded by the count its callers make first.
+
+### What pins it
+
+The tests in `test/projection-budget.test.ts`: "stops counting a shared value
+one place past the budget" and "stops serializing a shared value one place
+past the budget" hand each walk sixty shared levels and assert that the count
+stops one place past the budget - the work done, not the time taken; "answers
+a value of exactly the budget's places and refuses one more" and "serializes a
+value of exactly the budget's places and refuses one more" pin the boundary;
+and the tests on `evaluate`, `evaluateTagged`, `execute`, `executeValue` and
+the `JSON.stringify` builtin pin the refusal at each entry point and that a
+value within the budget still answers.
+
+Consequences. A program whose plain projection, or whose `JSON.stringify`
+call, passes the budget gets a failing arm with `"place_budget_exceeded"`
+where it got an answer after work that doubled with every shared level. No
+exported function's signature changes, no reason token is added, and no
+opcode changes.
