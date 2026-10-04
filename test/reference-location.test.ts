@@ -28,7 +28,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -301,7 +301,13 @@ describe("the location transcript", () => {
   // The two statechart rows binding a whole number as a key are the pair a
   // host number cannot tell apart, so what keeps them apart is held here: the
   // first binds an integer and resolves, the second binds an explicit float
-  // and is refused as a key of type float.
+  // and is refused as a key of type float. The refusal's details are read
+  // through the tagged decoder, as the bound keys are: the raw JSON reading
+  // answers the same number for 1 and 1.0, so it cannot see the float.
+  // Sabotage, by hand: the row's recorded `"key_value":1.0` rewritten as
+  // `"key_value":1` turns this case red on the details assertion (the hash
+  // pin above goes red too, as it does for any edited row); the raw reading
+  // this case made before stayed green under that edit. Run and restored.
   it("keeps a whole-number key bound as an integer apart from one bound as a float", () => {
     const byId = new Map(ROWS.map((row) => [row.raw.id, row]));
     const asNumber = byId.get("assign/statechart/whole-number-key-as-a-host-number");
@@ -312,10 +318,9 @@ describe("the location transcript", () => {
       ((row?.decoded.context ?? {}) as { readonly [key: string]: Value }).i ?? null;
     expect(isInteger(boundKey(asNumber))).toBe(true);
     expect(isInteger(boundKey(asFloat))).toBe(false);
-    expect((asFloat?.raw.error as Fields | undefined)?.details).toEqual({
-      key_type: "float",
-      key_value: 1,
-    });
+    const details =
+      ((asFloat?.decoded.error ?? {}) as { readonly [key: string]: Value }).details ?? null;
+    expect(sameValue(details, authored('{"key_type":"float","key_value":1.0}'))).toBe(true);
   });
 });
 
@@ -325,11 +330,25 @@ describe("the location transcript's generator", () => {
   const digest = (path: string): string =>
     createHash("sha256").update(readFileSync(path)).digest("hex");
 
-  /** Runs the generator against a fabricated export declaring `version`. */
-  function runAgainst(version: string, tag: string): { status: number | null; stderr: string } {
+  /**
+   * Runs the generator against a fabricated export declaring `version`, and,
+   * when `corpusHash` is given, carrying a corpus manifest with that hash.
+   */
+  function runAgainst(
+    version: string,
+    tag: string,
+    corpusHash?: string,
+  ): { status: number | null; stderr: string } {
     const fakeExport = mkdtempSync(join(tmpdir(), "reference-location-export-"));
     try {
       writeFileSync(join(fakeExport, "mix.exs"), `  @version "${version}"\n`);
+      if (corpusHash !== undefined) {
+        mkdirSync(join(fakeExport, "conformance"));
+        writeFileSync(
+          join(fakeExport, "conformance", "manifest.json"),
+          `${JSON.stringify({ corpus_hash: corpusHash })}\n`,
+        );
+      }
       const run = spawnSync(process.execPath, [generator, "--from", fakeExport, "--tag", tag], {
         encoding: "utf8",
       });
@@ -360,5 +379,23 @@ describe("the location transcript's generator", () => {
     ]);
 
     expect(digest(stampPath)).toBe(before);
+  });
+
+  // Sabotage, by hand: the corpus-hash comparison in
+  // scripts/reference-location.mjs made to pass every manifest turns this
+  // case red. It was run and restored.
+  it("refuses an export whose corpus hash is not the vendored one, and writes nothing", () => {
+    const pinned = transcriptSource.tag;
+    const vendoredHash = String(corpusSource.corpus_hash);
+    const transcriptPath = join(conformanceRoot, "transcript", "location.json");
+    const before = [digest(stampPath), digest(transcriptPath)];
+
+    const otherCorpus = runAgainst(pinned.replace(/^v/, ""), pinned, "sha256:not-the-vendored-one");
+    expect([otherCorpus.status, otherCorpus.stderr]).toEqual([
+      1,
+      `reference-location: the export's corpus hash sha256:not-the-vendored-one is not the vendored ${vendoredHash}\n`,
+    ]);
+
+    expect([digest(stampPath), digest(transcriptPath)]).toEqual(before);
   });
 });
