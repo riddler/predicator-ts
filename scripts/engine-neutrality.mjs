@@ -461,6 +461,28 @@ const rules = [
     violation: '/// <reference lib="es2022" />',
   },
   {
+    id: "global-merge",
+    // The same widening with no directive: a block that augments the global
+    // scope from inside a source file merges its declarations into the
+    // library's own interfaces, so a later edition's member declared there
+    // gets a type and the source typecheck passes a call to it. Two spellings
+    // open such a block. The usual one is the declaring keyword followed by
+    // the global scope's name; the other is that name alone opening its line,
+    // which is how the block is written nested inside an ambient module
+    // declaration. The anchor is the opening brace on the same line, which is
+    // where the formatter puts it, so prose that says a module declares
+    // nothing global stays quiet. A brace moved to the next line is not
+    // caught, and neither is an interface written at the top level of a file
+    // that has no import or export, or of a declaration file, which the
+    // compiler also merges into the global scope; nothing in the line says
+    // where such an interface lands.
+    pattern: /\bdeclare\s+global\s*\{|^\s*global\s*\{/g,
+    why: "shipped source may not merge declarations into the global scope; a member the target lacks would then typecheck and ship",
+    documentedBy:
+      "This module augments no global scope, so no library interface gains a member the source typecheck does not name.",
+    violation: "declare global { interface Array<T> { at(index: number): T | undefined; } }",
+  },
+  {
     id: "locale-sensitive",
     // The hazard is not the identifier `Intl`, it is any comparison or
     // rendering whose answer depends on the engine's locale data. String

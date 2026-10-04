@@ -258,6 +258,8 @@ const namesEndingASentence: readonly string[] = [
   "toLocaleLowerCase",
   // The directive's tag name.
   "reference",
+  // The keyword that opens a global augmentation.
+  "declare",
 ];
 
 // The other side of the same property. A forbidden name fires in prose as
@@ -306,6 +308,8 @@ const proseCarryingAnAnchor: readonly (readonly [string, string])[] = [
   // A doc-style line that opens with the directive is the directive, whatever
   // follows it.
   ["reference-directive", '/// <reference lib="es2022" /> is refused under src/.'],
+  // A global augmentation reached by the brace that opens its block.
+  ["global-merge", "// Writing declare global { here is refused under src/."],
   // One line tripping two rules, listed once for each. Killing either arm
   // leaves the line firing the other, so only the per-rule assertion notices.
   ["locale-sensitive", "// Neither Intl.Collator nor process.env is read here."],
@@ -541,6 +545,61 @@ describe("a reference directive in shipped source", () => {
   // `reference-directive` pattern turns the string, doc comment line and
   // fourth slash lines red.
   it.each(referenceDirectiveLookalikes)("leaves %s alone", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(output, line).toContain("clean");
+    expect(status, line).toBe(0);
+  });
+});
+
+// A global augmentation widens what the source typecheck checks against from
+// inside a source file with no directive: an interface declared in the block
+// merges into the library's own, so a later edition's member typechecks. The
+// block opens with the declaring keyword and the global scope's name, or with
+// that name alone when it is nested in an ambient module declaration. Each
+// fixture below fires the global-merge rule and nothing else, once.
+const globalMergeSpellings: readonly (readonly [string, string])[] = [
+  [
+    "a merge into the array interface",
+    "declare global {\n  interface Array<T> {\n    at(index: number): T | undefined;\n  }\n}",
+  ],
+  ["the block with no space before the brace", "declare global{"],
+  ["extra space between the keywords", "declare  global {"],
+  ["an indented block", "  declare global {"],
+  [
+    "the block nested in an ambient module declaration",
+    'declare module "loans" {\n  global {\n    interface Array<T> {\n      at(index: number): T | undefined;\n    }\n  }\n}',
+  ],
+  ["the nested form with no space before the brace", "  global{"],
+];
+
+// The other side: text that mentions the global scope without opening a block
+// on it, which the compiler does not merge and the rule leaves alone.
+const globalMergeLookalikes: readonly (readonly [string, string])[] = [
+  ["prose naming the augmentation", "// A module may not declare global types for a library."],
+  ["an object literal field named global", "const scope = { global: { loans: 1 } };"],
+  ["a field named global opening its line", "  global: { holds: 2 },"],
+  ["the nested name and its brace in a comment", "// A nested global { block opens its own line."],
+  ["a binding named for the keywords", "const declareGlobal = { patron: 3 };"],
+  ["a module declaration with no global block", 'declare module "loans" {'],
+  ["an interface at the top level of a module", "interface Hold { readonly patron: string; }"],
+];
+
+describe("a global augmentation in shipped source", () => {
+  // Sabotage: in scripts/engine-neutrality.mjs, deleting the `global-merge`
+  // rule turns every line here red; deleting its second arm turns the two
+  // nested lines red; dropping the `\s*` before the first arm's brace turns
+  // the three lines with a space before that brace red; and dropping the
+  // `\s*` before the second arm's brace turns the spaced nested line red.
+  it.each(globalMergeSpellings)("fires on %s", (_name, line) => {
+    const { status, output } = scanLine(root, line);
+    expect(status, line).toBe(1);
+    expect(firedRules(output), line).toEqual(["global-merge"]);
+  });
+
+  // Sabotage: in scripts/engine-neutrality.mjs, dropping the `\s*\{` anchor
+  // from the first arm of the `global-merge` pattern turns the prose line
+  // red, and dropping the `^` from its second arm turns the comment line red.
+  it.each(globalMergeLookalikes)("leaves %s alone", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(output, line).toContain("clean");
     expect(status, line).toBe(0);
