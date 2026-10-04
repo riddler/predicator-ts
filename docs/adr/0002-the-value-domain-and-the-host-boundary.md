@@ -4059,7 +4059,7 @@ reason token is added, and no opcode changes.
 
 ## Amendment: more members compare as the reference's term order compares them (2026-10-04)
 
-Status: proposed (2026-10-04)
+Status: accepted (2026-10-04; proposed 2026-10-04)
 
 This amendment is appended, and removes no line above. Code on the default
 branch is cited as read at `266719d`; `looseEqual` and
@@ -4399,3 +4399,61 @@ the difference. The comment above "refuses a component past the largest safe
 integer" in `test/cast.test.ts` says why the cast answers undefined and does
 not name the reference. Neither comment is changed by this note; a reader who
 wants the reference's answer for a given text reads the amendment's table.
+
+## Note: the acceptance of the amendment on more members compared as the reference's term order compares them (2026-10-04)
+
+This note records that the amendment headed "more members compare as the
+reference's term order compares them", with its section headed "A leading
+member that is the null value itself", moved from proposed to accepted. The
+conductor moved it under the flip standard of the campaign consent the
+operator adopted, 2026-10-03. It decides nothing, so it carries no Status
+line, and it removes no line. With it, no entry in this record reads
+proposed.
+
+**It shipped in `@riddler/predicator` 0.6.0.** That version is on npm, built
+from the commit tagged `v0.6.0` (`7c93e9c`), and the amendment's own change,
+`9763206` (request 186) and `08a74f1` (request 187), is in the tag; no commit
+after it touches `src/evaluator.ts`, `conformance/transcript/transcript.json`
+or the three tests the amendment names. Every claim was re-checked at
+`7c93e9c`, re-located by anchor; every claim about this package's answers was
+run against the published 0.5.0 and 0.6.0 builds, and every claim about the
+reference in a detached export of predicator-ex `v9.4.2` under Elixir 1.18.3
+and OTP 27, rather than read.
+
+**What was checked.** `membersEqual` in `src/evaluator.ts` answers false for
+a date member against a datetime member through `isDateAgainstDateTime` before
+it compares anything else, and `valuesEqual` is `looseEqual` with its
+`byInstant` flag unset, keeping the chronological branch for the top-level
+pair. `compareOrder` reads each walked member through `heldMember`, places a
+pair holding the null value through `nullMemberOrder`, orders a date member
+before a datetime member, and steps past two maps that `looseEqual` with
+`byInstant` set holds equal. `PDateTime` in `src/values.ts` is its epoch
+seconds and its microsecond and carries no precision. The private `halt` of
+the evaluation reports a result of the absence as the unbound name's error.
+Run against both builds and the reference, every row of the amendment's five
+tables answered its Before, Now, This package and Reference columns as
+written, a Before column at the published 0.5.0; the inequalities beside the
+equality rows answered the negation, and strict equality of the member pairs
+answered false at both versions. `[#2026-01-02#] < [#2025-12-31#]` answered
+true in the reference and false here, as the section headed "What this does
+not decide" says; `null < 1` answered the absence on both sides, a pair of
+members of mismatched types neither holding the null value answered the
+absence here, and a list that runs out first ordered first. At the tag, the
+reference compares two lists or two plain maps in the `types_match` clause of
+`compare_values/3` and, for membership, of `values_equal?/2`, each with its
+own clauses for a date against a datetime at the top level; section 5 of its
+`docs/isa.md` orders lists element-wise at the first position the two differ.
+The rows `date-member/001` through `date-member/054` and `null-order/001`
+through `null-order/044` are in the transcript, whose source names `v9.4.2`;
+the rows the amendment declares are declared in
+`test/reference-transcript.test.ts` with both answers, and no `null-order/`
+row is; `test/date-member.test.ts` and `test/null-order.test.ts` pass. Neither
+commit of the change adds an export, a reason token or an opcode.
+
+**Who decided what.** Matching the reference for a date member against a
+datetime member, and for a list ordering over a member holding the null value,
+was ruled by the operator, 2026-10-03, as the amendment says. Where a member
+holding the null value is placed against a member of another type, beyond the
+rows on which both members hold the null value, follows the rule that this
+package matches the reference on an unsettled question, and was decided by
+the conductor under a standing consent, 2026-10-03.
