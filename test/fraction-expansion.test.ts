@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compile } from "../src/compile.js";
+import { DURATION_UNIT_TABLE, mostExactPlaces, type UnitRow } from "../src/duration-units.js";
 import { evaluateToValue } from "../src/evaluator.js";
 import { parseDuration } from "../src/index.js";
 import { Duration, type DurationParts, Undefined, type Value } from "../src/values.js";
@@ -77,4 +78,33 @@ describe("a fraction expands alike in a literal and in a parsed text", () => {
     expect(parsed.ok).toBe(false);
     expect(elapsed).toBeLessThan(1_000);
   }, 60_000);
+});
+
+describe("the most decimal places a fraction can carry exactly", () => {
+  // The month weighs 2592000000 milliseconds, eleven twos and six fives, the
+  // most of either any unit carries; the eleven-place month row above is exact
+  // and the twelve-place second row is refused at this bound.
+  // Sabotage: counting only the fives, in the shared expander's bound, turns
+  // this red.
+  it("is computed from the unit table, and is eleven for the table as it stands", () => {
+    expect(mostExactPlaces(DURATION_UNIT_TABLE)).toBe(11);
+  });
+
+  // A unit is fabricated here, never added to the table: what is held is that
+  // the bound follows the table rather than a constant beside it.
+  // Sabotage: counting only the twos turns the fives row red, and counting
+  // only the fives turns the twos row red.
+  it.each([
+    ["twos", 2 ** 12, 12],
+    ["fives", 5 ** 13, 13],
+  ] as const)("rises when the table gains a weight with more %s", (_, millis, places) => {
+    const fabricated: UnitRow = {
+      key: "milliseconds",
+      suffix: "fabricated",
+      names: [],
+      millis,
+      remainder: false,
+    };
+    expect(mostExactPlaces([...DURATION_UNIT_TABLE, fabricated])).toBe(places);
+  });
 });

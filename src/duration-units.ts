@@ -86,17 +86,40 @@ export interface ExpandedAmount {
 const REMAINDER_LADDER: readonly UnitRow[] = DURATION_UNIT_TABLE.filter((row) => row.remainder);
 
 /**
- * The most decimal places a fraction can carry and still be exact.
+ * The most decimal places a fraction of any unit in `table` can carry and still
+ * be exact.
  *
  * A fraction is exact when the tens in its denominator all cancel against the
  * twos and fives in its unit's millisecond value and in its own digits, and
- * digits with no trailing zero cannot supply both. The richest unit here
- * carries eleven twos, so past eleven places nothing cancels and the fraction
- * is a sub-millisecond remainder whatever its digits say. Refusing there is
- * also what keeps every product below inside the whole numbers this language
- * holds exactly.
+ * digits with no trailing zero cannot supply both. So a unit absorbs at most as
+ * many places as the larger of its counts of twos and of fives, and past the
+ * largest such count in the table nothing cancels and the fraction is a
+ * sub-millisecond remainder whatever its digits say. Refusing there is also
+ * what keeps every product in `expandFraction` inside the whole numbers this
+ * language holds exactly. It is computed from the table, so a unit added with
+ * more twos or fives raises it with no edit here.
  */
-const MOST_EXACT_PLACES = 11;
+export function mostExactPlaces(table: readonly UnitRow[]): number {
+  let most = 0;
+  for (const row of table) {
+    most = Math.max(most, factorCount(row.millis, 2), factorCount(row.millis, 5));
+  }
+  return most;
+}
+
+/** How many times `prime` divides `n`, a positive whole number. */
+function factorCount(n: number, prime: number): number {
+  let count = 0;
+  let rest = n;
+  while (rest > 0 && rest % prime === 0) {
+    rest /= prime;
+    count += 1;
+  }
+  return count;
+}
+
+/** The bound `expandFraction` refuses past, for the table above. */
+const MOST_EXACT_PLACES = mostExactPlaces(DURATION_UNIT_TABLE);
 
 /**
  * Expands a component written with a fraction into whole-unit amounts, or
