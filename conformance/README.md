@@ -172,6 +172,14 @@ on both surfaces is what it is run for; a difference is a finding about this
 package or about that engine, recorded and explained, and never answered by
 dropping the case or by narrowing what the README claims.
 
+Beside the corpus it runs two more reports, for what the corpus has no case
+for: every row of the location transcript (`transcript/location.json`), handed
+to the location function the row names, and every authored statement program
+(`scripts/lib/program-sources.mjs`), compiled and run. Both are
+`test/conformance/engine-surfaces.ts`, and each is diffed between the engines
+row by row, as a surface is. Neither compares an answer with the reference's;
+the suite does that on the server runtime.
+
 It is the run behind the README's sentence about where this package's source
 goes. The gate's neutrality stage checks the source for the constructs that
 would make that sentence false, which is a check on the text; a text check
