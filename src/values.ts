@@ -312,13 +312,30 @@ export function isFloat(value: unknown): value is Float {
   return value instanceof Float;
 }
 
-/** Answers which member of the domain a value is. */
+/**
+ * Answers which member of the domain a value is.
+ *
+ * It names domain members, and a value must be admitted before it is asked:
+ * `fromHost` is the admitting step, and what it answers is a member. Asked
+ * about a value that was never admitted, the answer is not a membership
+ * claim. A host `Date` is the one such value named for what it becomes: it
+ * answers `"datetime"`, the member `fromHost` admits it as (an invalid date,
+ * which `fromHost` refuses, answers the same). Any other host
+ * object - a `Map`, a `Set`, an instance of a class this package did not
+ * define - falls through to `"map"`, though the boundary refuses each of them.
+ *
+ * The known way a value that was never admitted reaches this is a `lit`
+ * operand, which the evaluator checks in place rather than taking in through
+ * `fromHost`: the JSON builtin names such a value in its refusal by this
+ * answer.
+ */
 export function typeName(value: Value): TypeName {
   if (value === null) return "null";
   if (value === Undefined) return "undefined";
   if (value instanceof Float) return "float";
   if (value instanceof PDate) return "date";
   if (value instanceof PDateTime) return "datetime";
+  if (value instanceof Date) return "datetime";
   if (value instanceof Duration) return "duration";
   if (Array.isArray(value)) return "list";
   switch (typeof value) {

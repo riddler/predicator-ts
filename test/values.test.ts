@@ -212,6 +212,25 @@ describe("typeName", () => {
     expect(rows.map(([value]) => typeName(value))).toEqual(rows.map(([, name]) => name));
     expect(new Set(rows.map(([, name]) => name)).size).toBe(11);
   });
+
+  // Sabotage: deleting the host Date arm turns the first assertion red, since
+  // the date then falls through to the map arm; narrowing it to a finite time
+  // turns the last red.
+  it("names a host Date datetime, the member the host boundary admits it as", () => {
+    const issued = new Date(Date.UTC(2026, 9, 4, 12, 30));
+    const admitted = fromHost(issued);
+    expect(typeName(issued as unknown as Value)).toBe("datetime");
+    expect(admitted.ok && typeName(admitted.value)).toBe("datetime");
+    expect(typeName(new Date(Number.NaN) as unknown as Value)).toBe("datetime");
+  });
+
+  // Sabotage: answering "datetime" for every object turns this red. It pins
+  // that only a host Date moved: the other host objects the boundary refuses
+  // still answer the map arm.
+  it("still answers map for the host objects the boundary refuses", () => {
+    const hosts: unknown[] = [new Map([["patron", 1]]), new Set(["loan"]), new (class Hold {})()];
+    expect(hosts.map((host) => typeName(host as Value))).toEqual(["map", "map", "map"]);
+  });
 });
 
 describe("fromHost", () => {
