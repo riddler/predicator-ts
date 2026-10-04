@@ -173,6 +173,11 @@ So your part at a release is to notice a refusal and read it, not to run
 anything. If the guard refuses, the output is wrong and the release stops
 there; the lines above the refusal name which property failed.
 
+An agent or a session never runs `npm publish`: the release workflow
+(`.github/workflows/release.yml`) publishes on the tag push, where this guard
+runs under its `npm publish`, and a failed workflow is re-run from its Actions
+page, never worked round by a local publish.
+
 This step touches no file and so is absent from the table below.
 
 ## The files a release commit touches
@@ -199,6 +204,8 @@ plan or their own words), and nothing more. What follows it is set by
 The prep is pushed, opened and merged under the rows for those steps. Once the
 prep is merged to `origin/main`, the conductor or the session that owns the
 release bead tags that merged commit with the new version and pushes the tag;
-the tag never comes before the prep is on `origin/main`. The publish
-(`npm publish`) and the release itself stay the operator's, in every campaign
-and outside every campaign, and no consent or relay delegates them.
+the tag never comes before the prep is on `origin/main`. The release workflow
+(`.github/workflows/release.yml`) publishes on that tag push; an agent or a
+session never runs `npm publish`, in every campaign and outside every
+campaign, and a failed workflow is re-run from its Actions page, never worked
+round by a local publish.
