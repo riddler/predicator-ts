@@ -28,7 +28,8 @@
 // `decompile` answer, and a token is none of those. This script calls the
 // reference's `Predicator.Lexer.tokenize/1` directly, through
 // `scripts/lib/reference-tokens.exs`. None of the three writes another's
-// files.
+// files, and nor does the fourth generator added after this one,
+// `scripts/reference-location.mjs`, which records the location transcript.
 //
 // WHY AN EXPORT RATHER THAN A CHECKOUT. Running the reference means compiling
 // it, and compiling writes build output into the tree it runs in. An export is
