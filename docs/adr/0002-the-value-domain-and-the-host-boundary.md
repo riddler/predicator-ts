@@ -3986,3 +3986,73 @@ call, passes the budget gets a failing arm with `"place_budget_exceeded"`
 where it got an answer after work that doubled with every shared level. No
 exported function's signature changes, no reason token is added, and no
 opcode changes.
+
+## Note: `typeName` names domain members, and a host `Date` is named datetime (2026-10-04)
+
+This note is appended, and removes no line above. It states the contract of
+`typeName` in `src/values.ts` and records one answer it changes (ruled by the
+operator, 2026-10-04). Code on the default branch is cited as read at
+`f631424`; the `Date` arm of `typeName` is what this same change adds, cited
+by name.
+
+### What `typeName` names
+
+**`typeName` names domain members, and a value must be admitted before it is
+asked.** `fromHost` is the admitting step, and what it answers is a member.
+Asked about a value that was never admitted, `typeName` makes no membership
+claim. This is the reading the out-of-range amendment's list of what its rule
+does not bind already gives a classifier: it answers a name, refusing is not
+available to it, and a value reaching it unadmitted is the admitting site's
+defect, not the classifier's. The return type stays the closed union of the
+eleven member names; no arm is added and nothing throws.
+
+**A host `Date` answers `"datetime"`**, the member the normalization table's
+row for a JavaScript `Date` admits it as, where it answered `"map"`. A `Date`
+whose time is not finite, which `fromHost` refuses with
+`"non_finite_number"`, answers the same. Any other host object - a `Map`, a
+`Set`, an instance of a class this package did not define - still answers
+`"map"`, though normalization refuses each of them as it refuses every value
+it has no row for.
+
+### The known way a value that was never admitted reaches it
+
+`typeName` has internal callers in two files. The location surface's are
+`locationTypeName` and `writeError` in `src/location.ts`, and the values they
+name come from a context taken in through the boundary, so they ask only
+about members. The JSON builtin's is `serialize` in `src/functions/json.ts`,
+which names a value with no JSON form in its refusal by `typeName`'s answer,
+and its argument is whatever the machine's stack holds. A `lit` operand
+reaches that stack without passing through `fromHost`: the machine's `lit`
+method in `src/evaluator.ts` checks the operand in place - its nesting, how
+many containers it holds, the prototype of each list and the numbers it
+carries - and none of those checks refuses a host `Date`, a `Map`, a `Set` or
+a class instance. That is the known way a value that was never admitted
+reaches `typeName`, and this note does not close it:
+making the JSON builtin admit its argument first would change what it answers
+for every such value, and this change leaves it out (decided by the
+conductor under a standing consent, 2026-10-03).
+
+### What changes, and what does not
+
+Two answers change. `typeName` asked of a host `Date` answers `"datetime"`
+where it answered `"map"`; and the `JSON.stringify` builtin, handed a host
+`Date` in a `lit` operand, as the operand or inside a list or map it holds,
+refuses with "JSON.stringify has no JSON form for a datetime" where the
+refusal named a map. A `lit` operand holding a `Map`, a `Set` or a class
+instance still refuses naming a map, and a `Date` that comes in through the
+context is a `PDateTime` before it is asked, so its refusal
+already named a datetime and is unchanged.
+
+### What pins it
+
+In `test/values.test.ts`, "names a host Date datetime, the member the host
+boundary admits it as" asks `typeName` about a host `Date` and about what
+`fromHost` makes of it, and "still answers map for the host objects the
+boundary refuses" pins the `Map`, `Set` and class instance. In
+`test/functions.test.ts`, "names a literal host Date a datetime and the other
+host objects a map" pins the JSON builtin's refusal for each through a `lit`
+operand, and for a host `Date` held in a map. Each carries its sabotage note.
+
+Consequences. A caller asking `typeName` about a host `Date` gets the name
+the boundary would give it. No exported function's signature changes, no
+reason token is added, and no opcode changes.

@@ -427,6 +427,28 @@ describe("serializing to JSON", () => {
       "JSON.stringify has no JSON form for an absence",
     );
   });
+
+  // Sabotage: deleting typeName's host Date arm turns the two Date assertions
+  // red, since a literal host Date is then named a map; the map fall-through
+  // answering "datetime" turns the others red.
+  it("names a literal host Date a datetime and the other host objects a map", () => {
+    const literal = (host: unknown) =>
+      refusal(
+        evaluateToValue([
+          ["lit", host as Value],
+          ["call", "JSON.stringify", 1],
+        ] as Program),
+      );
+    expect(literal(new Date(Date.UTC(2026, 9, 4)))).toBe(
+      "JSON.stringify has no JSON form for a datetime",
+    );
+    expect(literal({ due: new Date(Date.UTC(2026, 9, 18)) })).toBe(
+      "JSON.stringify has no JSON form for a datetime",
+    );
+    expect(literal(new Map([["patron", 1]]))).toBe("JSON.stringify has no JSON form for a map");
+    expect(literal(new Set(["loan"]))).toBe("JSON.stringify has no JSON form for a map");
+    expect(literal(new (class Hold {})())).toBe("JSON.stringify has no JSON form for a map");
+  });
 });
 
 describe("reading JSON back", () => {
