@@ -74,6 +74,7 @@
     "DecodeResult",
     "EncodeReason",
     "EncodeResult",
+    "ProjectedEvaluation",
     "TaggedEvaluateOptions",
     "TaggedExecution",
     "decodeTagged",
