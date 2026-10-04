@@ -439,3 +439,31 @@ by its heading text. It is ADR-0002's
 [amendment on the three questions the statement-mode note holds](0002-the-value-domain-and-the-host-boundary.md#amendment-the-three-questions-the-statement-mode-note-holds-2026-09-17),
 and the rule this record departs from is that amendment's section
 [The main entry point's returned context is a plain projected object](0002-the-value-domain-and-the-host-boundary.md#the-main-entry-points-returned-context-is-a-plain-projected-object).
+
+## Note: the scope of the acceptance note's commit list (2026-10-04)
+
+Recorded for `pts-kf9l`. It decides nothing, so it carries no Status line, and
+it removes no line. It says which commits the sentence in the acceptance note
+opening "The surface landed in `b947e7f`; of the commits after it" names, and
+which it leaves out.
+
+**The sentence names the commits after the surface that touch this record's
+files, less one.** The commits after `b947e7f` up to `36c23a5`, the head that
+note was written at, are eight: `839f3ae`, `9bc3d78`, `9e77502`, `17a93c0`,
+`afaff54`, `44e17b2`, `733c42e` and `36c23a5`. Four of them touch a file this
+record cites: `839f3ae` (this record, `src/location.ts` and
+`test/location.test.ts`), `9bc3d78` (`src/context.ts`), `afaff54`
+(`test/location.test.ts`) and `9e77502` (`test/export-surface.json`). The
+sentence names the first three. `9e77502` is the one it leaves out: it adds
+`CompileProgramWithPositionsResult` and `CompileProgramWithSpansResult` to the
+main entry point and `TaggedExecution` to the `./tagged` subpath, with their
+pins in `test/export-surface.json`, and adds no name of this surface and
+changes no answer; the acceptance note's last sentence, on the two located
+compile results, is about the first two of those names. The other four,
+`17a93c0`, `44e17b2`, `733c42e` and `36c23a5`, touch none of this record's
+files: they change `README.md`, `CHANGELOG.md`, `package.json` and the
+changelog fragments. So read that sentence as naming the commits after the
+surface that touch this record's files, other than `9e77502`, and not every
+commit after it. Each list was read with `git log` over the range
+`b947e7f..36c23a5`, overall and for each file the record cites in this
+repository.
