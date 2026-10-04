@@ -783,7 +783,9 @@ class Parser {
         this.advance();
         const duration = this.durationFrom({ whole: token.value as number }, tokenStart(token));
         if (duration !== NOT_A_DURATION) return duration;
-        return { ok: true, value: leaf({ kind: "integer", value: token.value as number }, token) };
+        const integer = { kind: "integer", value: token.value as number } as const;
+        const digits = token.digits === undefined ? {} : { digits: token.digits };
+        return { ok: true, value: leaf({ ...integer, ...digits }, token) };
       }
 
       case "float":

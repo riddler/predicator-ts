@@ -129,7 +129,9 @@ export type TokenValue =
  * token and on no other: the quote character is what the renderer needs to
  * write the literal back the way it was written, and the end position is
  * stored rather than computed because a literal holding a raw newline ends on
- * a different line from the one it started on.
+ * a different line from the one it started on. `digits` is present on an
+ * integer token whose value the host cannot hold exactly, and on no other
+ * token: see `integerDigits`.
  */
 export interface Token {
   readonly type: TokenType;
@@ -139,6 +141,7 @@ export interface Token {
   readonly value: TokenValue;
   readonly quote?: "double" | "single";
   readonly end?: Position;
+  readonly digits?: string;
 }
 
 /** A token stream, or the one refusal that stopped it. */
@@ -294,6 +297,7 @@ export function tokenize(source: string): LexResult {
           column,
           length: number.consumed,
           value: Number(number.text),
+          ...(number.hasDecimal ? {} : integerDigits(number.text)),
         });
         index = afterNumber;
         column += number.consumed;
@@ -315,6 +319,7 @@ export function tokenize(source: string): LexResult {
               column,
               length: number.consumed,
               value: Number(number.text),
+              ...integerDigits(number.text),
             },
       );
       let unitColumn = column + number.consumed;
@@ -500,6 +505,23 @@ function takeNumber(chars: readonly string[], start: number): TakenNumber {
     break;
   }
   return { text: chars.slice(start, index).join(""), consumed: index - start, hasDecimal };
+}
+
+/**
+ * An integer literal's digits as written, for the one case that needs them.
+ *
+ * The host converts an integer literal to a double, and past the safe-integer
+ * bound that conversion rounds, or answers an infinity, so the value no longer
+ * names the number the source wrote. The emitter refuses such a literal under
+ * `number_out_of_range`, but `parse` still answers its tree, and the reference
+ * at `v9.4.2` renders its exact integer back. Keeping the digits, with leading
+ * zeros dropped as the reference's integer drops them, is what lets
+ * `decompile` render the same text. Inside the bound the value is exact and
+ * nothing is kept.
+ */
+function integerDigits(text: string): { readonly digits?: string } {
+  if (Number.isSafeInteger(Number(text))) return {};
+  return { digits: text.replace(/^0+(?=\d)/, "") };
 }
 
 /** Splits the digits of a decimal duration component on its point. */

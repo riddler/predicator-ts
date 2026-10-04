@@ -24,7 +24,10 @@
 //
 // One divergence from the reference is pinned rather than hidden, at the end
 // of this file, because a test suite that quietly omitted its one failing
-// source would be claiming more than the code does.
+// source would be claiming more than the code does. Beside it, a decimal
+// literal past the finite range is pinned too: the reference raises on it
+// before rendering anything, so what this package renders is stated rather
+// than compared.
 
 import { describe, expect, it } from "vitest";
 import { loadCases, loadManifest } from "../scripts/lib/corpus.mjs";
@@ -499,6 +502,65 @@ describe("the one rendering that is not the tag's", () => {
     expect(original.ok && again.ok).toBe(true);
     if (!original.ok || !again.ok) return;
     expect(again.instructions).toEqual(original.instructions);
+  });
+});
+
+describe("a numeric literal outside the value domain", () => {
+  // `compile` refuses these sources under `number_out_of_range`, and `parse`
+  // answers a tree for each, so they reach the renderer. Each expectation is
+  // quoted from a run of `Predicator.parse/1` and `Predicator.decompile/2` at
+  // `v9.4.2` over the same source, in a detached export of that tag.
+  //
+  // An integer the host cannot hold exactly renders with the digits it was
+  // written with, leading zeros dropped, as the tag renders its exact
+  // integer. A decimal past the finite range is the other half: the tag
+  // raises at `parse` on it and renders nothing, so there is no rendering to
+  // match, and this package's rendering of the host's infinity is pinned
+  // here as the declared divergence rather than left unstated.
+  //
+  // Sabotage, each run and reverted from a copy: rendering an integer from its
+  // value alone, or the parser dropping the token's digits, turned the five
+  // rows past the safe bound red; keeping leading zeros turned the row
+  // written with them red; keeping digits only for a value the host reads as
+  // an infinity turned the four rows it can hold, rounded, red.
+  const FOUR_HUNDRED_ZEROS = "0".repeat(400);
+
+  it.each([
+    [
+      "1 and four hundred zeros",
+      `holds == 1${FOUR_HUNDRED_ZEROS}`,
+      `holds == 1${FOUR_HUNDRED_ZEROS}`,
+    ],
+    ["1 and 308 zeros", `holds == 1${"0".repeat(308)}`, `holds == 1${"0".repeat(308)}`],
+    ["twenty nines", "holds == 99999999999999999999", "holds == 99999999999999999999"],
+    ["the safe bound plus two", "holds == 9007199254740993", "holds == 9007199254740993"],
+    [
+      "twenty nines after two zeros",
+      "holds == 0099999999999999999999",
+      "holds == 99999999999999999999",
+    ],
+    ["a safe integer after two zeros", "holds == 007", "holds == 7"],
+  ])("renders the integer %s as the tag does", (_label, source, expected) => {
+    expect(rendering(treeOf(source))).toBe(expected);
+  });
+
+  it("covers sources compile refuses, so the round trip makes no claim about them", () => {
+    for (const source of [`holds == 1${FOUR_HUNDRED_ZEROS}`, "holds == 9007199254740993"]) {
+      const compiled = compile(source);
+      expect(compiled.ok ? undefined : compiled.error.reason).toBe("number_out_of_range");
+    }
+  });
+
+  // The tag's answer for both sources below, from a run at v9.4.2: `parse`
+  // raises an argument error ("not a textual representation of a float")
+  // and answers no tree, so no rendering exists to compare against.
+  it.each([
+    ["1 and four hundred zeros, point 5", `holds == 1${FOUR_HUNDRED_ZEROS}.5`],
+    ["1 and 309 zeros, point 0", `holds == 1${"0".repeat(309)}.0`],
+  ])("renders the decimal %s as the host's infinity", (_label, source) => {
+    expect(rendering(treeOf(source))).toBe("holds == Infinity.0");
+    const compiled = compile(source);
+    expect(compiled.ok ? undefined : compiled.error.reason).toBe("number_out_of_range");
   });
 });
 
