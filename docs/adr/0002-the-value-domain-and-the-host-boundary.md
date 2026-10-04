@@ -4056,3 +4056,172 @@ operand, and for a host `Date` held in a map. Each carries its sabotage note.
 Consequences. A caller asking `typeName` about a host `Date` gets the name
 the boundary would give it. No exported function's signature changes, no
 reason token is added, and no opcode changes.
+
+## Amendment: more members compare as the reference's term order compares them (2026-10-04)
+
+Status: proposed (2026-10-04)
+
+This amendment is appended, and removes no line above. Code on the default
+branch is cited as read at `266719d`; `looseEqual` and
+`isDateAgainstDateTime` in `src/evaluator.ts` are what this same change adds,
+cited by name. Every run of the reference below was made at predicator-ex
+`v9.4.2` (`d8067df`) in a detached export (Elixir 1.18.3, OTP 27). Matching
+the reference here in the next minor release was ruled by the operator,
+2026-10-03; declaring the precision rows a divergence rather than matching
+them was ruled by the operator, 2026-10-04.
+
+What this amends. The amendment on a member holding the null value, or
+absent, left two member rules open under its heading "What this does not
+decide". Its paragraph "A date or a datetime member." said such a member keeps
+this package's chronological rule, where the reference compares it by term.
+This amendment decides that paragraph for a date member against a datetime
+member, and declares the rest of it, two datetimes written to different
+precision, a named divergence. Its paragraph "A leading member that is the
+null value itself." is not decided here; this amendment is written so that a
+later section of it can decide that one.
+
+### A date member and a datetime member are different members
+
+**Inside a list or a map, a date member against a datetime member is unequal
+under loose equality, as it is under strict equality, whatever instants the
+two name.** Inequality answers true for such a pair, and membership (`in`
+and `contains`) does not find a list or a map holding the one in a list
+holding the other. `membersEqual` in `src/evaluator.ts` answers false for
+such a pair, through `isDateAgainstDateTime`, before it compares anything
+else; two date members, and two datetime members, still compare by the
+instant each names.
+
+**The top-level pair keeps its rule.** `#2026-03-01# ==
+#2026-03-01T00:00:00Z#` still answers true and `<` between the two still
+answers by instant, and `#2026-03-01# in [#2026-03-01T00:00:00Z#]` still
+answers true, because membership compares each element of the list with the
+sought value as a top-level pair. `valuesEqual` keeps the chronological
+branch for its own pair; the rule above is about members only.
+
+**Why.** The reference compares two lists or two plain maps under a loose
+operator with its host language's term equality (`compare_values/3` in
+`lib/predicator/evaluator.ex` at `v9.4.2`, the `types_match` clause), and for
+membership the same way (`values_equal?/2`, the `types_match` clause). A date
+and a datetime are different terms there, so the reference holds them
+unequal as members; at the top level the same two functions have clauses for
+a date against a datetime that compare by instant. Run at the tag, the
+reference answered every row of the table below as its last column says.
+
+| Pair | Operator | Before | Now | Reference |
+|---|---|---|---|---|
+| `{opened_on: #2026-03-01#}` and `{opened_on: #2026-03-01T00:00:00Z#}` | `==` | true | false | false |
+| `[#2026-03-01#]` and `[#2026-03-01T00:00:00Z#]` | `==` | true | false | false |
+| `{holds: [#2026-03-01#]}` and `{holds: [#2026-03-01T00:00:00Z#]}` | `==` | true | false | false |
+| `{opened_on: #2026-03-01#}` in `[{opened_on: #2026-03-01T00:00:00Z#}]` | `in` | true | false | false |
+| `[[#2026-03-01T00:00:00Z#]]` and `[#2026-03-01#]` | `contains` | true | false | false |
+| `#2026-03-01#` and `#2026-03-01T00:00:00Z#` | `==` | true | true | true |
+| `#2026-03-01#` in `[#2026-03-01T00:00:00Z#]` | `in` | true | true | true |
+
+An inequality answers the negation of the equality beside it in every row,
+before and after. Strict equality of such a pair of members already answered
+false, and still does.
+
+### An ordering puts a date member before a datetime member
+
+**When two lists are walked and the first pair that is not stepped past is a
+date member against a datetime member, the date member orders first, whatever
+the two instants are.** That is where the reference's term order places a
+date against a datetime. `compareOrder` in `src/evaluator.ts` answers it
+before it compares the pair any other way. Before this change the pair was
+ordered by instant, and a pair at the same instant was stepped past, so a
+later member decided.
+
+| Pair | Operator | Before | Now | Reference |
+|---|---|---|---|---|
+| `[#2026-03-01#]` and `[#2026-03-01T00:00:00Z#]` | `<` | false | true | true |
+| `[#2026-03-01#]` and `[#2026-03-01T00:00:00Z#]` | `>=` | true | false | false |
+| `[#2026-03-02#]` and `[#2026-03-01T00:00:00Z#]` | `<` | false | true | true |
+| `[#2026-02-28T00:00:00Z#]` and `[#2026-03-01#]` | `>` | false | true | true |
+| `[#2026-03-01#, 2]` and `[#2026-03-01T00:00:00Z#, 1]` | `<` | false | true | true |
+| `[[#2026-03-01T00:00:00Z#], 1]` and `[[#2026-03-01#], 2]` | `<` | true | false | false |
+| `#2026-03-01#` and `#2026-03-01T00:00:00Z#` | `<` | false | false | false |
+
+### Ordering two maps
+
+**An ordering that meets two maps whose only difference is a date member
+against a datetime member steps past them, as it did before.** This package
+does not order two maps (the decline `compareOrder` documents), and with the
+rule above two such maps are no longer equal, so the walk would stop at them
+and answer the absence where it answered a value. `compareOrder` instead
+steps past two maps that are equal with their date and datetime members
+compared by instant (`looseEqual` with its `byInstant` flag set), and steps
+past a pair of lists that it orders level, so a later member decides, as
+before. Every such ordering answers what it answered before this change.
+
+**This is a named divergence.** The reference orders the two maps by term,
+the map holding the date member first, so it agrees with this package where
+that map is on the left of `<` or `<=` and disagrees where the map holding the
+datetime member is on the left, or under `>` or `>=`:
+
+| Pair | Operator | This package | Reference |
+|---|---|---|---|
+| `[{opened_on: #2026-03-01#}, 1]` and `[{opened_on: #2026-03-01T00:00:00Z#}, 2]` | `<` | true | true |
+| `[{opened_on: #2026-03-01T00:00:00Z#}, 1]` and `[{opened_on: #2026-03-01#}, 2]` | `<` | true | false |
+| `[{opened_on: #2026-03-01#}, 1]` and `[{opened_on: #2026-03-01T00:00:00Z#}, 1]` | `>=` | true | false |
+| `[[{opened_on: #2026-03-01T00:00:00Z#}], 1]` and `[[{opened_on: #2026-03-01#}], 2]` | `<` | true | false |
+
+Ordering them as the reference does would order two maps, which this package
+declines to do; the rows are declared rather than matched.
+
+### Precision: a named divergence
+
+**Two datetimes written to different precision at the same instant are one
+value here, and two values in the reference.** The reference keeps how many
+fractional digits a datetime was written with and compares it as part of the
+value, as a member under loose and strict equality and in an ordering, and
+at the top level under strict equality. A datetime here is its epoch seconds
+and its microsecond (`PDateTime` in `src/values.ts`) and carries no
+precision, so this package cannot tell the two apart. Matching the reference
+needs a precision field on the datetime value, which this amendment does not
+add; a follow-up covers it.
+
+| Pair | Operator | This package | Reference |
+|---|---|---|---|
+| `[#2026-03-01T00:00:00Z#]` and `[#2026-03-01T00:00:00.000Z#]` | `==` | true | false |
+| `[#2026-03-01T00:00:00.000Z#]` and `[#2026-03-01T00:00:00.000000Z#]` | `==` | true | false |
+| `{opened_on: #2026-03-01T00:00:00Z#}` and `{opened_on: #2026-03-01T00:00:00.000Z#}` | `==` | true | false |
+| `[#2026-03-01T00:00:00Z#]` and `[#2026-03-01T00:00:00.000Z#]` | `===` | true | false |
+| `#2026-03-01T00:00:00Z#` and `#2026-03-01T00:00:00.000Z#` | `===` | true | false |
+| `#2026-03-01T00:00:00.000Z#` and `#2026-03-01T00:00:00.000000Z#` | `===` | true | false |
+| `[#2026-03-01T00:00:00Z#]` and `[#2026-03-01T00:00:00.000Z#]` | `<` | false | true |
+| `{opened_on: #2026-03-01T00:00:00Z#}` in `[{opened_on: #2026-03-01T00:00:00.000Z#}]` | `in` | true | false |
+| `#2026-03-01T00:00:00Z#` and `#2026-03-01T00:00:00.000Z#` | `==` | true | true |
+
+The last row agrees: at the top level a loose comparison of two datetimes is
+by instant on both sides.
+
+### What this does not decide
+
+**Two date members, or two datetime members, under an ordering.** The
+reference orders two such members by term, which reads a date's day before
+its month and year, so `[#2026-01-02#] < [#2025-12-31#]` answers true there
+and false here, where the two are ordered by instant. This amendment does not
+change it.
+
+**The literal map's projection of an absent member**, which the amendment on
+a member holding the null value, or absent, left as it was, stays as it was.
+
+### What pins it
+
+The rows `date-member/001` through `date-member/054` in
+`conformance/transcript/transcript.json`, regenerated at `v9.4.2`, carry
+every row of the tables above. The rows of the sections headed "Ordering two
+maps" and "Precision: a named divergence" on which the two sides disagree are
+declared in `test/reference-transcript.test.ts`, each with both answers, so a
+row fails when either side moves; every other row must agree.
+`test/date-member.test.ts` asks the same sources and holds the reference's
+answer for each row that agrees, and this package's answer for each row
+declared.
+
+Consequences. A host comparing two lists or two maps that hold a date member
+against a datetime member gets false from `==`, `in` and `contains` where it
+got true, and true from `!=`, whatever instants the two name; an ordering
+whose walk reaches such a pair of members answers with the date member first.
+A date and a datetime compared at the top level, and two maps an ordering
+steps past, answer as before. No exported function's signature changes, no
+reason token is added, and no opcode changes.

@@ -394,9 +394,24 @@ const DURATION_KEYS = [
  * reference's term equality compares them: a member holding the null value
  * equals a member holding the null value, and an absent member equals an
  * absent member (see `membersEqual`). Only the top-level pair keeps the rule
- * above.
+ * above. So does a date member against a datetime member: the two are
+ * different members even at the same instant, while a date and a datetime at
+ * the top level compare by the instant they name.
  */
 export function valuesEqual(left: Value, right: Value): boolean {
+  return looseEqual(left, right, false);
+}
+
+/**
+ * Loose equality, with the rule for a date member against a datetime member
+ * chosen by the caller.
+ *
+ * `byInstant` false is `valuesEqual`: such a pair of members is unequal.
+ * `byInstant` true compares such a pair by the instant each names, at every
+ * depth, which is the rule `compareOrder` keeps for two maps it walks past
+ * (see `compareOrder`). The top-level pair is compared by instant either way.
+ */
+function looseEqual(left: Value, right: Value, byInstant: boolean): boolean {
   if (left === Undefined || right === Undefined) return false;
   if (left === null || right === null) return left === right;
   if (isNumeric(left) && isNumeric(right)) return numberOf(left) === numberOf(right);
@@ -412,7 +427,7 @@ export function valuesEqual(left: Value, right: Value): boolean {
   if (Array.isArray(left) && Array.isArray(right)) {
     return (
       left.length === right.length &&
-      left.every((item, at) => membersEqual(item, heldMember(right[at])))
+      left.every((item, at) => membersEqual(item, heldMember(right[at]), byInstant))
     );
   }
   if (isPlainMap(left) && isPlainMap(right)) {
@@ -420,7 +435,8 @@ export function valuesEqual(left: Value, right: Value): boolean {
     if (keys.length !== Object.keys(right).length) return false;
     return keys.every(
       (key) =>
-        Object.hasOwn(right, key) && membersEqual(heldMember(left[key]), heldMember(right[key])),
+        Object.hasOwn(right, key) &&
+        membersEqual(heldMember(left[key]), heldMember(right[key]), byInstant),
     );
   }
   return false;
@@ -442,13 +458,25 @@ function heldMember(member: Value | undefined): Value {
  *
  * The reference compares the members of two containers by term, so two absent
  * members are the same member there, where two absent values at the top level
- * are not equal at all. Every other pair of members is decided as
- * `valuesEqual` decides it, so a date or a datetime member keeps this
- * package's chronological rule rather than the reference's term comparison.
+ * are not equal at all, and a date member and a datetime member are different
+ * members there whatever instants they name. Every other pair of members is
+ * decided as `looseEqual` decides it, so two date members, or two datetime
+ * members, still compare by instant. A datetime here carries no precision, so
+ * two datetime members written to different precision at the same instant are
+ * equal here, where the reference tells them apart.
  */
-function membersEqual(left: Value, right: Value): boolean {
+function membersEqual(left: Value, right: Value, byInstant: boolean): boolean {
   if (left === Undefined || right === Undefined) return left === right;
-  return valuesEqual(left, right);
+  if (!byInstant && isDateAgainstDateTime(left, right)) return false;
+  return looseEqual(left, right, byInstant);
+}
+
+/** Whether one of the two is a date and the other a datetime. */
+function isDateAgainstDateTime(left: Value, right: Value): boolean {
+  return (
+    (left instanceof PDate && right instanceof PDateTime) ||
+    (left instanceof PDateTime && right instanceof PDate)
+  );
 }
 
 /**
@@ -533,6 +561,17 @@ export function compareStrings(left: string, right: string): number {
  * that rule, so this build declines to order them and the comparison answers
  * an absence. Equality between two maps stays well defined and portable; it is
  * only the ordering operators that have nothing to say.
+ *
+ * Two lists are walked from the front, as the reference walks them. A leading
+ * pair that is equal is stepped past. A date member against a datetime member
+ * is ordered as the reference's term order places it, the date first whatever
+ * the two instants are, while a date and a datetime at the top level are
+ * ordered by instant. Two maps are stepped past when they are equal with their
+ * date and datetime members compared by instant, as they were before a date
+ * member was told from a datetime member, because two maps that differ are not
+ * ordered here and the walk would otherwise stop at a pair the reference
+ * orders. A pair of lists that holds such maps, and so is ordered level, is
+ * stepped past in the same way.
  */
 export function compareOrder(left: Value, right: Value): number | undefined {
   if (!typesMatch(left, right)) return undefined;
@@ -557,8 +596,10 @@ export function compareOrder(left: Value, right: Value): number | undefined {
     for (let at = 0; at < shared; at += 1) {
       const a = left[at] ?? Undefined;
       const b = right[at] ?? Undefined;
-      if (valuesEqual(a, b)) continue;
-      return compareOrder(a, b);
+      if (isDateAgainstDateTime(a, b)) return a instanceof PDate ? -1 : 1;
+      if (isPlainMap(a) && isPlainMap(b) ? looseEqual(a, b, true) : valuesEqual(a, b)) continue;
+      const order = compareOrder(a, b);
+      if (order !== 0) return order;
     }
     if (left.length === right.length) return 0;
     return left.length < right.length ? -1 : 1;

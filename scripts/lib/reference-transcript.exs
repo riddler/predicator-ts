@@ -30,8 +30,10 @@
 # an arithmetic result past this package's safe integer range answers;
 # whether two reads of the clock in one evaluation answer one instant; what a
 # duration answers against a plain map; what a date plus a duration the
-# host supplies answers; and how two lists or two maps compare when a member
-# holds the null value or is absent. The
+# host supplies answers; how two lists or two maps compare when a member
+# holds the null value or is absent; and how a date member compares with a
+# datetime member, and a datetime member with one written to another
+# precision. The
 # values are chosen to show the reference's own behaviour rather than to agree
 # with this package's: below two to the fifty-third a float is written in
 # whichever of the plain and exponent forms is shorter, the plain one on a tie,
@@ -694,6 +696,88 @@ member_equality_cases =
     }
   end
 
+# A DATE MEMBER AGAINST A DATETIME MEMBER. The reference compares the members
+# of two containers by term, so a date member and a datetime member are
+# different members even at the same instant, and an ordering that walks two
+# lists puts a date member before a datetime member whatever their instants;
+# at the top level a date and a datetime still compare chronologically. Each
+# pair is asked through loose and strict equality and inequality, membership
+# both ways, and the four ordering operators: in a map, in a list, at depth,
+# either way round, at the same instant and on different days, as the first
+# member of two lists that a later member would order otherwise, and inside a
+# map that an ordering walks past. Beside them are the top-level pairs that do
+# not move, and datetimes written to different precision, as members and at
+# the top level: the reference keeps a datetime's precision and compares it
+# as part of the value, which a datetime here does not carry. The fields are
+# a patron's loan dates.
+date_member_cases =
+  for {source, at} <-
+        Enum.with_index(
+          [
+            ~S|{opened_on: #2026-03-01#} == {opened_on: #2026-03-01T00:00:00Z#}|,
+            ~S|{opened_on: #2026-03-01#} != {opened_on: #2026-03-01T00:00:00Z#}|,
+            ~S|{opened_on: #2026-03-01#} === {opened_on: #2026-03-01T00:00:00Z#}|,
+            ~S|{opened_on: #2026-03-01#} !== {opened_on: #2026-03-01T00:00:00Z#}|,
+            ~S|{opened_on: #2026-03-01T00:00:00Z#} == {opened_on: #2026-03-01#}|,
+            ~S|[#2026-03-01#] == [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01#] != [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01T00:00:00Z#] == [#2026-03-01#]|,
+            ~S|{holds: [#2026-03-01#]} == {holds: [#2026-03-01T00:00:00Z#]}|,
+            ~S|{holds: [#2026-03-01#]} != {holds: [#2026-03-01T00:00:00Z#]}|,
+            ~S|[[#2026-03-01#]] == [[#2026-03-01T00:00:00Z#]]|,
+            ~S|[{opened_on: #2026-03-01#}] == [{opened_on: #2026-03-01T00:00:00Z#}]|,
+            ~S|[#2026-03-02#] == [#2026-03-01T00:00:00Z#]|,
+            ~S|{opened_on: #2026-03-01#} in [{opened_on: #2026-03-01T00:00:00Z#}]|,
+            ~S|[#2026-03-01#] in [[#2026-03-01T00:00:00Z#]]|,
+            ~S|[[#2026-03-01T00:00:00Z#]] contains [#2026-03-01#]|,
+            ~S|[{opened_on: #2026-03-01T00:00:00Z#}] contains {opened_on: #2026-03-01#}|,
+            ~S|#2026-03-01# in [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01T00:00:00Z#] contains #2026-03-01#|,
+            ~S|#2026-03-01# == #2026-03-01T00:00:00Z#|,
+            ~S|#2026-03-01# < #2026-03-01T00:00:00Z#|,
+            ~S|#2026-03-02# > #2026-03-01T00:00:00Z#|,
+            ~S|[#2026-03-01#] < [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01#] > [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01#] <= [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01#] >= [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-01T00:00:00Z#] < [#2026-03-01#]|,
+            ~S|[#2026-03-01T00:00:00Z#] > [#2026-03-01#]|,
+            ~S|[#2026-03-01T00:00:00Z#] <= [#2026-03-01#]|,
+            ~S|[#2026-03-01T00:00:00Z#] >= [#2026-03-01#]|,
+            ~S|[#2026-03-02#] < [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-03-02#] > [#2026-03-01T00:00:00Z#]|,
+            ~S|[#2026-02-28T00:00:00Z#] < [#2026-03-01#]|,
+            ~S|[#2026-02-28T00:00:00Z#] > [#2026-03-01#]|,
+            ~S|[#2026-03-01#, 2] < [#2026-03-01T00:00:00Z#, 1]|,
+            ~S|[#2026-03-01T00:00:00Z#, 1] < [#2026-03-01#, 2]|,
+            ~S|[[#2026-03-01#], 2] < [[#2026-03-01T00:00:00Z#], 1]|,
+            ~S|[[#2026-03-01T00:00:00Z#], 1] < [[#2026-03-01#], 2]|,
+            ~S|[{opened_on: #2026-03-01#}, 1] < [{opened_on: #2026-03-01T00:00:00Z#}, 2]|,
+            ~S|[{opened_on: #2026-03-01T00:00:00Z#}, 1] < [{opened_on: #2026-03-01#}, 2]|,
+            ~S|[{opened_on: #2026-03-01#}, 1] <= [{opened_on: #2026-03-01T00:00:00Z#}, 1]|,
+            ~S|[{opened_on: #2026-03-01#}, 1] >= [{opened_on: #2026-03-01T00:00:00Z#}, 1]|,
+            ~S|[[{opened_on: #2026-03-01#}], 1] < [[{opened_on: #2026-03-01T00:00:00Z#}], 2]|,
+            ~S|[[{opened_on: #2026-03-01T00:00:00Z#}], 1] < [[{opened_on: #2026-03-01#}], 2]|,
+            ~S|[#2026-03-01T00:00:00Z#] == [#2026-03-01T00:00:00.000Z#]|,
+            ~S|[#2026-03-01T00:00:00.000Z#] == [#2026-03-01T00:00:00.000000Z#]|,
+            ~S|{opened_on: #2026-03-01T00:00:00Z#} == {opened_on: #2026-03-01T00:00:00.000Z#}|,
+            ~S|[#2026-03-01T00:00:00Z#] === [#2026-03-01T00:00:00.000Z#]|,
+            ~S|#2026-03-01T00:00:00Z# === #2026-03-01T00:00:00.000Z#|,
+            ~S|#2026-03-01T00:00:00.000Z# === #2026-03-01T00:00:00.000000Z#|,
+            ~S|#2026-03-01T00:00:00Z# == #2026-03-01T00:00:00.000Z#|,
+            ~S|[#2026-03-01T00:00:00Z#] < [#2026-03-01T00:00:00.000Z#]|,
+            ~S|[#2026-03-01T00:00:00.000Z#] < [#2026-03-01T00:00:00Z#]|,
+            ~S|{opened_on: #2026-03-01T00:00:00Z#} in [{opened_on: #2026-03-01T00:00:00.000Z#}]|
+          ],
+          1
+        ) do
+    %{
+      "id" => "date-member/#{at |> Integer.to_string() |> String.pad_leading(3, "0")}",
+      "source" => source,
+      "context" => %{}
+    }
+  end
+
 authored =
   float_cases ++
     float_cast_back_cases ++
@@ -702,7 +786,8 @@ authored =
     json_form_cases ++
     leading_sign_cases ++
     map_key_cases ++ duration_field_cases ++ integer_range_cases ++ clock_cases ++
-    duration_against_map_cases ++ date_arithmetic_cases ++ member_equality_cases
+    duration_against_map_cases ++ date_arithmetic_cases ++ member_equality_cases ++
+    date_member_cases
 
 completed =
   case Predicator.Conformance.Generator.generate(authored) do
