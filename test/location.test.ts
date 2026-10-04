@@ -592,4 +592,57 @@ describe("the run-time fence on a path a host builds", () => {
       }
     }
   });
+
+  // Sabotage, through scripts/sabotage.mjs, each run and restored: the
+  // revoked-proxy guard taken out of the segment spelling (the float class
+  // test reads the prototype), taken out of the segment's detail (the host
+  // boundary reads the segment), or the revoked test made to answer false,
+  // each turns this red on the first not-threw assertion.
+  it("answers, and never throws, for a revoked proxy as a segment", () => {
+    const revoked = (target: object): unknown => {
+      const { proxy, revoke } = Proxy.revocable(target, {});
+      revoke();
+      return proxy;
+    };
+    const revokedObject = revoked({ title: "atlas" });
+    const revokedList = revoked(["atlas"]);
+    const revokedFunction = revoked(() => "atlas");
+    const overRevoked = new Proxy(revoked({}) as object, {});
+    const attempt = (run: () => PutResult): PutResult | "threw" => {
+      try {
+        return run();
+      } catch {
+        return "threw";
+      }
+    };
+    for (const [what, segment, text] of [
+      ["a revoked proxy over an object", revokedObject, "(an object)"],
+      ["a revoked proxy over a list", revokedList, "(an object)"],
+      ["a revoked proxy over a function", revokedFunction, "(a function)"],
+      ["a proxy over a revoked proxy", overRevoked, "(an object)"],
+    ] as const) {
+      const onRoot = attempt(() => contextPut({}, [segment as string], 1));
+      expect(onRoot, what).not.toBe("threw");
+      expect(onRoot !== "threw" && onRoot.ok, what).toBe(false);
+      if (onRoot !== "threw" && !onRoot.ok) {
+        const error = onRoot.error as LocationError;
+        expect(error.reason, what).toBe("invalid_index");
+        expect(error.details.location, what).toBe(text);
+        expect(error.details.index, what).toBe(Undefined);
+        expect(error.details.pathIndex, what).toBe(0);
+      }
+      const onList = attempt(() =>
+        contextPut({ holds: ["atlas"] }, ["holds", segment as string], 1),
+      );
+      expect(onList, what).not.toBe("threw");
+      expect(onList !== "threw" && onList.ok, what).toBe(false);
+      if (onList !== "threw" && !onList.ok) {
+        const error = onList.error as LocationError;
+        expect(error.reason, what).toBe("not_a_container");
+        expect(error.details.location, what).toBe(`holds.${text}`);
+        expect(error.details.segment, what).toBe(Undefined);
+        expect(error.details.pathIndex, what).toBe(1);
+      }
+    }
+  });
 });

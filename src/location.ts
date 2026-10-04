@@ -279,17 +279,38 @@ function resolve(node: Node, context: Context): LocationResult {
 }
 
 /**
+ * Whether a segment is a revoked proxy, or a proxy over one: an object every
+ * read of which throws, the prototype included. The test is `Array.isArray`
+ * because it runs no host code - it follows a proxy to its target and calls
+ * no trap - and throws for exactly such an object, so this catch swallows
+ * nothing a host's code threw.
+ */
+function isRevoked(segment: unknown): boolean {
+  try {
+    Array.isArray(segment);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * How a location error spells one segment of the path it names: a key after
  * a dot, or at the root bare, and an integer in brackets. A segment that is
  * neither is spelled after a dot: a float with its point, any other primitive
  * as its text, and anything else by a description of what it is. Such a
  * segment is never converted to text, because a conversion runs the host's
- * own code or, for an object with no prototype, throws.
+ * own code or, for an object with no prototype, throws. A revoked proxy is
+ * described as an object before the float class test, which would read its
+ * prototype and throw.
  */
 function segmentText(segment: unknown, at: number): string {
   if (isInteger(segment)) return `[${segment}]`;
   const text = at === 0 ? "" : ".";
   if (typeof segment === "string") return text + segment;
+  if (typeof segment === "object" && segment !== null && isRevoked(segment)) {
+    return `${text}(an object)`;
+  }
   if (segment instanceof Float) return text + floatText(segment);
   if (typeof segment === "function") return `${text}(a function)`;
   if (typeof segment === "object" && segment !== null) {
@@ -308,9 +329,11 @@ function locationText(path: readonly unknown[], through: number): string {
 /**
  * A segment as a detail carries it: as the member of the domain the host
  * boundary reads it as, so a fraction is a float, or as the absence when the
- * domain has no member for it, such as a number that is not finite.
+ * domain has no member for it, such as a number that is not finite or a
+ * revoked proxy, which the boundary is not handed because reading it throws.
  */
 function segmentValue(segment: unknown): Value {
+  if (isRevoked(segment)) return Undefined;
   const normalized = fromHost(segment);
   return normalized.ok ? normalized.value : Undefined;
 }
