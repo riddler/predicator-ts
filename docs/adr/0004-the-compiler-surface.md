@@ -1912,3 +1912,30 @@ in `src/index.ts` and the two compilers in `src/compile.ts`.
 `Predicator.evaluate/3` parses a source string as an expression, and
 `Predicator.execute/3` and `Predicator.execute_value/3` parse one as a
 program.
+
+## Note: where the statement grammar's three reason members sit, and where the chain limits are measured (2026-10-04)
+
+The amendment above headed "the statement grammar compiles, through three
+program entry points, with the transcript's program rows as its evidence"
+words two things loosely. Its Typespecs say the `ParseReason` union "gains
+three members, appended", and its paragraph on depth says an `else if` chain
+"is refused a few links short of two hundred and fifty-six". This note states
+both exactly. It decides nothing, changes no answer and no type, and removes
+no line. Code is cited as read at `f125888`.
+
+**The three members are not appended.** In `ParseReason` in `src/errors.ts`,
+`"unexpected_else"`, `"unassignable_location"` and `"expected_open_brace"` sit
+together in a group of their own, commented as what the program grammar
+refuses that the expression grammar has no site for. That group follows the
+grammatical members and comes before the emission member,
+`"number_out_of_range"`, and the depth member, `"nesting_depth_exceeded"`,
+which close the union. The order of a union's members carries no meaning in
+the type, so the amendment's Typespecs block, which lists the three after a
+comment standing for the rest, declares the same type.
+
+**The measured chain limits are already recorded.** The note above headed
+"the acceptance of the three amendments of 2026-10-01" records them by shape:
+run at `v0.4.0` over three `else if` chains whose links nest progressively
+deeper, the longest that compiled had 255, 254 and 253 links. That is the
+amendment's "few links short of two hundred and fifty-six" measured, and this
+note adds no measurement of its own.
