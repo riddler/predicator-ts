@@ -994,3 +994,42 @@ date and datetime sources and no other. The Elixir half calls the four
 reference functions named. `scripts/reference-tokens.mjs`, run again on a
 detached export of predicator-ex `v9.4.2` under Elixir 1.18.3 and OTP 27,
 wrote the vendored `tokens.json` byte for byte.
+
+## Note: a refresh of the corpus regenerates four transcripts (2026-10-04)
+
+The amendment above headed "a token transcript at the tag, its sources
+enumerated from the scanner's suite" ends its Consequences on the cost that
+"a refresh of the corpus obliges a regeneration of three transcripts rather
+than two". That was true when it was written. A fourth transcript has been
+added since, the location transcript that ADR-0005 rests on, and a refresh now
+obliges a regeneration of all four. This note records that. It changes
+nothing the Decision or that amendment decides, and it removes no line.
+
+**The four.** Each transcript is written by its own generator and by nothing
+else, and each generator refuses an export whose tag is not the one
+`conformance/SOURCE.json` records:
+
+- `conformance/transcript/transcript.json`, the evaluation transcript, written
+  by `scripts/reference-transcript.mjs`;
+- `conformance/transcript/compile.json`, written by
+  `scripts/reference-compile.mjs`;
+- `conformance/transcript/tokens.json`, written by
+  `scripts/reference-tokens.mjs`;
+- `conformance/transcript/location.json`, written by
+  `scripts/reference-location.mjs`.
+
+The suite holds each one's record to the vendored corpus's tag, so a refresh
+to a later tag leaves each of the four failing until it is regenerated there:
+the evaluation, token and location transcripts through the test in their own
+suite titled "is the file its SOURCE.json records, taken at the vendored
+corpus's tag", and the compile transcript through `compileTranscriptLines` in
+`test/conformance/compile-transcript.ts`. `conformance/README.md` already
+names the four. Rows the evaluation transcript gains, whatever they cover,
+are rows of the first of these and not a transcript of their own.
+
+**The token generator's comment.** The header of
+`scripts/reference-tokens.mjs` explains, under "WHY A THIRD SCRIPT", why it
+was added beside the two generators before it, and says that none of the
+three writes another's files. That reason stays as written. The sentence after
+it now also names the fourth generator, which writes none of the other three's
+files either, as its own header says.
