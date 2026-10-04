@@ -4372,3 +4372,30 @@ out-of-range rule's sites says that "An encode refusal reached through the
 tagged evaluation entry point does carry the category". `executeTagged` wraps
 the encoder's reason into an `EvaluationError` before it answers, as
 `evaluateTagged` does, so that sentence holds of both.
+
+## Note: where the reference's answers for the texts refused past the safe integer range are recorded (2026-10-04)
+
+The amendment above headed "a duration component past the safe integer range
+is refused when a text is read" says, in its section on the divergence it
+declares, that the refused texts' rows "are not in the reference transcript;
+the tests below carry the reference's answer in their comments". The first
+half holds: no transcript has a row for any of those texts. The second half
+says more than the tests carry. This note states where the reference's
+answers are recorded. It decides nothing, changes no answer, and removes no
+line; the amendment's other claims stand as written. Code is cited as read at
+`f125888`.
+
+**The reference's answer for each refused text is recorded in this record,
+in the amendment's own table**, in its column headed "Reference at `v9.4.2`":
+a duration for every refused text, its component written as a number where
+the text sums two counts or carries a fraction, and as that many of its unit
+otherwise. The amendment's opening paragraph says each of those answers was
+run in a detached export of the reference at that tag, not read.
+
+**The tests record less.** The comment above `PAST_THE_SAFE_RANGE` in
+`test/parse-duration.test.ts` says that the reference answers each of those
+texts with a duration, gives no answer per row, and points to this record for
+the difference. The comment above "refuses a component past the largest safe
+integer" in `test/cast.test.ts` says why the cast answers undefined and does
+not name the reference. Neither comment is changed by this note; a reader who
+wants the reference's answer for a given text reads the amendment's table.
