@@ -426,3 +426,43 @@ same array member).
 `test/engine-neutrality.test.ts` pins the directive's spellings that fire,
 and lookalikes of them that stay quiet, in the block for a reference
 directive in shipped source.
+
+## Note: a global augmentation under the source directory (2026-10-04)
+
+The note above on a reference directive ends with a sentence that opens
+**Still not caught.** and names a declaration merged into a global interface
+in a source file, which restores a later member's type with no directive.
+Probed at `08a74f1`: a source file holding a block that augments the global
+scope, declaring the later array member inside an interface of the array's
+name, with a call to that member below it, passes the source typecheck, and
+the engine-neutrality stage at that commit passes it too. This note records
+where that block is now refused. It changes nothing the Decision says, and it
+adds a rule to the stage without narrowing any rule already there. Code is
+cited as this change leaves it, on a branch cut from `08a74f1`. Taking the
+rule rather than recording the gap was decided by the conductor under a
+standing consent, 2026-10-03.
+
+**What the stage refuses.** The rule `global-merge` in the stage's rule table
+(`rules` in `scripts/engine-neutrality.mjs`) fires on the declaring keyword
+and the global scope's name with any space between them, followed by any
+space and an opening brace on the same line. It also fires on the global
+scope's name opening a line after any space, followed by any space and an
+opening brace, which is how the block is written nested inside an ambient
+module declaration. With the rule in place, the probed file above fails the
+stage.
+
+**What stays quiet.** Prose that names the two keywords with no brace after
+them, a field or a binding named for the global scope, and the nested name
+and its brace when anything other than space comes before them on the line,
+a comment included.
+
+**Still not caught.** A brace moved to the line after the keywords, which
+the formatter does not write. An interface written at the top level of a
+source file that has no import or export, or of a declaration file, merges
+into the global scope with no augmentation block, and neither the source
+typecheck nor the stage refuses it (probed at `08a74f1` with the same array
+member). A line scanner cannot tell where such an interface lands.
+
+`test/engine-neutrality.test.ts` pins the spellings that fire, and lookalikes
+of them that stay quiet, in the block for a global augmentation in shipped
+source.
