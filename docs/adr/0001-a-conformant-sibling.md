@@ -528,3 +528,26 @@ before this note.
 `test/engine-neutrality.test.ts` pins the spellings that fire, and
 lookalikes of them that stay quiet, in the blocks for a DOM global and for
 a Node global reached another way.
+
+## Note: where the commit the engine-neutrality note cites landed (2026-10-04)
+
+The note above headed "what the engine-neutrality stage scans" cites its code
+as read at a commit, and names the same commit for the build output it
+describes and for a probe it ran. That commit is its pull request's branch
+commit. The request was merged by rebase, which gives each landed commit a new
+name, so the cited commit is not in main's history and a reader following the
+cite finds nothing there. This note says where it landed. It decides nothing,
+changes no code, and removes no line.
+
+`9dc77c0` landed on main as `2bf75d3`. The two carry the same change: their
+patches are identical, and the files that note describes -
+`scripts/engine-neutrality.mjs`, `tsup.config.ts`, `tsconfig.json` and
+`tsconfig.src.json` - are byte-identical at the two commits. They differ only
+in files main had changed underneath the request, none of which that note
+cites. So each of that note's three mentions of the branch commit reads as
+`2bf75d3`.
+
+The record cite check (`scripts/record-cites.mjs`, a stage of the full gate)
+fails on a cite of a commit outside the history of the tree it runs on. It
+reads the sentence above that begins with the branch commit as this
+correction, and checks the cite through the landed commit instead.
