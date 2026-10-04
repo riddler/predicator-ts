@@ -37,6 +37,15 @@
  * depth exactly when `compile` refuses the same source for its depth, with
  * the same refusal.
  *
+ * A numeric literal outside the value domain is a tree `parse` answers and
+ * `compile` refuses, so it reaches this walk. An integer past the safe bound
+ * renders with the digits it was written with, leading zeros dropped, as the
+ * reference renders its exact integer; the host's rounded value is not what
+ * the source named. A decimal past the finite range renders as the host's
+ * infinity with `.0` appended: the reference raises while parsing such a
+ * source and renders nothing, so there is no rendering of its to match, and
+ * ADR-0004 records that divergence.
+ *
  * Nothing here reaches for a Node built-in, and no source text is ever
  * evaluated on the way back.
  */
@@ -441,7 +450,7 @@ function isLiteralNode(node: Node): node is LiteralNode {
 function literal(node: LiteralNode): string {
   switch (node.kind) {
     case "integer":
-      return String(node.value);
+      return node.digits ?? String(node.value);
     case "float":
       return floatSource(node.value);
     case "boolean":

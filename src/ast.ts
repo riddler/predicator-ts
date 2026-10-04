@@ -45,10 +45,19 @@ export interface Located {
   readonly span: Span;
 }
 
-/** A whole-number literal. */
+/**
+ * A whole-number literal.
+ *
+ * `digits` is the literal as written, leading zeros dropped, and is present
+ * only when `value` is not the number the source wrote: past the safe-integer
+ * bound the host has already rounded it. It exists for the rendering
+ * direction, which writes those digits back as the reference writes its exact
+ * integer; nothing that evaluates reads it.
+ */
 export interface IntegerNode extends Located {
   readonly kind: "integer";
   readonly value: number;
+  readonly digits?: string;
 }
 
 /**

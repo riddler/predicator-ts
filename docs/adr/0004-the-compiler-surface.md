@@ -1939,3 +1939,47 @@ run at `v0.4.0` over three `else if` chains whose links nest progressively
 deeper, the longest that compiled had 255, 254 and 253 links. That is the
 amendment's "few links short of two hundred and fifty-six" measured, and this
 note adds no measurement of its own.
+
+## Note: the round-trip clause covers sources `compile` accepts, and what `decompile` renders for a numeric literal `compile` refuses (2026-10-04)
+
+The Consequences above say the tree can be replaced "as long as
+`decompile(parse(source).ast)` keeps answering what the reference answers",
+and the amendment headed "`decompile` refuses a tree past the source depth
+bound, as a value" says that "short of the bound the clause stands". Neither
+names the other source `parse` answers and `compile` refuses: a numeric
+literal outside the value domain, refused under `number_out_of_range` by the
+amendment of 2026-09-19 on that member. This note scopes the clause, records
+the reference's answer for such a literal, and declares the one divergence
+that remains. It removes no line. Code on `main` is cited as read at
+`96dd825`; the rendering this note describes is cited by anchor, as the
+change carrying this note leaves it.
+
+**The clause is scoped to sources `compile` accepts.** Read with this note,
+both sentences quoted above promise the reference's rendering for a source
+`compile` accepts, and nothing for a source it refuses. The doc comment on
+`parse` in `src/index.ts` (at `96dd825`) already states the promise that way.
+
+**What the reference answers, run at `v9.4.2`.** `Predicator.parse/1` and
+`Predicator.decompile/2` were run in a detached export of the tag over
+integer and decimal literals past each bound.
+
+| Literal | The reference at `v9.4.2` | This package |
+|---|---|---|
+| An integer past the safe-integer bound: `1` and four hundred zeros, `1` and 308 zeros, twenty nines, `9007199254740993` | parses, compiles, and renders the exact integer as written, leading zeros dropped | renders the same digits; `compile` refuses with `number_out_of_range` |
+| A decimal past the finite range: `1` and four hundred zeros then `.5`, `1` and 309 zeros then `.0` | `parse` raises an argument error and answers no tree | `parse` answers a tree, which renders as `Infinity.0`; `compile` refuses with `number_out_of_range` |
+
+**The integer rendering matches the reference.** Before this note the
+rendering wrote the host's converted value, so twenty nines rendered as
+`100000000000000000000` and a longer run as `Infinity` or in exponent form.
+The integer node now keeps the literal's digits when its value is past the
+safe-integer bound (`integerDigits` in `src/lexer.ts`), and `literal` in
+`src/decompile.ts` renders them. Matching the reference here is the standing
+rule for a fork the records leave open, decided by the conductor under a
+standing consent, 2026-10-03.
+
+**The decimal rendering is a declared divergence.** The reference has no
+rendering to match: it raises while parsing the source. Matching it would
+mean `parse` refusing such a source, which is a changed `parse` answer and
+not a rendering, so the rendering stays as it was, the host's infinity with
+`.0` appended. A test in `test/decompile.test.ts`, under "a numeric literal
+outside the value domain", pins both rows of the table.
