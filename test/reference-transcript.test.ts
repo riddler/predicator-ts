@@ -15,8 +15,9 @@
 // in one evaluation answer one instant, what a duration answers against a
 // plain map, what a date plus a duration the host supplies answers, how two
 // lists or two maps compare when a member holds the null value or is absent,
-// and how a date member compares with a datetime member, and a datetime member
-// with one written to another precision. The file is written by
+// how a date member compares with a datetime member, and a datetime member
+// with one written to another precision, and how two lists order when a member
+// holds the null value. The file is written by
 // `scripts/reference-transcript.mjs` and by nothing else; the suite never runs
 // the reference, it reads what the reference answered.
 //
@@ -607,6 +608,15 @@ describe("the reference transcript", () => {
   // ordering walk turns red the map orderings, the declared ones because this
   // package's answer moved; and answering a level pair of lists rather than stepping past
   // it turns `date-member/043` and `date-member/044` red.
+  //
+  // Sabotage for the `null-order/` rows, each run and reverted: reading each
+  // walked member of `compareOrder` with `?? Undefined` again turns red every
+  // row whose answer is a boolean over a member holding the null value;
+  // answering 1, or -1, from `nullMemberOrder` whatever the other member turns
+  // red the rows that place the null value on the other side; leaving false
+  // out of `nullMemberOrder` turns `null-order/026` red; and ordering two
+  // members holding the null value rather than stepping past them turns red
+  // the rows that step past them.
   it.each(ROWS.map((row) => [row.id, row] as const))("%s", (id, row) => {
     const reference = referenceAnswer(row);
     const ours = answer(row);

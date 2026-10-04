@@ -4225,3 +4225,92 @@ whose walk reaches such a pair of members answers with the date member first.
 A date and a datetime compared at the top level, and two maps an ordering
 steps past, answer as before. No exported function's signature changes, no
 reason token is added, and no opcode changes.
+
+### A leading member that is the null value itself (added 2026-10-04)
+
+This section is appended to the amendment above, and removes no line above.
+It decides the paragraph that amendment left to a later section of it: the
+paragraph "A leading member that is the null value itself." under "What this
+does not decide" in the amendment on a member holding the null value, or
+absent. Code on the default branch is cited as read at `9763206`;
+`nullMemberOrder` in `src/evaluator.ts` is what this same change adds, cited
+by name. Every run of the reference below was made at predicator-ex `v9.4.2`
+(`d8067df`) in a detached export (Elixir 1.18.3, OTP 27). Matching the
+reference here in the next minor release was ruled by the operator,
+2026-10-03.
+
+**An ordering of two lists reads a member holding the null value as the null
+value, never as the absence.** Two such members at the same place are stepped
+past, as two equal members are, so `[null, 1] < [null, 2]` answers true. A
+member holding the null value against any other member is placed where the
+reference's term order places it: after a number and after false, and before
+true, a string, a list, a map, a date, a datetime, a duration and an absent
+member. `compareOrder` in `src/evaluator.ts` reads each member it walks
+through `heldMember` and places such a pair through `nullMemberOrder`. Before
+this change it read each walked member with a fallback that turned a stored
+null into the absence, so the walk stopped at the first member holding the
+null value and the ordering answered the absence.
+
+**The top-level null value keeps its rule.** `null < null` and `null < 1`
+still answer the absence, as section 5's four-row matrix for the null value
+says, and as the reference answers. The rule above is about members only.
+
+**Why.** The reference orders two lists under an ordering operator with its
+host language's term order (`compare_values/3` in
+`lib/predicator/evaluator.ex` at `v9.4.2`, the `types_match` clause), which
+compares the members of the two lists by term. Its `docs/isa.md` section 5
+says a list is ordered element-wise at the first place the two differ, and
+does not say how two members of different types order; the term order does,
+and the reference answered every row of the table below as its last column
+says. The places it gives the null value are the term order's: a number
+orders before an atom, the null value, the two booleans and the absent member
+are atoms ordered by name, and every other value of the domain orders after
+every atom.
+
+| Pair | Operator | Before | Now | Reference |
+|---|---|---|---|---|
+| `[null, 1]` and `[null, 2]` | `<` | absence | true | true |
+| `[null, 1]` and `[null, 2]` | `>` | absence | false | false |
+| `[null, 1]` and `[null, 1]` | `<=` | absence | true | true |
+| `[null]` and `[null]` | `>=` | absence | true | true |
+| `[1, null]` and `[1, 2]` | `<` | absence | false | false |
+| `[null]` and `[1]` | `<` | absence | false | false |
+| `[null, 1]` and `[1, 2]` | `>` | absence | true | true |
+| `[null]` and `[false]` | `>` | absence | true | true |
+| `[null]` and `[true]` | `<` | absence | true | true |
+| `[null]` and `["overdue"]` | `<` | absence | true | true |
+| `[null]` and `[{loans: 1}]` | `<` | absence | true | true |
+| `[null]` and `[#2026-03-01#]` | `<` | absence | true | true |
+| `[null]` and `[3d]` | `<` | absence | true | true |
+| `[null]` and `[undefined]` | `<` | absence | true | true |
+| `[null]` and `[renewed_on]`, `renewed_on` unbound | `<` | `unbound_variable` error | true | true |
+| `null` and `null` | `<` | absence | absence | absence |
+
+The row on an unbound name answered an error before this change for the
+reason the amendment on a member holding the null value, or absent, gives for
+its own such rows: `halt` in `src/evaluator.ts` reports a result of the
+absence as the error of the unbound name the program loaded. It now answers
+the value.
+
+**What this does not change.** An ordering whose walk reaches two members
+whose types do not match, where neither holds the null value, still answers
+the absence here, as it did; this section places the null value only. Two
+maps are still not ordered here, and a list that runs out first still orders
+first.
+
+**What pins it.** The rows `null-order/001` through `null-order/044` in
+`conformance/transcript/transcript.json`, regenerated at `v9.4.2`, carry every
+row of the table above beside the orderings that step past two members
+holding the null value at a later place, the null value against a number at
+the first place and at a later one either way round, and the same orderings
+over lists from the context. None is declared in
+`test/reference-transcript.test.ts`, so each must agree.
+`test/null-order.test.ts` asks the same sources against the same context and
+holds the reference's answer for each.
+
+Consequences, for this section. A host ordering two lists that hold the null
+value as a member gets a boolean where it got the absence, and, where the
+walk reached an unbound name against such a member, a boolean where it got an
+`unbound_variable` error. An ordering at the top level over the null value
+answers as before. No exported function's signature changes, no reason token
+is added, and no opcode changes.

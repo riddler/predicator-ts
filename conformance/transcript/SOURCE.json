@@ -7,5 +7,5 @@
   "otp": "27",
   "isa_version": 6,
   "generator": "node scripts/reference-transcript.mjs --from <export of riddler/predicator-ex at v9.4.2> --tag v9.4.2",
-  "transcript_hash": "sha256:844a038b3bd3419de1c43ca9fbe59cc8768dd19b1b3460b18636c2b1bd9149b8"
+  "transcript_hash": "sha256:9d53cc4687f302673aee0bf7773587068498adf05e3af5ce0af86e15bdb18faa"
 }

@@ -31,9 +31,9 @@
 # whether two reads of the clock in one evaluation answer one instant; what a
 # duration answers against a plain map; what a date plus a duration the
 # host supplies answers; how two lists or two maps compare when a member
-# holds the null value or is absent; and how a date member compares with a
+# holds the null value or is absent; how a date member compares with a
 # datetime member, and a datetime member with one written to another
-# precision. The
+# precision; and how two lists order when a member holds the null value. The
 # values are chosen to show the reference's own behaviour rather than to agree
 # with this package's: below two to the fifty-third a float is written in
 # whichever of the plain and exponent forms is shorter, the plain one on a tie,
@@ -778,6 +778,77 @@ date_member_cases =
     }
   end
 
+# A LIST ORDERING THAT MEETS A MEMBER HOLDING THE NULL VALUE. The reference
+# orders two lists by its host language's term order, which steps past two
+# members holding the null value as equal members and places the null value
+# after a number and before a string, a list, a map, a date and a datetime.
+# Each ordering is asked under each of the four operators where it reads
+# differently: two members holding the null value, leading and later, alone
+# and beside other members, from literals and from the context; the null
+# value against a number at the first and at a later position, either way
+# round; a leading null value against a number when a later member would
+# order the two lists the other way; the null value against a boolean, a
+# string, a list, a map, a date, a datetime and a duration; a list that runs
+# out before the other; and the top-level null value, which the reference
+# does not order at all. The fields are a patron's holds and loans.
+null_order_cases =
+  for {{source, context}, at} <-
+        Enum.with_index(
+          [
+            {~S|[null, 1] < [null, 2]|, %{}},
+            {~S|[null, 1] > [null, 2]|, %{}},
+            {~S|[null, 1] <= [null, 1]|, %{}},
+            {~S|[null] >= [null]|, %{}},
+            {~S|[null] < [null]|, %{}},
+            {~S|[null] > [null]|, %{}},
+            {~S|[null] <= [null]|, %{}},
+            {~S|[null, 1] >= [null, 2]|, %{}},
+            {~S|[1, null] < [1, null]|, %{}},
+            {~S|[1, null] <= [1, null]|, %{}},
+            {~S|[1, null, 2] < [1, null, 3]|, %{}},
+            {~S|[null, null] > [null]|, %{}},
+            {~S|[null] < [null, null]|, %{}},
+            {~S|[null] < [1]|, %{}},
+            {~S|[null] > [1]|, %{}},
+            {~S|[1] < [null]|, %{}},
+            {~S|[1] >= [null]|, %{}},
+            {~S|[1, null] < [1, 2]|, %{}},
+            {~S|[1, null] > [1, 2]|, %{}},
+            {~S|[1, 2] <= [1, null]|, %{}},
+            {~S|[null, 1] < [1, 2]|, %{}},
+            {~S|[null, 1] > [1, 2]|, %{}},
+            {~S|[1, 2] > [null, 1]|, %{}},
+            {~S|[null] < [1.5]|, %{}},
+            {~S|[null] < [true]|, %{}},
+            {~S|[null] > [false]|, %{}},
+            {~S|[null] < ["overdue"]|, %{}},
+            {~S|[null] < [[1]]|, %{}},
+            {~S|[null] < [[]]|, %{}},
+            {~S|[null] < [{loans: 1}]|, %{}},
+            {~S|[null] < [#2026-03-01#]|, %{}},
+            {~S|[null] < [#2026-03-01T00:00:00Z#]|, %{}},
+            {~S|[null] < [3d]|, %{}},
+            {~S|[null] > []|, %{}},
+            {~S|[[null], 1] < [[1], 1]|, %{}},
+            {~S|[null] < [undefined]|, %{}},
+            {~S|[undefined] > [null]|, %{}},
+            {~S|[null] < [renewed_on]|, %{}},
+            {~S|holds < loans|, %{"holds" => [nil, 1], "loans" => [nil, 2]}},
+            {~S|holds >= loans|, %{"holds" => [nil], "loans" => [nil]}},
+            {~S|holds > loans|, %{"holds" => [nil], "loans" => [3]}},
+            {~S|null < null|, %{}},
+            {~S|null <= null|, %{}},
+            {~S|null < 1|, %{}}
+          ],
+          1
+        ) do
+    %{
+      "id" => "null-order/#{at |> Integer.to_string() |> String.pad_leading(3, "0")}",
+      "source" => source,
+      "context" => context
+    }
+  end
+
 authored =
   float_cases ++
     float_cast_back_cases ++
@@ -787,7 +858,7 @@ authored =
     leading_sign_cases ++
     map_key_cases ++ duration_field_cases ++ integer_range_cases ++ clock_cases ++
     duration_against_map_cases ++ date_arithmetic_cases ++ member_equality_cases ++
-    date_member_cases
+    date_member_cases ++ null_order_cases
 
 completed =
   case Predicator.Conformance.Generator.generate(authored) do
