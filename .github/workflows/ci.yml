@@ -26,7 +26,13 @@ jobs:
     # should not have.
 
     steps:
+      # The full history, not the default single commit: the record cite
+      # stage (scripts/record-cites.mjs) asks whether each commit a record
+      # cites is an ancestor of the tree, and refuses to answer in a shallow
+      # clone.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # The toolchain comes from mise.toml, provisioned by mise itself, so CI
       # runs the gate through the same `mise exec --` command an agent runs
