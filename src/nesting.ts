@@ -7,9 +7,10 @@
  * grammar, the emitter and the renderer check. Each is documented on its own
  * constant below. The paragraphs that follow are about the value limit, which
  * came first and whose argument the source limit reuses. Beside the two
- * limits is one budget, `PLACE_BUDGET`, which bounds how many places the two
- * walks that build an answer at each place a value appears - normalization
- * and the tagged encoder - may visit in one call.
+ * limits is one budget, `PLACE_BUDGET`, which bounds how many places the
+ * walks that build an answer at each place a value appears - normalization,
+ * the tagged encoder and the JSON serializer - may visit in one call, and how
+ * many places a value may have before an entry point refuses to project it.
  *
  * Walking a value - normalizing a context or a function's answered value,
  * encoding and decoding the tagged wire text, comparing two values or testing
@@ -133,6 +134,45 @@ export interface PlaceCount {
 export function visitPlace(count: PlaceCount): boolean {
   count.visited += 1;
   return count.visited > PLACE_BUDGET;
+}
+
+/**
+ * Answers whether a value already in the domain has more places than
+ * `PLACE_BUDGET`, counting them as the projection back to host values visits
+ * them.
+ *
+ * The projection, `toHost` in `./values.ts`, builds a copy at each place a
+ * value appears, and its return type has no failing arm, so it refuses
+ * nothing. An entry point that can refuse asks this first and refuses a value
+ * past the budget before projecting it. Every place counts, a leaf as much as
+ * a container, once for each path that reaches it; the walk descends lists,
+ * holes included, and every object `isMap` answers true for, and it stops at
+ * the first place past the budget, so it never visits more than one place
+ * past it. `count` is the walk's own count, which a caller hands in to read
+ * how many places the walk visited.
+ *
+ * The value is one the machine has already checked for a nesting fault, or a
+ * context, which cannot hold one, so this recursion goes no deeper than the
+ * depth limit allows.
+ */
+export function placesPastBudget(
+  value: unknown,
+  isMap: (value: object) => boolean,
+  count: PlaceCount = { visited: 0 },
+): boolean {
+  if (visitPlace(count)) return true;
+  if (value === null || typeof value !== "object") return false;
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      if (placesPastBudget(value[index], isMap, count)) return true;
+    }
+    return false;
+  }
+  if (!isMap(value)) return false;
+  for (const member of Object.values(value)) {
+    if (placesPastBudget(member, isMap, count)) return true;
+  }
+  return false;
 }
 
 /**

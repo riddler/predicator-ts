@@ -545,6 +545,13 @@ export function fromHost(value: unknown): Normalization {
  * `fromHost` refuses one a host hands in and a store write refuses a value
  * with a nesting fault.
  *
+ * This function also counts no places, and builds a copy at each place a
+ * value appears, so a value a program built out of a list it holds twice
+ * costs work that doubles with each such level. The entry points bound that
+ * instead: each counts the places of the value it is about to project, with
+ * `placesPastBudget` in `./nesting.ts`, and refuses one past the place budget
+ * as `"place_budget_exceeded"` rather than projecting it.
+ *
  * A host that calls this function on a structure it built itself, rather than
  * on a value this package answered, is outside both and holds the shape of
  * what it passes.

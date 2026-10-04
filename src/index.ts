@@ -12,8 +12,9 @@
 
 import { readDuration } from "./cast.js";
 import { type CompileResult, compile, compileProgram } from "./compile.js";
+import type { Context } from "./context.js";
 import type { Ast } from "./decompile.js";
-import type { ParseError } from "./errors.js";
+import type { EvaluationError, ParseError } from "./errors.js";
 import {
   type EvaluateOptions,
   type EvaluateResult,
@@ -24,6 +25,7 @@ import {
   isPlainMap,
   nestingError,
   projectContext,
+  projectionFault,
 } from "./evaluator.js";
 import type { Program } from "./instructions.js";
 import { tokenize } from "./lexer.js";
@@ -153,6 +155,13 @@ function programOf(
  * with its own reason token. A function the host registers under `functions`
  * that throws is answered the same way.
  *
+ * So is a result with more places than the place budget this package
+ * declares, refused as `"place_budget_exceeded"` before it is projected. A
+ * place is a position a value sits at, counted once for each path that
+ * reaches it, and the projection builds a copy at each place, so a result a
+ * program built out of a list it holds twice is refused rather than projected
+ * at a cost that doubles with each such level.
+ *
  * Outside that promise is host code that throws while the evaluation reads
  * what the host handed it: a getter or a proxy trap on a value the evaluation
  * walks, such as the context, and the `now` option when a relative date reads
@@ -171,7 +180,10 @@ export function evaluate(
   const resolved = programOf(program, compile);
   if (!resolved.ok) return { ok: false, error: resolved.error };
   const outcome = evaluateToValue(resolved.program, context, options);
-  return outcome.ok ? { ok: true, value: toHost(outcome.value) } : outcome;
+  if (!outcome.ok) return outcome;
+  const tooMany = projectionFault(outcome.value, "the result");
+  if (tooMany !== undefined) return { ok: false, error: tooMany };
+  return { ok: true, value: toHost(outcome.value) };
 }
 
 /**
@@ -213,6 +225,11 @@ export function evaluate(
  * context the value boundary refused, which is answered before any program
  * runs. A store that would nest the context past the depth limit fails at its
  * own instruction, so the context handed back is the one before it.
+ *
+ * A context with more places than the place budget this package declares is
+ * not projected. On the successful arm the run is refused as
+ * `"place_budget_exceeded"`, with no context; on the failing arm the run's own
+ * error stays the answer, and the context is left off.
  */
 export function execute(
   program: Program | string,
@@ -222,9 +239,12 @@ export function execute(
   const resolved = programOf(program, compileProgram);
   if (!resolved.ok) return { ok: false, error: resolved.error };
   const outcome = executeToContext(resolved.program, context, options);
-  if (outcome.ok) return { ok: true, context: projectContext(outcome.context) };
-  if (outcome.context === undefined) return { ok: false, error: outcome.error };
-  return { ok: false, error: outcome.error, context: projectContext(outcome.context) };
+  if (outcome.ok) {
+    const tooMany = contextFault(outcome.context);
+    if (tooMany !== undefined) return { ok: false, error: tooMany };
+    return { ok: true, context: projectContext(outcome.context) };
+  }
+  return { ok: false, error: outcome.error, ...contextWithin(outcome.context) };
 }
 
 /**
@@ -252,7 +272,10 @@ export function execute(
  * The failing arm is `execute`'s - the error and the context the program got
  * as far as binding, with no value at all, and with no context either when the
  * source did not compile. A value nested past the depth limit is refused onto
- * that arm, with the context it ran to, rather than handed back.
+ * that arm, with the context it ran to, rather than handed back, and so is a
+ * value with more places than the place budget, as `"place_budget_exceeded"`.
+ * A context past that budget is treated as at `execute`: refused with no
+ * context on the successful arm, and left off the failing arm.
  */
 export function executeValue(
   program: Program | string,
@@ -268,13 +291,40 @@ export function executeValue(
       return {
         ok: false,
         error: nestingError(fault, "the value"),
-        context: projectContext(outcome.context),
+        ...contextWithin(outcome.context),
       };
     }
+    const valueTooMany = projectionFault(outcome.value, "the value");
+    if (valueTooMany !== undefined) {
+      return { ok: false, error: valueTooMany, ...contextWithin(outcome.context) };
+    }
+    const contextTooMany = contextFault(outcome.context);
+    if (contextTooMany !== undefined) return { ok: false, error: contextTooMany };
     return { ok: true, value: toHost(outcome.value), context: projectContext(outcome.context) };
   }
-  if (outcome.context === undefined) return { ok: false, error: outcome.error };
-  return { ok: false, error: outcome.error, context: projectContext(outcome.context) };
+  return { ok: false, error: outcome.error, ...contextWithin(outcome.context) };
+}
+
+/**
+ * The failure answered for a context whose projection would pass the place
+ * budget, or nothing when it would not. The context is projected as the map
+ * of its roots, so that map is what is counted.
+ */
+function contextFault(context: Context): EvaluationError | undefined {
+  return projectionFault(context.asMap(), "the context");
+}
+
+/**
+ * The context a failing arm carries: the projected context, or none when
+ * there is no context to give or its projection would pass the place budget.
+ * On a failing arm the run's own error stays the answer, so a context past the
+ * budget is left off rather than answered in the error's place.
+ */
+function contextWithin(context: Context | undefined): {
+  context?: ReturnType<typeof projectContext>;
+} {
+  if (context === undefined || contextFault(context) !== undefined) return {};
+  return { context: projectContext(context) };
 }
 
 /**
