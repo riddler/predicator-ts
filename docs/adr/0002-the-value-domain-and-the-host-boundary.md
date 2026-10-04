@@ -4314,3 +4314,61 @@ walk reached an unbound name against such a member, a boolean where it got an
 `unbound_variable` error. An ordering at the top level over the null value
 answers as before. No exported function's signature changes, no reason token
 is added, and no opcode changes.
+
+## Note: every singular sentence on the subpath's entry point and the `tagged` option reads as the second-entry-point note reads two (2026-10-04)
+
+The note above headed "the subpath's second entry point, the statement run
+that answers the encoding" quotes two sentences of this record that speak of
+the `./tagged` subpath's entry point in the singular, and says each stays true
+of the `tagged` option now that the subpath has two entry points: `tagged` is
+accepted at `evaluateTagged` and at no other function on either entry point,
+because `executeTagged` takes `EvaluateOptions`, which has no `tagged` member.
+This note says that reading covers every sentence of this record that names
+the subpath's entry point in the singular when it speaks of the `tagged`
+option, not only the two that note quotes. It decides nothing, no decision
+changes, and it removes no line. Code is cited as read at `f125888`.
+
+**The sentences it covers.** Beside the two that note quotes, these name the
+subpath's entry point in the singular. They were found by a scan of the record
+with its whitespace collapsed, for the singular "entry point" beside the
+subpath or `tagged`, and each was then read:
+
+- the Decision's section on evaluation options: "`tagged` is accepted by the
+  `./tagged` subpath's entry point and by no other";
+- the Typespecs section's doc comment on the `tagged` member: "Accepted by the
+  `./tagged` subpath's entry point only";
+- the note headed "which entry point accepts the `tagged` option": "the reading
+  that the subpath's entry point takes the option", and "The option is accepted
+  by the `./tagged` subpath's entry point only";
+- the amendment headed "two options types, and `tagged` on the subpath's
+  only": "a doc comment restricting it to the `./tagged` subpath's entry
+  point", "This record already rules that `tagged` is accepted by the
+  `./tagged` subpath's entry point and by no other", "The subpath's entry point
+  takes that type", and its typespec's comment "The `./tagged` subpath's entry
+  point takes this type";
+- the amendment headed "the three questions the statement-mode note holds":
+  "when the `tagged` option was ruled onto the `./tagged` subpath's entry point
+  alone";
+- the note headed "the two options types and the options table, read
+  exactly": "The `tagged` row is accepted by the `./tagged` subpath's entry
+  point alone", and "The Consequences section records no cost for accepting
+  `tagged` at the `./tagged` subpath's entry point alone".
+
+Each of these is about `evaluateTagged`, and each stays true of the option as
+the note above reads its two: `evaluateTagged` in `src/tagged.ts` is the one
+function that takes `TaggedEvaluateOptions`, and `executeTagged` takes
+`EvaluateOptions`. Where a sentence says the subpath's entry point takes a
+type, it is `evaluateTagged` that takes `TaggedEvaluateOptions`.
+
+**Two singular sentences that speak of the encoding, not the option.** The
+amendment on the three questions also says of the corpus's tagged encoding
+that "this record places it on the `./tagged` subpath's entry point alone".
+Both of the subpath's entry points now answer that encoding, `evaluateTagged`
+when it is asked for it and `executeTagged` always, and the main entry point
+answers it at none of its own; the sentence reads as placing the encoding
+on the subpath and off the main entry point, and the note above records that
+the change that sentence left open has been made. The amendment on the
+out-of-range rule's sites says that "An encode refusal reached through the
+tagged evaluation entry point does carry the category". `executeTagged` wraps
+the encoder's reason into an `EvaluationError` before it answers, as
+`evaluateTagged` does, so that sentence holds of both.
