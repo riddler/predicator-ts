@@ -254,31 +254,30 @@ const domCalledGlobals = ["alert", "XMLHttpRequest"];
 const nodeCalledGlobals = ["setImmediate", "clearImmediate"];
 
 // A global is only a global when it is USED as one: a property access or an
-// index with no space in it, which is what the formatter produces and what
-// prose never does. Allowing whitespace around the dot was tried and
-// reverted - it made the English sentence "a sliding window. Documentation of
-// ..." match, which is the same prose-fires-the-check defect this stage exists
-// to retire.
+// index, which is what the formatter produces. Space may come BEFORE the dot,
+// an optional-chaining dot counts as a dot, and the character after the dot
+// may be a dollar sign, because each of those still reads the global. Space
+// AFTER the dot does not count. Allowing it was tried and reverted - it made
+// the English sentence "a sliding window. Documentation of ..." match, which
+// is the same prose-fires-the-check defect this stage exists to retire.
 //
 // And a global is not a MEMBER of that name. `process` and `global` are
 // ordinary words an evaluator uses: a scope object carries a global frame, an
 // environment record carries a process field. The lookbehind is what tells
 // `process.env` (a global) from `env.process.id` (a member), and it applies
 // the principle already stated above for `location`, `Node` and `Element` -
-// leave out what is plausible in a compiler - to the names added later.
-const usedAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternation})(?:\.\w|\[)`;
-
-// The DOM rule takes the same lookbehind, so an options object with a field
-// named for a window or a document stays quiet, plus one alternative the Node
-// rule does not have: a name written as a member of `globalThis`, or of a
-// `self` that is not itself a member, still fires, through a dot or an
-// optional-chaining dot and with space allowed before either, because that
-// member is the browser global itself. Its anchor is wider than the Node
-// rule's in the same three ways: an optional-chaining dot counts as a dot,
-// the character after the dot may be a dollar sign, and space may come BEFORE
-// the dot. Space AFTER the dot still does not count, which is what keeps the
-// sliding-window sentence above quiet.
-const globalObjectMember = String.raw`(?<=(?:\bglobalThis|(?<![.\w$])self)\s*\??\.)`;
+// leave out what is plausible in a compiler - to the names added later. An
+// options object with a field named for a window or a document stays quiet
+// the same way.
+//
+// One member is the global itself: a name written as a member of the global
+// object. So the name still fires after `globalThis`, or after a `self` that
+// is not itself a member, or after either of those two wrapped in
+// parentheses that do not close a call's arguments, through a dot or an
+// optional-chaining dot with space allowed before either. The DOM rule and
+// the Node rule take the same pattern.
+const globalObject = String.raw`(?:\bglobalThis|(?<![.\w$])self|(?<![\w$.)\]])\(\s*(?:globalThis|self)\s*\))`;
+const globalObjectMember = String.raw`(?<=${globalObject}\s*\??\.)`;
 const usedAsBareOrGlobalObjectMember = (alternation) =>
   String.raw`(?:(?<![.\w$])|${globalObjectMember})(?:${alternation})(?:\s*\??\.[\w$]|\s*\?\.\[|\[)`;
 
@@ -307,7 +306,7 @@ const rules = [
   },
   {
     id: "node-global",
-    pattern: new RegExp(usedAsBareGlobal(nodeGlobalAlternation), "g"),
+    pattern: new RegExp(usedAsBareOrGlobalObjectMember(nodeGlobalAlternation), "g"),
     why: "shipped source may not touch a Node global; it has to run where there is no Node",
     documentedBy:
       "This module touches no Node global, so it never reads the process environment and never builds a Buffer.",
