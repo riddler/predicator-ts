@@ -125,11 +125,31 @@ function outOfRange(node: Node): ParseError {
   return new ParseError("number_out_of_range", NUMBER_OUT_OF_RANGE, node.position, node.span);
 }
 
+/**
+ * The words a refusal's noun starts with that are spelled with a vowel and
+ * said with a consonant, as "unary" is said "yoo-nary".
+ */
+const CONSONANT_SOUNDS: readonly string[] = ["unary"];
+
+/**
+ * A noun with its indefinite article, as a refusal's message writes it.
+ *
+ * The article follows how the noun is said, not how it is spelled: "an
+ * arithmetic expression" and "an undefined", but "a unary expression" and "a
+ * list". The nouns are this file's own expression kinds and the domain's type
+ * names, so the vowel test and its one listed exception cover every one.
+ */
+function withArticle(noun: string): string {
+  const vowelSound =
+    /^[aeiou]/.test(noun) && !CONSONANT_SOUNDS.some((word) => noun.startsWith(word));
+  return `${vowelSound ? "an" : "a"} ${noun}`;
+}
+
 /** Refuses a node that names no location, saying what kind of expression it is. */
 function notAssignable(expressionType: string, value: Value): LocationError {
   return new LocationError(
     "not_assignable",
-    `a location names a variable, a property or an index, not a ${expressionType}`,
+    `a location names a variable, a property or an index, not ${withArticle(expressionType)}`,
     { expressionType, value },
   );
 }
@@ -233,7 +253,7 @@ function bracketKey(
       ok: false,
       error: new LocationError(
         "invalid_key",
-        `a bracket key is a string or an integer, not a ${keyType}`,
+        `a bracket key is a string or an integer, not ${withArticle(keyType)}`,
         { keyType, keyValue: bound },
       ),
     };

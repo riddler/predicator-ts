@@ -367,6 +367,41 @@ describe("what the transcript cannot pin", () => {
     }
   });
 
+  // Sabotage, through scripts/sabotage.mjs: the article helper made to
+  // answer "a" for every noun turns this red, and so does the helper made to
+  // answer "an" for every noun spelled with a vowel. It was run and restored.
+  it("writes each refusal's noun with the article it is said with", () => {
+    const refused = "a location names a variable, a property or an index, not";
+    for (const [source, noun] of [
+      ["1", "a literal value"],
+      ["'York'", "a string literal"],
+      ["len(holds)", "a function call"],
+      ["patron.fines + 1", "an arithmetic expression"],
+      ["1 < 2", "a comparison expression"],
+      ["NOT true", "a logical expression"],
+      ["-fines", "a unary expression"],
+      ["[1, 2]", "a list literal"],
+    ] as const) {
+      const located = contextLocation(source);
+      expect(located.ok, source).toBe(false);
+      if (!located.ok) expect(located.error.message, source).toBe(`${refused} ${noun}`);
+    }
+    const bracket = "a bracket key is a string or an integer, not";
+    for (const [label, key, noun] of [
+      ["the absence", Undefined, "an undefined"],
+      ["a float", float(1.5), "a float"],
+      ["a boolean", true, "a boolean"],
+      ["a list", ["atlas"], "a list"],
+      ["a map", { shelf: "A" }, "a map"],
+      ["a duration", new Duration({ weeks: 2 }), "a map"],
+      ["a host Date", new Date(0), "a datetime"],
+    ] as const) {
+      const located = contextLocation("holds[k]", { k: key, holds: {} });
+      expect(located.ok, label).toBe(false);
+      if (!located.ok) expect(located.error.message, label).toBe(`${bracket} ${noun}`);
+    }
+  });
+
   // Sabotage, through scripts/sabotage.mjs: the depth guard loosened past
   // the limit turns this red. It was run and restored.
   it("refuses a write that would nest the context past the depth limit, as the store does", () => {
