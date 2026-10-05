@@ -78,12 +78,13 @@ failing arm of the result rather than as a throw; `ok` tells the two apart.
   - [Rendering a rule back](#rendering-a-rule-back): show an authored rule back to its author in a normalized form.
   - [Statement programs](#statement-programs): run a short script that assigns into its context.
   - [Writing a location](#writing-a-location): write an assignment's location into your own data without running a program.
-  - [Host functions](#host-functions): let a rule call functions your host supplies.
+  - [How to add host functions](https://github.com/riddler/predicator-ts/blob/main/docs/guides/how-to-add-host-functions.md): let a rule call a function your application supplies, and handle a call that fails.
 - Look up
   - The API reference: every exported function and type, built into `docs/api/` by `mise exec -- pnpm run docs` in a clone of this repository.
   - [The entry points](#the-entry-points): the two import paths and what each one exports.
   - [The value domain](#the-value-domain): each value type and its shape in TypeScript.
   - [Evaluation options](#evaluation-options): the options an evaluation takes, and their defaults.
+  - [Host functions](#host-functions): how a host function's arguments and answer cross into the language's values, and how its name shadows a builtin.
   - [The tagged subpath](#the-tagged-subpath): the encoding that keeps what a JSON round trip loses.
   - [The changelog](https://github.com/riddler/predicator-ts/blob/main/CHANGELOG.md): what changed in each version.
 - Understand
