@@ -87,4 +87,4 @@ For how arguments and answers cross into the language's values, and how a
 host function's name shadows a builtin of the same name, see
 [Host functions](https://github.com/riddler/predicator-ts/blob/main/README.md#host-functions)
 and
-[The value domain](https://github.com/riddler/predicator-ts/blob/main/README.md#the-value-domain).
+[The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md).

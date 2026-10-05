@@ -93,4 +93,4 @@ and read it back with `decodeTagged`, both from `@riddler/predicator/tagged`
 For what a failed evaluation carries and the options `evaluate` takes, see
 [Evaluating a rule](https://github.com/riddler/predicator-ts/blob/main/README.md#evaluating-a-rule)
 and
-[Evaluation options](https://github.com/riddler/predicator-ts/blob/main/README.md#evaluation-options).
+[The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md).
