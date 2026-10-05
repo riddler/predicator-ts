@@ -1,0 +1,9 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/index.ts", "src/tagged.ts"],
+  "tsconfig": "tsconfig.src.json",
+  "readme": "README.md",
+  "out": "docs/api",
+  "treatWarningsAsErrors": true,
+  "intentionallyNotExported": ["HostContext"]
+}

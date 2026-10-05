@@ -1060,6 +1060,8 @@ and is mirrored here in a later release. The records under `docs/adr/` are what
 this package decided for itself: what kind of thing it is, the value domain and
 the host boundary, the conformance apparatus, and the compiler surface.
 
+`mise exec -- pnpm run docs` builds the API reference locally, into `docs/api/`.
+
 ## Development
 
 ```bash
