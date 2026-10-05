@@ -18,6 +18,10 @@ dist/
 coverage/
 reports/
 
+# The generated API reference, built by `pnpm run docs` (typedoc.json). It is
+# built locally and checked by the gate, and never committed.
+/docs/api/
+
 # Temporary files, for example, from tests.
 /tmp/
 
