@@ -14,6 +14,21 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.6.1] 2026-10-05
+
+A documentation release, carrying 0.6.0's code unchanged. The README the
+package carries is rewritten as an introduction with a documentation map,
+and the longer how-to and reference text it pointed at is in pages in the
+repository. No source file changes, no answer changes, and no public name is
+added, removed or renamed.
+
+### Changed
+
+- The README opens with what the package is, why it exists, the install line, one basic-usage example and a documentation map grouped by the reader's question (Learn, Do, Look up, Understand), followed by a compatibility section; the earlier sections follow under "Reference, in full", and the examples among them that taught another subject are re-cut around a library loan, with the same checks.
+- Three how-to guides join the repository under `docs/guides/`, linked from the README's map: "How to compile and evaluate a rule", "How to add host functions" and "How to run a statement program".
+- A reference page, "The value domain and evaluation options", joins the repository under `docs/reference/`; the README's two sections on the value domain and on evaluation options become links to it.
+- The API reference for both entry points, the main entry and `./tagged`, is built from a clone with `pnpm run docs`; the README names the command.
+
 ## [0.6.0] 2026-10-04
 
 A minor release. `ProjectedEvaluation` on the `./tagged` subpath names what
