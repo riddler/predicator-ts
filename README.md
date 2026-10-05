@@ -74,6 +74,7 @@ failing arm of the result rather than as a throw; `ok` tells the two apart.
   - [Basic usage](#basic-usage): a rule compiled once and evaluated against two loans.
   - [Compiling a rule](#compiling-a-rule): a rule compiled, run and refused, with each result checked.
 - Do
+  - [How to compile and evaluate a rule](https://github.com/riddler/predicator-ts/blob/main/docs/guides/how-to-compile-and-evaluate-a-rule.md): compile a rule's text, keep the instruction list, and decide the rule for one loan.
   - [Rendering a rule back](#rendering-a-rule-back): show an authored rule back to its author in a normalized form.
   - [Statement programs](#statement-programs): run a short script that assigns into its context.
   - [Writing a location](#writing-a-location): write an assignment's location into your own data without running a program.
