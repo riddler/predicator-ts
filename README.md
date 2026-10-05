@@ -1,21 +1,119 @@
 # @riddler/predicator
 
-A conformant TypeScript sibling of the Predicator expression language.
+The same predicate language in TypeScript, corpus-identical to the Elixir
+evaluator. Predicator is a small, safe expression language a host embeds so
+that a non-programmer can author a condition - may this loan be renewed, is
+this copy overdue - and the host can decide it without running arbitrary code.
+An expression compiles to a flat instruction list that an evaluator runs.
 
-Predicator is a small, safe expression language a host embeds so that a
-non-programmer can author a condition - a feature flag's audience, a signup
-wizard's branch, a rule about whether a credit-card charge needs review - and
-the host can decide it without running arbitrary code. An expression compiles
-to a flat instruction list; an evaluator runs that list against a context and
-answers a value.
+## Why
 
-The reference implementation is
-[predicator-ex](https://github.com/riddler/predicator-ex), written in Elixir.
-This package is the TypeScript sibling: same language, same instruction set,
-same answers, so an expression authored once can be compiled on a server and
-evaluated in a browser or in a React Native app without a round trip.
+A rule a librarian writes - how many times a loan may be renewed, when an
+overdue copy counts as lost - has to be decided in more than one place: on the
+server that keeps the loan, and in the browser or React Native app that shows
+the patron what they may do. Without a shared language each place
+re-implements the rule, and the copies drift until the desk and the app give a
+patron two different answers. With this package the rule is authored once, as
+an expression, and decided the same way everywhere: the same language, the
+same instruction set and the same answers as the reference implementation,
+[predicator-ex](https://github.com/riddler/predicator-ex), held to a shared
+conformance corpus. An expression compiled on a server can be evaluated in a
+browser or an app without a round trip, and an authored rule never runs as
+code.
 
 ## Install
+
+```bash
+pnpm add @riddler/predicator@^0.6.0
+```
+
+The package has no runtime dependencies. The version is named on purpose:
+[Installing, in full](#installing-in-full) says why, and what the package has
+been run on.
+
+## Basic usage
+
+```ts
+import { compile, evaluate } from "@riddler/predicator";
+
+// The branch's renewal rule, as a librarian writes it.
+const rule = "loan.renewals < 2 AND NOT copy.on_hold";
+
+const compiled = compile(rule);
+
+if (!compiled.ok) {
+  throw new Error("a well-formed rule compiles");
+}
+
+// The instruction list is plain data: store it, send it, and run it anywhere.
+const renewable = evaluate(compiled.instructions, {
+  loan: { renewals: 1 },
+  copy: { on_hold: false },
+});
+
+if (!renewable.ok || renewable.value !== true) {
+  throw new Error("a loan renewed once, on a copy nobody holds, may be renewed");
+}
+
+const wanted = evaluate(compiled.instructions, {
+  loan: { renewals: 1 },
+  copy: { on_hold: true },
+});
+
+if (!wanted.ok || wanted.value !== false) {
+  throw new Error("a copy another patron holds may not be renewed");
+}
+```
+
+A rule that does not compile, and an evaluation that fails, come back as the
+failing arm of the result rather than as a throw; `ok` tells the two apart.
+
+## Documentation
+
+- Learn
+  - [Basic usage](#basic-usage): a rule compiled once and evaluated against two loans.
+  - [Compiling a rule](#compiling-a-rule): a rule compiled, run and refused, with each result checked.
+- Do
+  - [Rendering a rule back](#rendering-a-rule-back): show an authored rule back to its author in a normalized form.
+  - [Statement programs](#statement-programs): run a short script that assigns into its context.
+  - [Writing a location](#writing-a-location): write an assignment's location into your own data without running a program.
+  - [Host functions](#host-functions): let a rule call functions your host supplies.
+- Look up
+  - The API reference: every exported function and type, built into `docs/api/` by `mise exec -- pnpm run docs` in a clone of this repository.
+  - [The entry points](#the-entry-points): the two import paths and what each one exports.
+  - [The value domain](#the-value-domain): each value type and its shape in TypeScript.
+  - [Evaluation options](#evaluation-options): the options an evaluation takes, and their defaults.
+  - [The tagged subpath](#the-tagged-subpath): the encoding that keeps what a JSON round trip loses.
+  - [The changelog](https://github.com/riddler/predicator-ts/blob/main/CHANGELOG.md): what changed in each version.
+- Understand
+  - [Conformance](#conformance): what "conformant" means here, and what this build claims.
+  - [The decision records](https://github.com/riddler/predicator-ts/tree/main/docs/adr): what this package decided for itself, and why.
+  - [The language reference](https://github.com/riddler/predicator-ex/blob/main/docs/reference/language.md): the grammar, the operators, the function set, the value space and the refusals, kept with the reference implementation.
+
+## Compatibility
+
+- **Runtimes:** a server runtime, a browser, and React Native's JavaScript
+  engine. Nothing under `src/` imports a Node built-in or touches a DOM, and a
+  gate stage checks that rather than leaving it to review.
+- **Node:** `engines.node` in `package.json` is `>=20`, the floor a
+  consumer's runtime has to clear.
+- **Module formats:** ESM and CommonJS, each with type declarations, for both
+  entry points.
+- **TypeScript resolution:** `node16`, `nodenext` and `bundler` reach both
+  entry points; `node10` reaches the main entry point only, through the
+  top-level `main` and `types`.
+- **Instruction set:** version 6, answered by `isaVersion()`.
+
+[Installing, in full](#installing-in-full) and
+[The entry points](#the-entry-points) below carry the detail, including what
+has been run on React Native's engine and how.
+
+## Reference, in full
+
+The sections below are the package's reference by example. Every TypeScript
+example in them is run by this repository's test suite.
+
+### Installing, in full
 
 **The name carries an earlier generation of this project.**
 `@riddler/predicator` on npm was first a 2019 package, built from
@@ -32,10 +130,6 @@ offers `0.1.0` as a version. No version of that `0.1.x` line is this code.
 It was retired by deprecation rather than removal, because a published
 version can be deprecated but not recalled. A registry is live: read it
 yourself rather than trusting this paragraph's date.
-
-```bash
-pnpm add @riddler/predicator@^0.6.0
-```
 
 The version is named because a bare install resolves to whatever the registry
 offers as `latest` under the name, and nothing but a publish from this
@@ -114,7 +208,7 @@ consumer's runtime has to clear. It is not the toolchain: what builds and
 gates this repository is the one node and the one pnpm `mise.toml` pins, and
 the Development section below is how to provision them.
 
-## The entry points
+### The entry points
 
 ```ts
 import { compile, contextAssign, contextLocation, contextPut, decompile, durationToMilliseconds, evaluate, execute, executeValue, float, isaVersion, parse, parseDuration, toHost } from "@riddler/predicator";
@@ -178,7 +272,7 @@ would not compile fails the gate too. Not caught there: a defect only the
 declaration build would introduce, and a type error only a consumer's
 different compiler options would raise.
 
-### The ISA version
+#### The ISA version
 
 ```ts
 import { isaVersion } from "@riddler/predicator";
@@ -199,7 +293,7 @@ direction - it refuses an opcode that this version of the set has retired,
 with `retired_opcode`. The number here is re-derived from the reference
 implementation's ISA document, not chosen independently.
 
-### Reading a duration
+#### Reading a duration
 
 ```ts
 import { parseDuration } from "@riddler/predicator";
@@ -245,7 +339,7 @@ stands, so one a host built with a fraction contributes an unrounded product,
 and a sum past the largest safe integer is the nearest double rather than the
 exact count. It never throws: an argument that is not an object answers `NaN`.
 
-## Compiling a rule
+### Compiling a rule
 
 `compile` takes the source text of an expression and answers the instruction
 list `evaluate` runs. The operands are this package's own domain values rather
@@ -255,8 +349,8 @@ than the corpus's encoding of them, so what comes back is passed straight to
 ```ts
 import { compile, compileWithSpans, evaluate } from "@riddler/predicator";
 
-// A reviewer authors this rule in a payments console.
-const rule = "amount > 500 AND issuer == 'visa'";
+// A librarian authors this rule in the branch's circulation settings.
+const rule = "days_overdue > 30 AND status == 'checked_out'";
 
 const compiled = compile(rule);
 
@@ -264,17 +358,17 @@ if (!compiled.ok) {
   throw new Error("a well-formed rule compiles");
 }
 
-const held = evaluate(compiled.instructions, { amount: 750, issuer: "visa" });
+const lost = evaluate(compiled.instructions, { days_overdue: 45, status: "checked_out" });
 
-if (!held.ok || held.value !== true) {
-  throw new Error("a large charge on a visa card matches the rule");
+if (!lost.ok || lost.value !== true) {
+  throw new Error("a copy still out a month and a half past due matches the rule");
 }
 
-// A signup wizard's editor hands over a rule the author is still typing, so
+// A circulation editor hands over a rule the librarian is still typing, so
 // the failing arm is routine rather than exceptional. It is a value: the
 // reason names the family, the message is the one the reference gives, and the
 // span is what an editor underlines.
-const draft = "variant == 'B' and steps_completed >= ";
+const draft = "status == 'checked_out' and renewals >= ";
 
 const refused = compile(draft);
 
@@ -286,7 +380,7 @@ if (refused.error.reason !== "expected_primary") {
   throw new Error("the refusal names the grammar family it belongs to");
 }
 
-if (refused.error.position.column !== 39) {
+if (refused.error.position.column !== 41) {
   throw new Error("the refusal points at the place the source ran out");
 }
 
@@ -331,16 +425,16 @@ there, and an expression's source runs as a program of one statement.
 ```ts
 import { evaluate, execute } from "@riddler/predicator";
 
-// The payments console's rule, run straight from its text. What the string
+// The circulation rule, run straight from its text. What the string
 // form skips is the storage step, not the compilation: the same compiler runs
 // underneath, under the same context and the same options.
-const held = evaluate("amount > 500 AND issuer == 'visa'", {
-  amount: 750,
-  issuer: "visa",
+const lost = evaluate("days_overdue > 30 AND status == 'checked_out'", {
+  days_overdue: 45,
+  status: "checked_out",
 });
 
-if (!held.ok || held.value !== true) {
-  throw new Error("a large charge on a visa card matches the rule");
+if (!lost.ok || lost.value !== true) {
+  throw new Error("a copy still out a month and a half past due matches the rule");
 }
 
 // A source that does not compile comes back on the failing arm these three
@@ -377,7 +471,7 @@ caller of the three, including one that never passes a string. A caller that
 wants the narrower set back narrows on `error.type`, which is what the example
 above does.
 
-## Rendering a rule back
+### Rendering a rule back
 
 `decompile` writes an expression back out as source text, and `parse` is how
 you get it something to write: it reads the source into the syntax tree the
@@ -392,9 +486,9 @@ uppercase whatever case the author typed.
 ```ts
 import { compile, decompile, parse } from "@riddler/predicator";
 
-// A signup wizard's editor holds the rule its author typed, lowercase `and`
+// A circulation editor holds the rule the librarian typed, lowercase `and`
 // and all.
-const authored = "variant == 'B' and steps_completed >= 3";
+const authored = "status == 'checked_out' and renewals >= 3";
 
 const read = parse(authored);
 
@@ -407,14 +501,14 @@ if (!read.ok) {
 // that precedence does not need.
 const written = decompile(read.ast);
 
-if (!written.ok || written.source !== "variant == 'B' AND steps_completed >= 3") {
+if (!written.ok || written.source !== "status == 'checked_out' AND renewals >= 3") {
   throw new Error("the defaults are minimal parentheses and normal spacing");
 }
 
 // The editor offers a view that makes every grouping visible.
 const grouped = decompile(read.ast, { parentheses: "explicit" });
 
-if (!grouped.ok || grouped.source !== "((variant == 'B') AND (steps_completed >= 3))") {
+if (!grouped.ok || grouped.source !== "((status == 'checked_out') AND (renewals >= 3))") {
   throw new Error("explicit parentheses wrap every operator application");
 }
 
@@ -422,7 +516,7 @@ if (!grouped.ok || grouped.source !== "((variant == 'B') AND (steps_completed >=
 // inside a list, an object or a call stay a fixed `", "`.
 const tight = decompile(read.ast, { spacing: "compact" });
 
-if (!tight.ok || tight.source !== "variant=='B'ANDsteps_completed>=3") {
+if (!tight.ok || tight.source !== "status=='checked_out'ANDrenewals>=3") {
   throw new Error("compact spacing removes the spaces around the operators");
 }
 
@@ -442,7 +536,7 @@ if (JSON.stringify(first.instructions) !== JSON.stringify(second.instructions)) 
 // `parse` refuses every source whose scan or grammar fails, on the same arm
 // and with the refusal `compile` answers for that source - there is no second
 // error shape to handle.
-const draft = parse("variant == 'B' and steps_completed >= ");
+const draft = parse("status == 'checked_out' and renewals >= ");
 
 if (draft.ok) {
   throw new Error("a rule that stops mid-comparison does not parse");
@@ -513,7 +607,7 @@ datetime value carries the precision it was written with, and this package's
 carries a microsecond count, so the digit count is not in the tree to render.
 The instant is the same, and the rendering compiles back to the same program.
 
-## Evaluating a rule
+### Evaluating a rule
 
 `evaluate` runs an instruction list in expression mode: the result is the value
 on top of the stack when the program halts.
@@ -521,34 +615,32 @@ on top of the stack when the program halts.
 ```ts
 import { evaluate } from "@riddler/predicator";
 
-// The instruction list for: charge.amount > 5000 and not account.verified
-const heldForReview = [
-  ["load", "charge"],
-  ["access", "amount"],
-  ["lit", 5000],
+// The instruction list for: patron.fines_owed > 10 and not patron.staff
+const blockedFromBorrowing = [
+  ["load", "patron"],
+  ["access", "fines_owed"],
+  ["lit", 10],
   ["compare", "GT"],
   ["jump_if_falsy_or_pop", 4],
-  ["load", "account"],
-  ["access", "verified"],
+  ["load", "patron"],
+  ["access", "staff"],
   ["unary_bang"],
 ];
 
-const decision = evaluate(heldForReview, {
-  charge: { amount: 7300, currency: "USD" },
-  account: { verified: false },
+const decision = evaluate(blockedFromBorrowing, {
+  patron: { fines_owed: 12, staff: false },
 });
 
 if (!decision.ok || decision.value !== true) {
-  throw new Error("a large charge on an unverified account is held for review");
+  throw new Error("a patron owing more than ten in fines is blocked from borrowing");
 }
 
-const settled = evaluate(heldForReview, {
-  charge: { amount: 7300, currency: "USD" },
-  account: { verified: true },
+const staff = evaluate(blockedFromBorrowing, {
+  patron: { fines_owed: 12, staff: true },
 });
 
-if (!settled.ok || settled.value !== false) {
-  throw new Error("a verified account is not held");
+if (!staff.ok || staff.value !== false) {
+  throw new Error("a member of staff is not blocked");
 }
 ```
 
@@ -574,7 +666,7 @@ comparison or a membership test whose operand is nested past the limit, a store
 that would nest the context past it, a value handed to the `JSON.stringify`
 builtin nested past it, and a result nested past it are each refused at that
 point rather than walked or handed over. A value reached by two
-paths without a cycle - one card object under two keys, say - is not refused:
+paths without a cycle - one copy object under two keys, say - is not refused:
 it is normalized at each place it appears, as a copy of its own. Because that
 copy grows with the paths rather than with the objects, the places are counted,
 once for each path that reaches them, and a context of more than a million
@@ -584,10 +676,10 @@ the context itself and every member of every list and map under it.
 ```ts
 import { evaluate } from "@riddler/predicator";
 
-const cardholder: Record<string, unknown> = { name: "Ada" };
-cardholder.card = { brand: "visa", cardholder };
+const patron: Record<string, unknown> = { name: "Ada" };
+patron.loan = { copy: "atlas", patron };
 
-const refused = evaluate([["lit", true]], { cardholder });
+const refused = evaluate([["lit", true]], { patron });
 
 if (refused.ok || refused.error.reason !== "cyclic_value") {
   throw new Error("a context that contains itself is refused rather than raised");
@@ -606,7 +698,7 @@ wants a result rather than a throw, wraps the call.
 ```ts
 import { evaluate } from "@riddler/predicator";
 
-const missing = evaluate([["load", "charge"], ["access", "amount"]], {});
+const missing = evaluate([["load", "loan"], ["access", "due"]], {});
 
 if (missing.ok || missing.error.reason !== "unbound_variable") {
   throw new Error("a load of a root the context did not bind is reported");
@@ -618,7 +710,7 @@ policy a load of an unbound root pushes the absence and execution continues,
 and the error above is the halt rewriting an absence *result* that an executed
 unbound load put there.
 
-## Statement programs
+### Statement programs
 
 The same instruction list runs in either mode, because a program is a flat list
 with no header: what differs is the entry point and what comes back. `execute`
@@ -628,28 +720,28 @@ last expression statement's value alongside that context.
 ```ts
 import { executeValue } from "@riddler/predicator";
 
-// variant = if visitor.bucket < 50 { "treatment" } else { "control" }; variant
-const assignVariant = [
-  ["load", "visitor"],
-  ["access", "bucket"],
-  ["lit", 50],
+// decision = if loan.renewals < 2 { "renewed" } else { "refused" }; decision
+const decideRenewal = [
+  ["load", "loan"],
+  ["access", "renewals"],
+  ["lit", 2],
   ["compare", "LT"],
   ["pop_jump_if_falsy", 5],
-  ["lit", "variant"],
-  ["lit", "treatment"],
+  ["lit", "decision"],
+  ["lit", "renewed"],
   ["store", 1],
   ["jump", 4],
-  ["lit", "variant"],
-  ["lit", "control"],
+  ["lit", "decision"],
+  ["lit", "refused"],
   ["store", 1],
-  ["load", "variant"],
+  ["load", "decision"],
   ["pop"],
 ];
 
-const run = executeValue(assignVariant, { visitor: { bucket: 12 } });
+const run = executeValue(decideRenewal, { loan: { renewals: 1 } });
 
-if (!run.ok || run.value !== "treatment" || run.context.variant !== "treatment") {
-  throw new Error("a visitor in the lower half of the buckets gets the treatment");
+if (!run.ok || run.value !== "renewed" || run.context.decision !== "renewed") {
+  throw new Error("a loan renewed once may be renewed again");
 }
 ```
 
@@ -663,8 +755,8 @@ opens no scope of its own.
 ```ts
 import { compileProgram, compileProgramWithSpans, executeValue } from "@riddler/predicator";
 
-// A signup wizard's step script, as an author writes it in the editor.
-const script = "if visitor.bucket < 50 { variant = 'treatment' } else { variant = 'control' }; variant";
+// A branch's renewal script, as a librarian writes it in the editor.
+const script = "if loan.renewals < 2 { decision = 'renewed' } else { decision = 'refused' }; decision";
 
 const compiled = compileProgram(script);
 
@@ -672,16 +764,16 @@ if (!compiled.ok) {
   throw new Error("a well-formed script compiles");
 }
 
-const run = executeValue(compiled.instructions, { visitor: { bucket: 12 } });
+const run = executeValue(compiled.instructions, { loan: { renewals: 1 } });
 
-if (!run.ok || run.value !== "treatment" || run.context.variant !== "treatment") {
+if (!run.ok || run.value !== "renewed" || run.context.decision !== "renewed") {
   throw new Error("the compiled script runs as the hand-written list above does");
 }
 
 // A refusal is a value here as it is at `compile`, and the statement grammar
 // brings reasons of its own: a left side that is not a location, a block
 // with no opening brace, and an `else` with no `if` before it.
-const misplaced = compileProgram("plan.trial + 1 = 14");
+const misplaced = compileProgram("loan.period + 1 = 14");
 
 if (misplaced.ok || misplaced.error.reason !== "unassignable_location") {
   throw new Error("only a name, a property or an index can be assigned");
@@ -691,10 +783,10 @@ if (misplaced.ok || misplaced.error.reason !== "unassignable_location") {
 // where the instruction ending each statement spans that whole statement,
 // and a second table keyed by each `store`, with one span per segment of the
 // location it writes. `compileProgramWithPositions` carries points instead.
-const located = compileProgramWithSpans("plan.trial = 14");
+const located = compileProgramWithSpans("loan.period = 14");
 
 if (!located.ok || located.segmentSpans.get(3)?.length !== 2) {
-  throw new Error("a store into plan.trial writes a location of two segments");
+  throw new Error("a store into loan.period writes a location of two segments");
 }
 ```
 
@@ -710,7 +802,7 @@ any program runs. And `executeValue` answers the absence both when the program
 had no expression statement and when the last one's own value was an absence,
 which the result does not distinguish.
 
-## Writing a location
+### Writing a location
 
 A host that keeps its own data - a statechart's datamodel, say - writes an
 assignment's location into it without running a program. `contextLocation`
@@ -774,7 +866,7 @@ answers the `EvaluationError` that boundary answers.
 details each one carries, and the places this surface declares it differs from
 the reference.
 
-## The value domain
+### The value domain
 
 `docs/adr/0002-the-value-domain-and-the-host-boundary.md` is the record; the
 members are the ones predicator-ex's ISA document names, and a value type this
@@ -834,7 +926,7 @@ engine's own error there rather than coming back as a refusal. It takes a
 float's number from the field the class's `instanceof` test checked rather
 than from the instance's `valueOf`.
 
-## Evaluation options
+### Evaluation options
 
 `EvaluateOptions` in `src/evaluator.ts` is the declaration; what each option
 does is below. None of them adds an opcode or changes the wire format: the
@@ -873,7 +965,7 @@ entry point rather than refused: the same list, context and options answer
 byte-identically with the member present and with it removed, and no warning is
 raised.
 
-## Host functions
+### Host functions
 
 A host supplies functions by name, and one arrives with its arguments already
 normalized into the domain and has its answer normalized on the way back.
@@ -883,20 +975,20 @@ a builtin of the same name rather than merging with it.
 ```ts
 import { evaluate } from "@riddler/predicator";
 
-const issuerAllowed = [
-  ["load", "charge"],
-  ["access", "issuer_country"],
-  ["call", "issuer_allowed", 1],
+const branchLends = [
+  ["load", "copy"],
+  ["access", "branch"],
+  ["call", "branch_lends", 1],
 ];
 
 const answer = evaluate(
-  issuerAllowed,
-  { charge: { issuer_country: "US" } },
-  { functions: { issuer_allowed: (args) => args[0] === "US" } },
+  branchLends,
+  { copy: { branch: "central" } },
+  { functions: { branch_lends: (args) => args[0] === "central" } },
 );
 
 if (!answer.ok || answer.value !== true) {
-  throw new Error("the host decides which issuing countries it takes");
+  throw new Error("the host decides which branches lend their copies");
 }
 ```
 
@@ -907,18 +999,18 @@ ones case by case. No case in the corpus calls `Date.now` or `Math.random`,
 whose answers depend on the `now` and `random` options above rather than on
 their arguments.
 
-## The tagged subpath
+### The tagged subpath
 
 ```ts
 import { evaluateTagged } from "@riddler/predicator/tagged";
 
-const signedUpAt = evaluateTagged(
-  [["load", "signed_up_at"]],
-  { signed_up_at: new Date("2026-03-01T09:30:00Z") },
+const borrowedAt = evaluateTagged(
+  [["load", "borrowed_at"]],
+  { borrowed_at: new Date("2026-03-01T09:30:00Z") },
   { tagged: true },
 );
 
-if (!signedUpAt.ok || signedUpAt.value !== '{"$type":"datetime","value":"2026-03-01T09:30:00Z"}') {
+if (!borrowedAt.ok || borrowedAt.value !== '{"$type":"datetime","value":"2026-03-01T09:30:00Z"}') {
   throw new Error("asked for the encoding, a datetime result comes back as its tag");
 }
 ```
@@ -981,7 +1073,7 @@ format: predicator-ex's `conformance/README.md` specifies it, it is revised by
 regenerating the corpus, and offering a codec for it here does not make it part
 of what conformance means.
 
-## Conformance
+### Conformance
 
 "Conformant" is not a claim, it is a corpus. The Predicator family shares one
 language-neutral conformance corpus - cases, their expected results, and the
@@ -1052,16 +1144,6 @@ fresh run in which each recorded entry still passes, and the completeness rule
 behind a claim. The full gate, `mise exec -- pnpm run gate`, runs that suite
 and the hash check together.
 
-## Documentation
-
-The language reference - the grammar, the operators, the function set, the
-value space and the refusals - lives with the reference implementation for now
-and is mirrored here in a later release. The records under `docs/adr/` are what
-this package decided for itself: what kind of thing it is, the value domain and
-the host boundary, the conformance apparatus, and the compiler surface.
-
-`mise exec -- pnpm run docs` builds the API reference locally, into `docs/api/`.
-
 ## Development
 
 ```bash
@@ -1078,7 +1160,7 @@ rather than duplicating the versions into the workflow. The pnpm version is the
 one exact version written in two places: `mise.toml` pins it for `mise install`
 and `package.json`'s `packageManager` pins it for corepack. Nothing checks that
 the two agree, so a bump has to move both. `engines.node` in `package.json` is
-not a pin of the toolchain either; the Install section says what it is.
+not a pin of the toolchain either; the Compatibility section says what it is.
 
 ## License
 
