@@ -83,8 +83,7 @@ failing arm of the result rather than as a throw; `ok` tells the two apart.
   - The API reference: every exported function and type, built into `docs/api/` by `mise exec -- pnpm run docs` in a clone of this repository.
   - [The entry points](#the-entry-points): the two import paths and what each one exports.
   - [Statement programs](#statement-programs): what a program's statements can be, what `execute` and `executeValue` answer, and what a failing execution hands back.
-  - [The value domain](#the-value-domain): each value type and its shape in TypeScript.
-  - [Evaluation options](#evaluation-options): the options an evaluation takes, and their defaults.
+  - [The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md): each value type and its shape in TypeScript, what crosses the host boundary and what it refuses, and every option an evaluation takes with its default.
   - [Host functions](#host-functions): how a host function's arguments and answer cross into the language's values, and how its name shadows a builtin.
   - [The tagged subpath](#the-tagged-subpath): the encoding that keeps what a JSON round trip loses.
   - [The changelog](https://github.com/riddler/predicator-ts/blob/main/CHANGELOG.md): what changed in each version.
@@ -871,102 +870,11 @@ the reference.
 
 ### The value domain
 
-`docs/adr/0002-the-value-domain-and-the-host-boundary.md` is the record; the
-members are the ones predicator-ex's ISA document names, and a value type this
-package needs and the domain does not have is raised there rather than added
-here.
-
-| Member | In TypeScript |
-|---|---|
-| integer | a `number` satisfying `Number.isSafeInteger` |
-| float | a `Float`, built by the exported `float(n)` |
-| string | a `string` |
-| boolean | a `boolean` |
-| list | an array of values of this domain |
-| map | a plain object whose own keys are strings |
-| date | a `PDate`, a civil date with no time and no zone |
-| datetime | a `PDateTime`, an instant in UTC |
-| duration | a `Duration`, carrying each of its keys and defaulting them to zero |
-| null | `null` |
-| undefined | the exported `Undefined` singleton, a first-class value that is an absence: no value was ever supplied |
-
-A host's values are normalized into that domain before a program runs, and a
-result is projected back to plain host values afterwards. Four points about that
-boundary are the ones a host meets first:
-
-- An integral `number` inside the safe range is an **integer**, so a host that
-  means a float writes `float(n)`.
-- Where this package admits a number into the domain as an integer, one outside
-  the safe range is **refused** with the reason `integer_out_of_range` rather
-  than rounded into a wrong answer no error names. The record puts that as an
-  obligation on a change adding such a site, so the set of sites is the code's
-  to say rather than this page's. One qualification the record states travels
-  with the rule, because it misleads without it: a **`cast` is exempt**. The
-  instruction set makes a cast total, so a conversion that cannot produce a
-  value of the target type answers the absence instead of failing. A **`lit`
-  operand is held to the rule** like a host's context value: an out-of-range
-  integer written into an instruction list, on its own or held as data inside a
-  list or map operand, is refused at that instruction -
-  `evaluate([["lit", 9007199254740994]], {})` answers the failing arm with the
-  reason `integer_out_of_range`.
-- A JavaScript `Date` normalizes to a `PDateTime`, and JavaScript `undefined`
-  normalizes to the absence. Predicator's absence is the singleton and never
-  the language's own inside the machine, which is what keeps an absent key and
-  a key bound to an absence distinguishable.
-- `PDate`, `PDateTime` and `Duration` come back as themselves. They are the part
-  of a plain result for which a host imports a type from this package.
-
-**The plain projection loses the integer/float distinction, and the record
-states that as its one loss.** A host that needs the distinction to survive a
-round trip reaches for the tagged encoding on the subpath.
-
-That projection is exported as `toHost`. It answers a host value, which has
-no failing arm, so it refuses nothing and applies no depth limit of its own.
-Every value this package hands it has already been through the checks above;
-a structure a host builds and passes straight to it has not, and one that
-contains itself or nests deeply enough to exhaust the call stack raises the
-engine's own error there rather than coming back as a refusal. It takes a
-float's number from the field the class's `instanceof` test checked rather
-than from the instance's `valueOf`.
+Moved to [The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md).
 
 ### Evaluation options
 
-`EvaluateOptions` in `src/evaluator.ts` is the declaration; what each option
-does is below. None of them adds an opcode or changes the wire format: the
-instruction list is the artifact and the options are the host's policy, so two
-runs of one list under different options may legitimately differ.
-
-| Option | Default | What it does |
-|---|---|---|
-| `functions` | none | Functions `call` may dispatch into, by name |
-| `loopBudget` | `10000` | The back edges one run may take before it is stopped with `loop_budget_exceeded` |
-| `now` | the system clock | The clock a time-dependent instruction reads, read at most once per run so that two of them agree |
-| `random` | the host's own | The source of randomness |
-| `onUnbound` | `"undefined"` | Whether a load of a root the context did not bind pushes the absence or fails at the load |
-| `protectedRoots` | empty | Context roots a `store` may not write, refused with `protected_root`; the refusal's `details.root` names the refused root |
-
-The request for the corpus's tagged encoding is not on that type. It belongs to
-`TaggedEvaluateOptions`, which the subpath exports and which extends the type
-above. The split is a type-level boundary and adds no runtime check: no opcode
-is added, the wire format is untouched, and nothing about an evaluation
-changes.
-
-Which spellings of that request the compiler refuses at the main entry point is
-a type-level test's enumeration, not this page's: more than one of the
-compiler's rules bears on it, and they do not agree about where an options
-object has to be written. `test/index.test.ts` pins the refusal this package
-promises - the request written inline at the call, which is the form a host
-normally writes, does not typecheck - and the `@ts-expect-error` directive
-above it is the assertion: if the member ever returns to this entry point's
-options type, the directive goes unused and the typecheck fails. Read that
-test for the boundary rather than inferring it from here.
-
-At run time there is nothing to infer. Because `TaggedEvaluateOptions` extends
-the type above, a host calling both entry points may pass one options object to
-both, and a `tagged` carried on such a shared object is ignored at the main
-entry point rather than refused: the same list, context and options answer
-byte-identically with the member present and with it removed, and no warning is
-raised.
+Moved to [The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md).
 
 ### Host functions
 
@@ -999,8 +907,9 @@ The builtins are the closed set the reference implementation defines, including
 `len`, `upper`, `lower`, `trim`, `substring`, `concat` and the `Math.`, `Date.`
 and `JSON.` families. `conformance/corpus/tier-5.json` pins the deterministic
 ones case by case. No case in the corpus calls `Date.now` or `Math.random`,
-whose answers depend on the `now` and `random` options above rather than on
-their arguments.
+whose answers depend on the `now` and `random` options
+([The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md))
+rather than on their arguments.
 
 ### The tagged subpath
 

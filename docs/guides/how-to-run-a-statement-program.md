@@ -85,4 +85,4 @@ and any other loan is marked refused.
 For what a program's statements can be, and the options `execute` takes, see
 [Statement programs](https://github.com/riddler/predicator-ts/blob/main/README.md#statement-programs)
 and
-[Evaluation options](https://github.com/riddler/predicator-ts/blob/main/README.md#evaluation-options).
+[The value domain and evaluation options](https://github.com/riddler/predicator-ts/blob/main/docs/reference/the-value-domain-and-evaluation-options.md).
