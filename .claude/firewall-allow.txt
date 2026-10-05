@@ -1,0 +1,9 @@
+# Exact strings the maintainers' planning-reference scan may pass. One exact
+# string per line; a line starting with "# " is a comment. An entry allows a
+# match only where the entry's text covers it on the same line.
+
+# pnpm-lock.yaml: the integrity value of brace-expansion 5.0.12. The scan
+# reads base64 as prose and a run inside this hash takes an id's shape; no
+# planning reference is involved. Allowed by a ruling of the operator,
+# 2026-10-05.
+sha512-YovQ3rzhaLMIrDjNDMkNS01tea93qhEhG5xy8f6+R0l+dw3Ki+5sCoIoI942iuLZTHWogWktgwVDhU09iNEimQ==
