@@ -23,4 +23,5 @@ export function landedAs(text: string): LandedAs[];
 export function citeFaults(
   records: readonly RecordText[],
   isAncestor: (commit: string) => boolean,
+  samePatch?: (cited: string, landed: string) => boolean | null,
 ): string[];

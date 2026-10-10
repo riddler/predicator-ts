@@ -1,7 +1,8 @@
 // The record cite check, held to what it claims: it finds every commit a
-// decision record cites as read at, it leaves alone the commits a record cites
-// another way, it accepts a cite a later note corrects, and the gate stage
-// fails on a cite outside the history of the tree it runs on. The functions
+// decision record cites as read at, in any case, it leaves alone the commits a
+// record cites another way, it accepts a cite a later note corrects when the
+// correction carries the cited change, and the gate stage fails on a cite
+// outside the history of the tree it runs on. The functions
 // run on fabricated records with a stand-in for the ancestry question; the
 // stage runs for real, against this repository's history.
 
@@ -40,6 +41,19 @@ describe("what the check reads as a cite", () => {
       { commit: "3333333", line: 3 },
       { commit: "4444444", line: 3 },
       { commit: "5555555abc", line: 4 },
+    ]);
+  });
+
+  // Sabotage, by hand: the case-insensitive flag removed from the cite pattern
+  // in scripts/lib/record-cites.mjs turns this red.
+  it("finds a cite that begins a sentence, in any case", () => {
+    const text = [
+      "The hold queue was moved. Read at `1111111`, the loan desk",
+      "reads it first. READ AT COMMIT `2222222` names the branch copy.",
+    ].join("\n");
+    expect(readAtCites(text)).toEqual([
+      { commit: "1111111", line: 1 },
+      { commit: "2222222", line: 2 },
     ]);
   });
 
@@ -90,6 +104,18 @@ describe("which cites the check fails on", () => {
     ]);
   });
 
+  // Sabotage, by hand: the patch comparison removed from citeFaults turns
+  // the first expectation red.
+  it("fails a correction whose commits carry different changes, where the cited one is held", () => {
+    const text = "read at `9999999`.\n\n`9999999` landed on main as `1111111`.";
+    const record = { name: "0001-a.md", text };
+    expect(citeFaults([record], isAncestor, () => false)).toEqual([
+      "0001-a.md: says `9999999` landed on main as `1111111`, but the two do not carry the same change (their patch ids differ)",
+    ]);
+    expect(citeFaults([record], isAncestor, () => true)).toEqual([]);
+    expect(citeFaults([record], isAncestor, () => null)).toEqual([]);
+  });
+
   it("does not take a correction in one record for a cite in another", () => {
     const records = [
       { name: "0001-a.md", text: "`9999999` landed on main as `1111111`." },
@@ -123,6 +149,33 @@ describe("the record cite stage", () => {
       expect([run.status, run.stderr]).toEqual([
         1,
         "record-cites: 0001-a-loan-record.md:3: cites `0000000` as read at, which is not an ancestor of this tree, and no note in the record says where it landed\n",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Two commits on main with different changes stand in for a branch commit
+  // and a wrong landed commit; a commit this repository does not hold stands
+  // in for a branch deleted after its merge.
+  // Sabotage, by hand: samePatch in scripts/record-cites.mjs answering true
+  // for every pair turns this red, and so does it answering false, not null,
+  // for a cited commit the repository does not hold.
+  it("fails on a correction whose held cited commit carries another change, and accepts one it cannot compare", () => {
+    const dir = mkdtempSync(join(tmpdir(), "record-cites-"));
+    try {
+      writeFileSync(
+        join(dir, "0001-a-loan-record.md"),
+        "# A loan record\n\nRead at `0e1e492`.\n\n`0e1e492` landed on main as `f6754d3`.\n",
+      );
+      writeFileSync(
+        join(dir, "0002-a-hold-record.md"),
+        "# A hold record\n\nRead at `0000000`.\n\n`0000000` landed on main as `0e1e492`.\n",
+      );
+      const run = runStage(dir);
+      expect([run.status, run.stderr]).toEqual([
+        1,
+        "record-cites: 0001-a-loan-record.md: says `0e1e492` landed on main as `f6754d3`, but the two do not carry the same change (their patch ids differ)\n",
       ]);
     } finally {
       rmSync(dir, { recursive: true, force: true });

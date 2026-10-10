@@ -11,7 +11,10 @@
 // `docs/adr/` (or in the directory `--records` names) and fails when a cite names
 // a commit that is not an ancestor of HEAD. What counts as a cite, and how a
 // later note corrects one that cannot be edited away, is in
-// `scripts/lib/record-cites.mjs`.
+// `scripts/lib/record-cites.mjs`. A correction whose cited commit this
+// repository still holds is compared with the landed commit by patch id
+// (`git patch-id --stable` over each commit's own diff), and fails when the
+// two differ.
 //
 // THE HISTORY HAS TO BE THERE. Ancestry is a question about history, and a
 // shallow clone holds only the newest commits, so in one every older cite
@@ -73,9 +76,35 @@ const records = names.map((name) => ({
   text: readFileSync(join(recordsDir, name), "utf8"),
 }));
 
+/**
+ * The stable patch id of one commit's own change (empty for a commit that
+ * changes nothing), or null when git cannot answer.
+ */
+function patchId(commit) {
+  const diff = git(["diff-tree", "--patch", "--no-color", "--root", commit]);
+  if (diff.status !== 0) return null;
+  const id = spawnSync("git", ["patch-id", "--stable"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    input: diff.stdout,
+  });
+  if (id.status !== 0) return null;
+  return id.stdout.split(" ")[0];
+}
+
+/** Whether the two commits carry one change; null when the cited one is not held. */
+function samePatch(cited, landed) {
+  if (git(["cat-file", "-e", `${cited}^{commit}`]).status !== 0) return null;
+  const citedId = patchId(cited);
+  const landedId = patchId(landed);
+  if (citedId === null || landedId === null) return false;
+  return citedId === landedId;
+}
+
 const faults = citeFaults(
   records,
   (commit) => git(["merge-base", "--is-ancestor", commit, "HEAD"]).status === 0,
+  samePatch,
 );
 if (faults.length > 0) {
   for (const fault of faults) console.error(`record-cites: ${fault}`);
