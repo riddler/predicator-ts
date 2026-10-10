@@ -25,7 +25,11 @@
 // a pair; comparing two maps by `valuesEqual` rather than by instant in the
 // ordering walk turns red every ordering over two maps, in both tables; and
 // answering a level pair of lists in the walk rather than stepping past it
-// turns red the two orderings whose leading members are lists of such maps.
+// turns red the two orderings whose leading members are lists of such maps;
+// and stepping past a level pair only when it is equal by term (`valuesEqual`)
+// rather than by instant turns the same two red, while dropping that check
+// turns nothing red, because no pair the walk orders level is unequal by
+// instant.
 
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/index.js";
