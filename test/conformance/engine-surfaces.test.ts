@@ -25,6 +25,27 @@ describe("the location run", () => {
     expect(report.results.map(({ id }) => id)).toEqual(ids);
   });
 
+  // Sabotage, by hand: renaming the `put` case in engine-surfaces.ts turns
+  // this red, since every `put` row then reads as a row naming no call.
+  it("reads every transcript line and finds the call every row names", () => {
+    const unreadable = report.results.filter(({ id }) => id.startsWith("unreadable line "));
+    const noCall = report.results.filter(({ result }) => result.startsWith("a row naming no call"));
+    expect(unreadable).toEqual([]);
+    expect(noCall).toEqual([]);
+  });
+
+  // Sabotage, by hand: rewording either marker in engine-surfaces.ts turns
+  // this red, so the test above cannot pass by looking for a marker the run
+  // no longer writes.
+  it("marks an unreadable line and a row naming no call as such", () => {
+    const marked = runLocation([
+      "not a transcript line",
+      '{"id":"hold/renew","call":"renew","context":{"hold":{"position":3}}}',
+    ]);
+    expect(marked.results[0]?.id.startsWith("unreadable line ")).toBe(true);
+    expect(marked.results[1]).toEqual({ id: "hold/renew", result: "a row naming no call: renew" });
+  });
+
   // Sabotage, by hand: writing a refusal's values as JSON rather than in the
   // tagged encoding, in engine-surfaces.ts, turns this red, since JSON writes
   // the float 1.0 as 1.

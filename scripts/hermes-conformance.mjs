@@ -1,5 +1,6 @@
-// Runs both conformance surfaces under a standalone Hermes VM and diffs the
-// two reports against a run of the same corpus under Node.
+// Runs both conformance surfaces, and the two runs beside the corpus, under a
+// standalone Hermes VM and diffs the four reports against a run of the same
+// inputs under Node.
 //
 //   node scripts/hermes-conformance.mjs --tools <dir> [--tier N] [--out <dir>]
 //
@@ -12,21 +13,22 @@
 // A text check cannot see a behaviour difference between two engines, and a
 // behaviour difference is what would make the sentence untrue.
 //
-// ZERO DIFFERENCES ON BOTH SURFACES IS THE RESULT THAT MEANS ANYTHING. A
+// ZERO DIFFERENCES IN ALL FOUR REPORTS IS THE RESULT THAT MEANS ANYTHING. A
 // difference is a finding about this package or about the engine, to be
 // recorded and explained; it is never answered by dropping the case from the
 // run or by narrowing what the README claims. So this script excludes nothing:
-// it runs the surface's whole case set at the tier asked for, and it exits
-// non-zero on the first surface whose reports differ, naming every row that
-// diverged.
+// it runs each surface's whole case set at the tier asked for, diffs every
+// report, and exits non-zero when any of the four differs, naming every row
+// that diverged.
 //
 // TWO RUNS BESIDE THE CORPUS. The corpus has no case for the location surface
 // and none that compiles statement source, so the bundle carries two more
-// reports: every row of the location transcript, handed to the location
-// function the row names, and every authored statement program, compiled and
-// run through `executeTagged`. Both are `test/conformance/engine-surfaces.ts`,
-// and each is diffed between the engines exactly as a surface is. Neither is
-// compared with the reference here; the suite does that on the server runtime.
+// reports, four in all: every row of the location transcript, handed to the
+// location function the row names, and every authored statement program,
+// compiled and run through `executeTagged`. Both are
+// `test/conformance/engine-surfaces.ts`, and each is diffed between the
+// engines exactly as a surface is. Neither is compared with the reference
+// here; the suite does that on the server runtime.
 //
 // WHAT IT BUILDS, AND WHY THE VM NEEDS A BUNDLE AT ALL. The VM has no module
 // loader and no filesystem: there is no `require`, no `import`, and nothing to
