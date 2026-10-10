@@ -49,10 +49,12 @@ export interface Located {
  * A whole-number literal.
  *
  * `digits` is the literal as written, leading zeros dropped, and is present
- * only when `value` is not the number the source wrote: past the safe-integer
- * bound the host has already rounded it. It exists for the rendering
- * direction, which writes those digits back as the reference writes its exact
- * integer; nothing that evaluates reads it.
+ * exactly when the literal is past the largest safe integer, where the host
+ * may already have rounded `value`. That includes 2^53, which the host holds
+ * exactly: the test is the safe-integer bound, not whether `value` is the
+ * number the source wrote. It exists for the rendering direction, which
+ * writes those digits back as the reference writes its exact integer; nothing
+ * that evaluates reads it.
  */
 export interface IntegerNode extends Located {
   readonly kind: "integer";
@@ -295,10 +297,17 @@ export interface CastNode extends Located {
  * expanded while the literal is parsed, so `1.5s` reaches this shape as one
  * second and five hundred milliseconds and nothing downstream has to know a
  * fraction was ever written.
+ *
+ * `digits` is the component's whole number as written, leading zeros dropped,
+ * present exactly when that number is past the largest safe integer, as on an
+ * integer node; a decimal component's whole part keeps it on the unit it was
+ * written in. It exists for the rendering direction alone; nothing that
+ * compiles or evaluates reads it.
  */
 export interface DurationUnit {
   readonly value: number;
   readonly unit: string;
+  readonly digits?: string;
 }
 
 /** A duration literal, in the order its components were written. */

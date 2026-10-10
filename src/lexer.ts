@@ -130,8 +130,9 @@ export type TokenValue =
  * write the literal back the way it was written, and the end position is
  * stored rather than computed because a literal holding a raw newline ends on
  * a different line from the one it started on. `digits` is present on an
- * integer token whose value the host cannot hold exactly, and on no other
- * token: see `integerDigits`.
+ * integer token past the largest safe integer, and on a decimal duration
+ * component whose whole part is past it, where it is that whole part's
+ * digits; on no other token: see `integerDigits`.
  */
 export interface Token {
   readonly type: TokenType;
@@ -312,6 +313,7 @@ export function tokenize(source: string): LexResult {
               column,
               length: number.consumed,
               value: fractionalValue(number.text),
+              ...integerDigits(number.text.slice(0, number.text.indexOf("."))),
             }
           : {
               type: "integer",
@@ -516,8 +518,11 @@ function takeNumber(chars: readonly string[], start: number): TakenNumber {
  * `number_out_of_range`, but `parse` still answers its tree, and the reference
  * at `v9.4.2` renders its exact integer back. Keeping the digits, with leading
  * zeros dropped as the reference's integer drops them, is what lets
- * `decompile` render the same text. Inside the bound the value is exact and
- * nothing is kept.
+ * `decompile` render the same text, for a literal standing alone and for the
+ * whole number of a duration component alike. The test is the safe-integer
+ * bound, not exactness: 2^53 is exact as a double and its digits are kept
+ * all the same, which renders the same text. Inside the bound nothing is
+ * kept.
  */
 function integerDigits(text: string): { readonly digits?: string } {
   if (Number.isSafeInteger(Number(text))) return {};

@@ -781,11 +781,13 @@ class Parser {
     switch (token.type) {
       case "integer": {
         this.advance();
-        const duration = this.durationFrom({ whole: token.value as number }, tokenStart(token));
+        const duration = this.durationFrom(
+          { whole: token.value as number, ...digitsOf(token) },
+          tokenStart(token),
+        );
         if (duration !== NOT_A_DURATION) return duration;
         const integer = { kind: "integer", value: token.value as number } as const;
-        const digits = token.digits === undefined ? {} : { digits: token.digits };
-        return { ok: true, value: leaf({ ...integer, ...digits }, token) };
+        return { ok: true, value: leaf({ ...integer, ...digitsOf(token) }, token) };
       }
 
       case "float":
@@ -796,7 +798,7 @@ class Parser {
         this.advance();
         const fraction = token.value as FractionalNumber;
         const duration = this.durationFrom(
-          { whole: fraction.whole, fraction: fraction.fraction },
+          { whole: fraction.whole, fraction: fraction.fraction, ...digitsOf(token) },
           tokenStart(token),
         );
         if (duration !== NOT_A_DURATION) return duration;
@@ -1147,7 +1149,7 @@ class Parser {
         }
         this.advance();
         components.push({
-          value: { whole: number.value as number },
+          value: { whole: number.value as number, ...digitsOf(number) },
           unit: String(unit.value),
           span: { start: tokenStart(number), end: tokenEnd(unit) },
         });
@@ -1166,7 +1168,7 @@ class Parser {
         this.advance();
         const fraction = number.value as FractionalNumber;
         components.push({
-          value: { whole: fraction.whole, fraction: fraction.fraction },
+          value: { whole: fraction.whole, fraction: fraction.fraction, ...digitsOf(number) },
           unit: String(unit.value),
           span: { start: tokenStart(number), end: tokenEnd(unit) },
         });
@@ -1241,7 +1243,28 @@ interface DurationComponent {
   readonly span: Span;
 }
 
-type DurationValue = { readonly whole: number; readonly fraction?: string };
+/**
+ * A component's number: its whole part, the digits after a decimal point if
+ * it was written with one, and the whole part's digits as written where the
+ * host cannot be trusted to hold it (see `DurationUnit`).
+ */
+type DurationValue = {
+  readonly whole: number;
+  readonly fraction?: string;
+  readonly digits?: string;
+};
+
+/** A token's kept digits, as a member to spread, or nothing. */
+function digitsOf(token: Token): { readonly digits?: string } {
+  return token.digits === undefined ? {} : { digits: token.digits };
+}
+
+/** A whole-unit pair, with the whole number's kept digits when it has them. */
+function wholeUnit(value: DurationValue, unit: string): DurationUnit {
+  return value.digits === undefined
+    ? { value: value.whole, unit }
+    : { value: value.whole, unit, digits: value.digits };
+}
 
 /** A node's own token, as both of its metadata members. */
 function leaf<T extends object>(node: T, token: Token): T & { position: Position; span: Span } {
@@ -1378,10 +1401,7 @@ function expandComponents(
   if (!components.some((component) => component.value.fraction !== undefined)) {
     return {
       ok: true,
-      value: components.map((component) => ({
-        value: component.value.whole,
-        unit: component.unit,
-      })),
+      value: components.map((component) => wholeUnit(component.value, component.unit)),
     };
   }
 
@@ -1389,11 +1409,11 @@ function expandComponents(
   for (const component of components) {
     const fraction = component.value.fraction;
     if (fraction === undefined) {
-      pairs.push({ value: component.value.whole, unit: component.unit });
+      pairs.push(wholeUnit(component.value, component.unit));
       continue;
     }
 
-    const expanded = expandFraction(component.value.whole, fraction, component.unit);
+    const expanded = expandFraction(component.value, fraction, component.unit);
     if (expanded === undefined) {
       const literal = `${component.value.whole}.${fraction}${component.unit}`;
       return {
@@ -1438,20 +1458,24 @@ const ROW_OF_SUFFIX: ReadonlyMap<string, UnitRow> = new Map(
  *
  * The expansion is the one the parse behind `::duration` and `parseDuration`
  * runs, so a literal and a parsed text expand a fraction alike; this only
- * names each amount's unit by the suffix a literal writes. A unit the table
- * does not know is refused as an inexact fraction would be.
+ * names each amount's unit by the suffix a literal writes, and keeps the
+ * whole part's digits on its own pair. A unit the table does not know is
+ * refused as an inexact fraction would be.
  */
 function expandFraction(
-  whole: number,
+  whole: DurationValue,
   digits: string,
   unit: string,
 ): readonly DurationUnit[] | undefined {
   const row = ROW_OF_SUFFIX.get(unit);
   if (row === undefined) return undefined;
-  return expandFractionalComponent(whole, digits, row)?.map((expanded) => ({
-    value: expanded.amount,
-    unit: expanded.row.suffix,
-  }));
+  // The whole part comes out first, on its own row, whenever it is not zero;
+  // that pair is the one its kept digits belong to.
+  return expandFractionalComponent(whole.whole, digits, row)?.map((expanded, index) =>
+    index === 0 && expanded.row === row && expanded.amount === whole.whole
+      ? wholeUnit(whole, unit)
+      : { value: expanded.amount, unit: expanded.row.suffix },
+  );
 }
 
 /**
