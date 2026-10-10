@@ -32,7 +32,14 @@
 import { describe, expect, it } from "vitest";
 import { loadCases, loadManifest } from "../scripts/lib/corpus.mjs";
 import type { Node } from "../src/ast.js";
-import { type Ast, compile, type DecompileOptions, decompile, parse } from "../src/index.js";
+import {
+  type Ast,
+  compile,
+  type DecompileOptions,
+  decompile,
+  evaluate,
+  parse,
+} from "../src/index.js";
 import { SOURCE_DEPTH_LIMIT } from "../src/nesting.js";
 
 const MATRIX: readonly (readonly [string, Readonly<Record<string, string>>])[] = [
@@ -561,6 +568,83 @@ describe("a numeric literal outside the value domain", () => {
     expect(rendering(treeOf(source))).toBe("holds == Infinity.0");
     const compiled = compile(source);
     expect(compiled.ok ? undefined : compiled.error.reason).toBe("number_out_of_range");
+  });
+});
+
+describe("a duration component past the safe-integer bound", () => {
+  // `compile` accepts these sources, and the duration they name is refused
+  // only when it is evaluated, so the round trip has to write them back. Each
+  // expectation is quoted from a run of `Predicator.parse/1` and
+  // `Predicator.decompile/2` at `v9.4.2` over the same source, in a detached
+  // export of that tag, and a run at `v9.4.4` answered the same for every
+  // row: the component renders with the digits it was written with, leading
+  // zeros dropped, never as the host's rounded double.
+  //
+  // Sabotage, each run and reverted from a copy: rendering a component from
+  // its value alone turned every row here red but the safe bound itself,
+  // which the host holds exactly; the parser dropping the digits of the whole
+  // number that opens a duration turned the rows it opens red, and dropping
+  // them on a later whole component the second-component row; the scanner
+  // dropping them on the whole part of a decimal, or the expansion leaving
+  // them off that part's own pair, turned the four decimal rows red; the
+  // parser dropping them on a decimal that opens the literal turned the three
+  // rows it opens red, and on a later decimal component that component's row.
+  const zeros = (count: number) => "0".repeat(count);
+
+  it.each([
+    ["twenty nines of days", "holds == 99999999999999999999d", "holds == 99999999999999999999d"],
+    ["1 and 308 zeros of milliseconds", `1${zeros(308)}ms`, `1${zeros(308)}ms`],
+    ["1 and 400 zeros of milliseconds", `1${zeros(400)}ms`, `1${zeros(400)}ms`],
+    ["the safe bound plus one", "9007199254740993d", "9007199254740993d"],
+    ["the safe bound plus one after two zeros", "009007199254740993d", "9007199254740993d"],
+    ["the safe bound itself", "9007199254740992d", "9007199254740992d"],
+    ["a second component", "3d99999999999999999999h", "3d99999999999999999999h"],
+    ["in a list", "x in [1d, 99999999999999999999d]", "x IN [1d, 99999999999999999999d]"],
+    ["before ago", "99999999999999999999d ago", "99999999999999999999d ago"],
+    ["before from now", "99999999999999999999d from now", "99999999999999999999d from now"],
+    ["after next", "next 99999999999999999999d", "next 99999999999999999999d"],
+    ["as the whole of a decimal", "99999999999999999999.5h", "99999999999999999999h30m"],
+    [
+      "as the whole of a decimal past the bound by one",
+      "9007199254740993.5h",
+      "9007199254740993h30m",
+    ],
+    ["as the whole of a decimal, 1 and 300 zeros", `1${zeros(300)}.5h`, `1${zeros(300)}h30m`],
+    [
+      "as the whole of a later decimal component",
+      "1d99999999999999999999.5h",
+      "1d99999999999999999999h30m",
+    ],
+  ])("renders %s as the tag does", (_label, source, expected) => {
+    expect(rendering(treeOf(source))).toBe(expected);
+  });
+
+  // The tag's answer for this source, from a run at v9.4.2 and at v9.4.4:
+  // `parse` raises an argument error ("not a textual representation of a
+  // float") on the decimal component and answers no tree, so no rendering
+  // exists to compare against. Here the whole part keeps its digits as any
+  // other component past the bound does, rather than rendering the host's
+  // infinity. Sabotage: each mutation above that drops the digits of a
+  // decimal's whole part turned this red too.
+  it("renders the whole of a decimal component past the finite range with its digits", () => {
+    expect(rendering(treeOf(`1${zeros(400)}.5h`))).toBe(`1${zeros(400)}h30m`);
+  });
+
+  // The digits are for the rendering direction only: what `compile` emits
+  // and what evaluation answers are the same as before they were kept.
+  // Sabotage: the emitter writing a component's kept digits in place of its
+  // value turned this red. It was run and reverted from a copy.
+  it("leaves the compiled program and the evaluation refusal as they were", () => {
+    const compiled = compile("holds == 99999999999999999999d");
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    expect(compiled.instructions).toEqual([
+      ["load", "holds"],
+      ["duration", [[100000000000000000000, "d"]]],
+      ["compare", "EQ"],
+    ]);
+    const evaluated = evaluate("holds == 99999999999999999999d", { holds: 1 });
+    expect(evaluated.ok ? undefined : evaluated.error.reason).toBe("invalid_duration_format");
   });
 });
 

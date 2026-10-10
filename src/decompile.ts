@@ -332,7 +332,7 @@ class Renderer {
         return `{${entries.join(", ")}}`;
       }
       case "duration":
-        return node.units.map((unit) => `${unit.value}${unit.unit}`).join("");
+        return node.units.map((unit) => `${unit.digits ?? unit.value}${unit.unit}`).join("");
       case "relative_date": {
         const duration = this.render(node.duration);
         switch (node.direction) {
