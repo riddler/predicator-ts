@@ -574,7 +574,9 @@ export function compareStrings(left: string, right: string): number {
  * member was told from a datetime member, because two maps that differ are not
  * ordered here and the walk would otherwise stop at a pair the reference
  * orders. A pair of lists that holds such maps, and so is ordered level, is
- * stepped past in the same way.
+ * stepped past in the same way, but only when the pair is equal with date and
+ * datetime members compared by instant; a pair that orders level and is not
+ * equal that way is not stepped past, and the comparison answers no order.
  */
 export function compareOrder(left: Value, right: Value): number | undefined {
   if (!typesMatch(left, right)) return undefined;
@@ -607,6 +609,7 @@ export function compareOrder(left: Value, right: Value): number | undefined {
       if (isPlainMap(a) && isPlainMap(b) ? looseEqual(a, b, true) : valuesEqual(a, b)) continue;
       const order = compareOrder(a, b);
       if (order !== 0) return order;
+      if (!looseEqual(a, b, true)) return undefined;
     }
     if (left.length === right.length) return 0;
     return left.length < right.length ? -1 : 1;

@@ -607,7 +607,10 @@ describe("the reference transcript", () => {
   // that reach such a pair; comparing two maps by `valuesEqual` in the
   // ordering walk turns red the map orderings, the declared ones because this
   // package's answer moved; and answering a level pair of lists rather than stepping past
-  // it turns `date-member/043` and `date-member/044` red.
+  // it turns `date-member/043` and `date-member/044` red; stepping past a level
+  // pair only when it is equal by term rather than by instant turns the same
+  // two red, and dropping that check turns nothing red, because no pair the
+  // walk orders level is unequal by instant.
   //
   // Sabotage for the `null-order/` rows, each run and reverted: reading each
   // walked member of `compareOrder` with `?? Undefined` again turns red every
