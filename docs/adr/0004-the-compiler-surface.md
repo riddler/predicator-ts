@@ -1983,3 +1983,44 @@ mean `parse` refusing such a source, which is a changed `parse` answer and
 not a rendering, so the rendering stays as it was, the host's infinity with
 `.0` appended. A test in `test/decompile.test.ts`, under "a numeric literal
 outside the value domain", pins both rows of the table.
+
+## Note: which half of the out-of-range literal the reference raises on (2026-10-10)
+
+The Consequences of the amendment of 2026-09-19 headed "a numeric literal the
+domain cannot represent is refused, under a member this package authors" open
+their second paragraph with "A source the reference raises on now answers a
+value here." That amendment decides two halves, a decimal literal past the
+finite range and an integer literal past the safe-integer bound, and the
+sentence is true of the first half only. This note says so. It removes no
+line. Code on `main` is cited as read at `f6754d3`.
+
+**The sentence covers the decimal half.** Run on 2026-10-10 in a detached
+export of predicator-ex `v9.4.2` (`mix.exs` `@version` reads `9.4.2` in that
+export), `Predicator.compile/1` raises `ArgumentError` on
+`17976931348623159` followed by two hundred ninety-two zeros and `.0`, and on
+`1` followed by four hundred zeros and `.0`, with the message the amendment
+quotes. The reference's lexer converts a literal with a decimal point by
+`String.to_float/1`, which raises past the finite range (`finalize_number` in
+`lib/predicator/lexer.ex` at `v9.4.2`). Here such a source answers the failing
+arm under `number_out_of_range` (`literalValue` in `src/emitter.ts` at
+`f6754d3`). That is the value the sentence means.
+
+**The integer half is not a source the reference raises on.** At the same tag
+and on the same day, `Predicator.compile/1` answers a program on `1` followed
+by four hundred zeros, on `17976931348623159` followed by two hundred
+ninety-two zeros, and on `9007199254740993`: each is a `lit` carrying the exact
+integer, because `finalize_number` converts a literal without a decimal point
+by `String.to_integer/1`, which has no bound. Here each of those sources is
+refused under `number_out_of_range` by `literalValue`. Both sides answer,
+and they answer differently: the reference on the succeeding arm with the
+exact integer, this package on the failing arm with the refusal. That is the
+divergence the amendment's section headed "The integer half, in this entry
+rather than a later one" declares, and its earlier sentence "There the
+divergence is in the answer rather than in whether there is one" already
+states it; the Consequences sentence does not reach it.
+
+**Read with this note,** the reason the same paragraph gives, that "there is
+nothing to diverge from where the reference does not answer at all", is the
+decimal half's reason. The integer half rests on its own section's
+declaration and on the value domain ADR-0002 fixed. The note decides nothing
+new and changes no answer.
