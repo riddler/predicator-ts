@@ -651,6 +651,15 @@ const globalMergeSpellings: readonly (readonly [string, string])[] = [
     "a block comment before the nested name",
     'declare module "loans" {\n  /* x */ global {\n    interface Array<T> {\n      at(index: number): T | undefined;\n    }\n  }\n}',
   ],
+  // A block comment opened on an earlier line and closed on the nested
+  // name's own line, with no comment opener before that close: the line
+  // begins inside the comment, so the name after the close is code.
+  [
+    "the nested name after a block comment opened on an earlier line",
+    'declare module "loans" {\n  /* holds\n  */ global {\n    interface Array<T> {\n      at(index: number): T | undefined;\n    }\n  }\n}',
+  ],
+  ["the nested name after the tail of a comment with text in it", "  placed on hold */ global {"],
+  ["a comment's tail and another block comment before the nested name", "  */ /* x */ global {"],
 ];
 
 // The other side: text that mentions the global scope without opening a block
@@ -669,15 +678,18 @@ const globalMergeLookalikes: readonly (readonly [string, string])[] = [
     "a block comment naming the scope before code",
     "/* the global scope */ const holds = { patron: 1 };",
   ],
+  ["code before a block comment and the nested name", "const holds = 1; /* x */ global {"],
+  ["a comment's tail before code", "  */ const scope = { global: { loans: 1 } };"],
 ];
 
 describe("a global augmentation in shipped source", () => {
   // Sabotage: in scripts/engine-neutrality.mjs, deleting the `global-merge`
-  // rule turns every line here red; deleting its second arm turns the four
+  // rule turns every line here red; deleting its second arm turns the seven
   // nested lines red; and narrowing any one `spaceOrBlockComment` in the
   // pattern to plain space turns the block comment line at that place red -
   // between the keywords, before the first arm's brace, before the nested
-  // name, or before the nested brace.
+  // name, or before the nested brace. Deleting `tailOfEarlierBlockComment`
+  // from the second arm turns the three lines after a comment's tail red.
   it.each(globalMergeSpellings)("fires on %s", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(status, line).toBe(1);
@@ -688,10 +700,64 @@ describe("a global augmentation in shipped source", () => {
   // from the first arm of the `global-merge` pattern turns the two prose
   // lines red, and letting any text come before the nested name, instead of
   // space and block comments only, turns the two line comment lines red.
+  // Letting the tail of an earlier comment hold a comment opener turns the
+  // line with code before a block comment red.
   it.each(globalMergeLookalikes)("leaves %s alone", (_name, line) => {
     const { status, output } = scanLine(root, line);
     expect(output, line).toContain("clean");
     expect(status, line).toBe(0);
+  });
+});
+
+// A declaration file under an entry's directory is refused by its name.
+// Every top-level declaration in one with no import or export lands in the
+// global scope, an interface there merges into the library's own, and the
+// compiler reads it that way whatever the program's module detection says,
+// so no line of it tells the stage anything. The names are the compiler's:
+// the three standard declaration extensions, and a TypeScript name whose
+// base name carries a declaration marker for an arbitrary extension.
+const declarationMerge = "interface Array<T> {\n  at(index: number): T | undefined;\n}";
+
+describe("a declaration file under an entry's directory", () => {
+  // Sabotage: in scripts/engine-neutrality.mjs, making `isDeclarationFile`
+  // answer false turns every case here red; dropping the module or the
+  // CommonJS declaration extension from its list turns that extension's case
+  // red; and dropping its arbitrary-extension arm turns the last case red.
+  // The plain declaration extension is caught by either arm.
+  it.each([[".d.ts"], [".d.mts"], [".d.cts"], [".d.json.ts"]] as const)(
+    "refuses a %s file",
+    (extension) => {
+      const { status, output } = scanLine(root, declarationMerge, extension);
+      expect(status, extension).toBe(1);
+      expect(findings(output), extension).toEqual([`fixture${extension}:1: declaration-file`]);
+    },
+  );
+
+  // Sabotage: in scripts/engine-neutrality.mjs, loosening the marker in the
+  // arbitrary-extension arm of `isDeclarationFile` to a dot and a `d` turns
+  // the first two cases red, and to a `d` and a dot the last.
+  it.each([[".data.ts"], [".dts.ts"], [".md.ts"]] as const)(
+    "leaves a %s file alone",
+    (extension) => {
+      const { status, output } = scanLine(root, declarationMerge, extension);
+      expect(output, extension).toContain("clean");
+      expect(status, extension).toBe(0);
+    },
+  );
+
+  // Sabotage: the same false answer turns this red; the file sits beside an
+  // entry the build lists, as a declaration file shipped with the source
+  // would.
+  it("refuses one beside an entry the build lists", () => {
+    const dir = project({
+      "tsup.config.ts": 'export default { entry: ["src/index.ts"] };\n',
+      "src/index.ts": "export const answer = 1;\n",
+      "src/holds.d.ts": `${declarationMerge}\n`,
+    });
+    const { status, output } = runChecker(["--config", join(dir, "tsup.config.ts")]);
+    rmSync(dir, { recursive: true, force: true });
+    expect(status).toBe(1);
+    expect(findings(output)).toEqual(["src/holds.d.ts:1: declaration-file"]);
   });
 });
 

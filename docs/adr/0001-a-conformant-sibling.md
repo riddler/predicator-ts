@@ -551,3 +551,64 @@ The record cite check (`scripts/record-cites.mjs`, a stage of the full gate)
 fails on a cite of a commit outside the history of the tree it runs on. It
 reads the sentence above that begins with the branch commit as this
 correction, and checks the cite through the landed commit instead.
+
+## Note: a global merge with no augmentation block, and a nested block after a comment's tail (2026-10-10)
+
+The note above on a global augmentation ends with a paragraph that opens
+**Still not caught.** It names an interface written at the top level of a
+source file that has no import or export, or of a declaration file, which
+merges into the global scope with no augmentation block. A nested block
+whose line begins inside a block comment opened on an earlier line was not
+named there and was not caught either. This note records where all three
+are now refused. It changes nothing the Decision says, and it narrows no
+rule already in the stage. Code is cited as this change leaves it, on a
+branch cut from `0e1e492`. Taking the checks rather than recording the gaps
+was decided by the conductor under a standing consent, 2026-10-10.
+
+Probed at `ef25ea5`, each with the later array member the note above names.
+A source file with no import or export declaring that member in an interface
+of the array's name, beside a module calling it, passed the source typecheck
+and the engine-neutrality stage. A declaration file under the source
+directory declaring the same passed both, and passed the source typecheck
+with module detection forced as well. A nested block whose name follows the
+close of a block comment opened on the line above passed the stage.
+
+**The source typecheck reads every implementation file as a module.**
+`tsconfig.json` sets `moduleDetection` to `force`, and `tsconfig.src.json`
+and `tsconfig.build.json` extend it. The compiler then reads every file that
+is not a declaration file as a module, whether or not it imports or exports,
+so an interface at its top level stays in that file and a call to the member
+it declares fails the source typecheck where the call is made. Every file in
+the three programs was already a module at `ef25ea5`, so the setting changes
+how no existing file is read, and the build wrote byte-identical output with
+and without it (both probed).
+
+**The stage refuses a declaration file.** The compiler reads a declaration
+file with no import or export as global whatever the module detection
+setting, so the stage refuses one under the directory of a build entry by its
+name (`isDeclarationFile` in `scripts/engine-neutrality.mjs`), reported as
+`declaration-file` at its first line. The names are the compiler's: the three
+standard declaration extensions, and a name ending in the TypeScript
+extension whose base name carries the declaration marker for an arbitrary
+extension. The check sits beside the rule table (`rules`), not in it,
+because the table's fixtures are lines and this check reads a file name.
+
+**The nested block after a comment's tail.** The second arm of the
+`global-merge` rule now also fires when the nested name follows the close of
+a block comment with no comment opener before that close on its line
+(`tailOfEarlierBlockComment`): such a line begins inside a comment opened
+above, and the compiler reads the name after the close as code. Code before
+a block comment on the line still keeps the nested name quiet. A line comment
+that writes a comment close and then the nested name and a brace fires, since
+a line scanner cannot tell it from the tail of a block comment; that
+over-refusal is accepted.
+
+**Still not caught.** A brace moved to the line after the keywords, as the
+note above says.
+
+`test/source-program.test.ts` pins the module reading in its block for a
+source file with no import or export. `test/engine-neutrality.test.ts` pins
+the declaration file names that are refused and lookalikes of them that are
+not, in its block for a declaration file under an entry's directory, and the
+nested spellings after a comment's tail, with their lookalikes, in its block
+for a global augmentation in shipped source.
