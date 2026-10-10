@@ -4457,3 +4457,37 @@ holding the null value is placed against a member of another type, beyond the
 rows on which both members hold the null value, follows the rule that this
 package matches the reference on an unsettled question, and was decided by
 the conductor under a standing consent, 2026-10-03.
+
+## Note: every caller of the visited-place count (2026-10-10)
+
+Recorded for `pts-lqbd`. This note is appended, and removes no line above.
+It decides nothing, so it carries no Status line. Code is cited as read at
+`c7011bd`.
+
+**The sentence.** The note on the acceptance of the four entries of
+2026-09-30, in its paragraph headed "The place budget.", says: "`normalize`
+in `src/values.ts` and `encodeValue` in `src/tagged.ts` are its only callers,
+so `toHost` and the serializer count no places." That sentence no longer
+holds. The note on the projection and the JSON serializer bounded by the place
+budget, of 2026-10-04, added two callers and read the amendment's matching
+sentence as scoped by it, but did not name this one.
+
+**Every caller of `visitPlace`.** `visitPlace` is defined in `src/nesting.ts`,
+and these are the functions under `src/` that call it, four in all:
+
+| Caller | File | What it counts |
+|---|---|---|
+| `normalize` | `src/values.ts` | each place of a host value as it enters the domain |
+| `encodeValue` | `src/tagged.ts` | each place the tagged encoder writes |
+| `placesPastBudget` | `src/nesting.ts` | each place of a value that `projectionFault` in `src/evaluator.ts` is asked about before the projection |
+| `serialize` | `src/functions/json.ts` | each place the `JSON.stringify` builtin writes |
+
+Each refuses past `PLACE_BUDGET` with `"place_budget_exceeded"`, or, for
+`placesPastBudget`, answers true for its caller to refuse. Outside `src/`, the
+tests name `visitPlace` only in comments.
+
+**How the earlier sentence reads.** "Its only callers" no longer holds: the
+callers are the four above. "`toHost` ... count no places" still holds of
+`toHost` itself, which calls no `visitPlace`; the entry points count before
+they call it, as the note of 2026-10-04 says. "The serializer count no places"
+no longer holds: `serialize` counts every place it writes.
