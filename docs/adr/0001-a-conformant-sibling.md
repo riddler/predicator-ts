@@ -612,3 +612,45 @@ the declaration file names that are refused and lookalikes of them that are
 not, in its block for a declaration file under an entry's directory, and the
 nested spellings after a comment's tail, with their lookalikes, in its block
 for a global augmentation in shipped source.
+
+## Note: what the record cite check reads, how it holds a correction, and where it fires (2026-10-10)
+
+The note above headed "where the commit the engine-neutrality note cites
+landed" describes the record cite check. Three things about that check were
+not said there, and two of them were gaps. This note records where each now
+stands. It changes nothing the Decision says. Code is cited as this change
+leaves it, on a branch cut from `d038b2f`. Closing the two gaps, and stating
+the third as a limit rather than closing it, was decided by the conductor
+under a standing consent, 2026-10-10.
+
+**A cite in any case.** The check reads the words of a cite in any case
+(the cite pattern in `scripts/lib/record-cites.mjs`), so a sentence that
+begins with the cite is counted. Before this change it read the words only
+in lower case, and a record whose sentence began with the cite would have
+passed whatever commit it named. One such cite was on main, in ADR-0002; it
+names an ancestor of main, so the stage still passes over every record.
+
+**A correction is held to the cited change.** A correction says a cited
+commit landed on main as another commit. The check took that on the landed
+commit's ancestry alone. Where this repository still holds the cited commit,
+it now also compares the two commits by patch id (`samePatch` in
+`scripts/record-cites.mjs`, through `git patch-id --stable` over each
+commit's own diff), and a correction whose two commits carry different
+changes fails (`citeFaults` in `scripts/lib/record-cites.mjs`). Where the
+repository does not hold the cited commit - its branch deleted after the
+merge, or a clone that never fetched it - the two cannot be compared, and the
+correction is taken on the landed commit's ancestry alone, as before. The
+correction the note above carries compares equal where its cited commit is
+held.
+
+**A branch-only cite is caught on main, not on the pull request.** On a pull
+request's own branch, a cite of that branch's commit is an ancestor of the
+tree the check runs on, so the check passes there. The rebase merge gives
+the commit a new name, and the cite fails the check on main afterwards. The
+check therefore finds this defect on main, after the merge, and a later note
+of the shape above is how a record answers it.
+
+`test/record-cites.test.ts` pins the cite read in any case in its block on
+what the check reads as a cite, the patch comparison in its block on which
+cites the check fails on, and the stage's comparison of a held cited commit,
+beside one it cannot compare, in its block on the record cite stage.
