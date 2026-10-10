@@ -7,7 +7,7 @@
 | [0003](0003-the-conformance-apparatus.md) | The conformance apparatus | accepted |
 | [0004](0004-the-compiler-surface.md) | The compiler surface | accepted |
 | [0005](0005-the-location-surface.md) | The location surface | accepted |
-| [0006](0006-the-publish-runs-from-a-tag-push.md) | The publish runs from a tag push, and only from a tag push | proposed |
+| [0006](0006-the-publish-runs-from-a-tag-push.md) | The publish runs from a tag push, and only from a tag push | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences). A record that states a public signature adds a Typespecs
