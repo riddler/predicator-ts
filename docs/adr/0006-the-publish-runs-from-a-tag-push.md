@@ -1,6 +1,6 @@
 # ADR-0006: The publish runs from a tag push, and only from a tag push
 
-Status: proposed (2026-10-04)
+Status: accepted (2026-10-10, @riddler/predicator 0.6.1; proposed 2026-10-04)
 
 ## Context
 
@@ -138,3 +138,57 @@ the maintainer's own words, was ruled by the operator, 2026-10-04.
 - This record stays proposed until a version of this package has been
   published through the workflow; the first such run is the evidence the
   record is read against.
+
+## Note: this record's acceptance (2026-10-10)
+
+This note records that the record above moved from proposed to accepted. The
+conductor moved it under the flip standard of the campaign consent the
+operator adopted, 2026-10-10; that the release-workflow records flip together,
+with each one's first publish through its workflow as the evidence, was ruled
+by the operator, 2026-10-06. It decides nothing, so it carries no Status line,
+and it removes no line. The Consequences bullet saying this record stays
+proposed until a version of this package has been published through the
+workflow is met by the version named below, and is left as written. The
+wording of the Status line and of this note was decided by the conductor under
+a standing consent, 2026-10-10.
+
+**It was first published through the workflow as `@riddler/predicator`
+0.6.1.** The tag `v0.6.1` is on `376583ce`, and the workflow run is
+https://github.com/riddler/predicator-ts/actions/runs/37309260438. That version
+is npm's `latest`; npm names `376583ce` as its source, and its provenance
+statement names this repository, `refs/tags/v0.6.1` and
+`.github/workflows/release.yml`. It is the only run of the workflow, so no
+later version has been published through it.
+
+**The run took two attempts.** The first attempt passed every check and the
+full quality gate and stopped at the publish step, where npm answered
+`ENEEDAUTH`: the trusted publisher on npmjs.com was not yet configured to
+accept this run, so npm refused the run's identity and nothing was published.
+The maintainer configured the trusted publisher and re-ran the failed job
+once, by hand, from the run's page in the Actions tab, on the same commit and
+tag; the second attempt repeated the whole job, the checks and the gate
+included, and published 0.6.1. The Decision's handling of a failed publish
+held: the workflow itself retried nothing ("A failed publish is never retried
+by the workflow"), the tag was not moved, and the one re-run was by hand, on
+the same commit and tag.
+
+**What was checked.** Every claim was re-checked on the default branch at
+`376583ce`, the tagged commit, which is its head as this note is written.
+`release.yml` triggers on a push of a tag matching `v*.*.*` and on nothing
+else, with no branch, pull request or manual dispatch trigger. Its job's
+permissions are `contents: read` and `id-token: write` and nothing else, and
+no token is written in it; the repository holds no Actions secret of its own.
+It reads the default branch from `github.event.repository.default_branch` and
+checks ancestry with `git merge-base --is-ancestor`, and its steps carry the
+names the Decision quotes, with "Check npm does not already show this
+version" before the toolchain. The toolchain, cache, install and "Full
+quality gate" steps are copies of `ci.yml`'s, and the gate command is read
+from `gate.full` in `.claude/wurk.json`. "Check npm and node meet the trusted-publishing floor"
+checks node 22.14.0 and npm 11.5.1, upgrading npm only below its floor; the
+publish step runs `npm publish` under `mise exec --` with no dist-tag; and the
+last step prints the published version's address. `package.json` states
+`0.6.1`, its `repository.url` names this repository, and its `prepack` script
+runs `scripts/publish-guard.mjs`. `CLAUDE.md`'s `npm publish` row and its
+Release preps paragraph, and `.claude/wurk/release.md`, say that an agent or a
+session never runs `npm publish` and that the release workflow publishes on
+the tag push.
