@@ -165,12 +165,13 @@ of the repository, and no check trusts one it did not just produce.
 
 ## The second evidence path: the corpus on another engine
 
-`scripts/hermes-conformance.mjs` runs both surfaces over this corpus on the
-JavaScript engine React Native uses, and diffs the two reports against a run of
-the same corpus on the server runtime in the same invocation. Zero differences
-on both surfaces is what it is run for; a difference is a finding about this
-package or about that engine, recorded and explained, and never answered by
-dropping the case or by narrowing what the README claims.
+`scripts/hermes-conformance.mjs` runs both surfaces over this corpus, and the
+two runs below beside it, on the JavaScript engine React Native uses, and diffs
+the four reports against a run of the same inputs on the server runtime in the
+same invocation. Zero differences in all four reports is what it is run for; a
+difference is a finding about this package or about that engine, recorded and
+explained, and never answered by dropping the case or by narrowing what the
+README claims.
 
 Beside the corpus it runs two more reports, for what the corpus has no case
 for: every row of the location transcript (`transcript/location.json`), handed

@@ -146,10 +146,11 @@ A gate stage checks `src/` for those constructs rather than leaving the rule
 to review.
 
 That is a check on the text. On the last of those three there is also a check
-on a run: `scripts/hermes-conformance.mjs` bundles both conformance surfaces
-and the vendored corpus into one self-contained file, runs it on the
-JavaScript engine React Native uses, and diffs the two reports against a run
-of the same corpus on the server runtime in the same invocation. It is run
+on a run: `scripts/hermes-conformance.mjs` bundles both conformance surfaces,
+the vendored corpus and the two runs beside it (the location transcript and
+the authored statement programs) into one self-contained file, runs it on the
+JavaScript engine React Native uses, and diffs the four reports against a run
+of the same inputs on the server runtime in the same invocation. It is run
 by hand and is not a stage of the gate; `conformance/README.md` says what it
 needs and what it bounds.
 
