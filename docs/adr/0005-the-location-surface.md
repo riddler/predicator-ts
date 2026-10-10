@@ -467,3 +467,57 @@ surface that touch this record's files, other than `9e77502`, and not every
 commit after it. Each list was read with `git log` over the range
 `b947e7f..36c23a5`, overall and for each file the record cites in this
 repository.
+
+## Note: a decimal literal past the finite range, and the integer bracket key amendment by anchor (2026-10-10)
+
+It decides nothing, so it carries no Status line, and it removes no line. It
+says what the reference answers for a decimal literal past the finite range,
+beside this package's answer, which the paragraph opening "Three inputs get
+answers of this package's own" leaves out, and it gives the section "Declared,
+not matched" the anchor its cite of an ADR-0002 amendment lacks. Code on
+`main` is cited as read at `d883acd`.
+
+**The reference raises on a decimal literal past the finite range.** That
+paragraph's last sentence says a numeric literal the domain cannot represent
+is refused here with `number_out_of_range` where the resolution reads it as a
+value or a key, and says what the reference does with such a literal only for
+an integer. For a literal with a decimal point past the finite range the
+reference answers nothing on this surface. `context_location/3` and
+`context_assign/4` both hand the source to the lexer before any resolution
+(`resolve_expression/2` in `lib/predicator/context_location.ex` at `v9.4.2`),
+and the lexer converts a literal with a decimal point by `String.to_float/1`,
+which raises `ArgumentError` past the finite range (`finalize_number` in
+`lib/predicator/lexer.ex` at the same tag). Run on 2026-10-10 against the
+reference built from a detached export of `v9.4.2` (`d8067df`), both functions
+raise `ArgumentError` from `finalize_number` on each of four sources: `1`
+followed by four hundred zeros and `.0` as the location's root;
+`17976931348623159` followed by two hundred ninety-two zeros and `.0` as the
+root; the first of those as the bracket key of `holds[...]`; and the same key
+under a minus. No transcript row carries such a literal.
+
+**Here the answer depends on where the literal stands.** At the root, both
+functions answer the `ParseError` `number_out_of_range`, as `compile` answers
+it: `rootRefusal` in `src/location.ts` refuses a decimal literal whose value is
+not finite through `outOfRange`, and the test "refuses a numeric literal the
+domain cannot represent as compile does" in `test/location.test.ts` pins a
+decimal of that kind at the root. At a bracket key, the resolution does not
+read a decimal literal as a key: `bracketKey` in `src/location.ts` takes a
+string literal, an integer literal, a minus over an integer literal and a
+variable, and answers any other key as `computed_key`, a decimal literal of
+any size included, as the reference answers `items[1.0]` in the transcript row
+`location/computed-key-float-literal`. So `holds[...]` with that literal as its
+key answers `computed_key` here, with the key's syntax tree in
+`details.expression`: a float node whose value is not finite, or, under a
+minus, the unary node over it. These answers were read on 2026-10-10 by
+running both functions from the source at `d883acd` on the four sources
+above; no test pins the bracket-key case. So the paragraph's "where the
+resolution reads it as a value or a key" holds for such a decimal at the root
+and does not reach it at a bracket key, and since the reference raises at
+both, neither answer here departs from an answer the reference gives.
+
+**The amendment the integer-segment bullet cites, by anchor.** The first
+bullet of "Declared, not matched" names ADR-0002's amendment "an integer
+bracket key reads its string spelling" by its heading text. It is ADR-0002's
+[amendment on an integer bracket key reading its string spelling](0002-the-value-domain-and-the-host-boundary.md#amendment-an-integer-bracket-key-reads-its-string-spelling-2026-09-17).
+
+The note changes no answer.
