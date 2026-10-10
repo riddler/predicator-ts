@@ -417,8 +417,8 @@ describe("the round trip over the corpus", () => {
   // round-trip check quietly stops being one, turned both counts red. It was
   // run and reverted.
   it("covers every source-bearing case", () => {
-    expect(CORPUS_SOURCES.length).toBe(215);
-    expect(new Set(CORPUS_SOURCES).size).toBe(206);
+    expect(CORPUS_SOURCES.length).toBe(220);
+    expect(new Set(CORPUS_SOURCES).size).toBe(211);
   });
 
   // Sabotage: dropping the `.0` an integral decimal keeps turned this red at

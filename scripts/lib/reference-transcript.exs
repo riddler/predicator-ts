@@ -710,6 +710,17 @@ member_equality_cases =
 # the top level: the reference keeps a datetime's precision and compares it
 # as part of the value, which a datetime here does not carry. The fields are
 # a patron's loan dates.
+#
+# TWO DATE MEMBERS, OR TWO DATETIME MEMBERS, UNDER AN ORDERING. From `v9.4.4`
+# the reference orders two lists whose members are two dates, or two
+# datetimes, by the instant each names, as it orders the same pair at the top
+# level, where before it read a date's fields in term order, the day before
+# the month and the year. A pair at the same instant is level, and the next
+# member decides; a datetime pair written to different precision is level
+# there too. The last rows ask each of the four ordering operators over dates
+# and datetimes whose term order and instant order disagree, at depth, and
+# with a level pair before the member that decides. The values are a loan's
+# due dates.
 date_member_cases =
   for {source, at} <-
         Enum.with_index(
@@ -767,7 +778,16 @@ date_member_cases =
             ~S|#2026-03-01T00:00:00Z# == #2026-03-01T00:00:00.000Z#|,
             ~S|[#2026-03-01T00:00:00Z#] < [#2026-03-01T00:00:00.000Z#]|,
             ~S|[#2026-03-01T00:00:00.000Z#] < [#2026-03-01T00:00:00Z#]|,
-            ~S|{opened_on: #2026-03-01T00:00:00Z#} in [{opened_on: #2026-03-01T00:00:00.000Z#}]|
+            ~S|{opened_on: #2026-03-01T00:00:00Z#} in [{opened_on: #2026-03-01T00:00:00.000Z#}]|,
+            ~S|[#2025-12-31#] < [#2026-01-02#]|,
+            ~S|[#2026-01-02#] <= [#2025-12-31#]|,
+            ~S|[#2026-01-02#] >= [#2025-12-31#]|,
+            ~S|[#2026-02-01T00:00:00Z#] > [#2025-12-31T00:00:00Z#]|,
+            ~S|[#2026-02-01T00:00:00Z#] <= [#2025-12-31T00:00:00Z#]|,
+            ~S|[[#2026-01-02#]] < [[#2025-12-31#]]|,
+            ~S|[#2026-01-01#, #2026-01-02#] > [#2026-01-01#, #2025-12-31#]|,
+            ~S|[#2026-01-01T00:00:00Z#, #2026-01-02#] <= [#2026-01-01T00:00:00.000Z#, #2025-12-31#]|,
+            ~S|[#2026-01-01T00:00:00.000Z#, #2026-02-01T00:00:00Z#] > [#2026-01-01T00:00:00Z#, #2025-12-31T00:00:00Z#]|
           ],
           1
         ) do
