@@ -107,7 +107,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -295,6 +295,12 @@ const calledAsBareGlobal = (alternation) => String.raw`(?<![.\w$])(?:${alternati
 // or a block comment that closes on the same line.
 const spaceOrBlockComment = String.raw`(?:\s|/\*.*?\*/)`;
 
+// The tail of a block comment opened on an earlier line: any text holding no
+// comment opener, up to the first comment close on the line. A comment close
+// with no opener before it on its line can only end a comment that began
+// above, so whatever follows it is read by the compiler as code.
+const tailOfEarlierBlockComment = String.raw`(?:(?:(?!/\*).)*?\*/)`;
+
 const rules = [
   {
     id: "dom-global",
@@ -477,15 +483,24 @@ const rules = [
     // nothing global stays quiet. The compiler reads a block comment as
     // space, so wherever the pattern allows space it allows a block comment
     // closed on the same line too: between the two keywords, before the
-    // brace, and before the nested name. Nothing else may come before the
-    // nested name on its line, which keeps a line comment that writes the
-    // name and a brace quiet. A brace moved to the next line is not
-    // caught, and neither is an interface written at the top level of a file
-    // that has no import or export, or of a declaration file, which the
-    // compiler also merges into the global scope; nothing in the line says
-    // where such an interface lands.
+    // brace, and before the nested name. The nested name may also follow the
+    // close of a block comment opened on an earlier line, when nothing on its
+    // own line opens a comment before that close: the line then begins inside
+    // the comment, and the compiler reads the name after the close as code.
+    // Nothing else may come before the nested name on its line, which keeps a
+    // line comment that writes the name and a brace quiet. A line comment
+    // that writes a comment close and then the name and a brace fires, since
+    // a line scanner cannot tell it from the tail of a block comment; that
+    // over-refusal is accepted. A brace moved to the next line is not caught.
+    // An interface written at the top level of a file that has no import or
+    // export, or of a declaration file, also merges into the global scope,
+    // and nothing in the line says where such an interface lands, so this
+    // rule does not try: the source typecheck reads every file that is not a
+    // declaration file as a module, which keeps the first form's interface
+    // out of the global scope, and this stage refuses a declaration file
+    // under an entry's directory outright (`isDeclarationFile` below).
     pattern: new RegExp(
-      String.raw`\bdeclare${spaceOrBlockComment}+global${spaceOrBlockComment}*\{|^${spaceOrBlockComment}*global${spaceOrBlockComment}*\{`,
+      String.raw`\bdeclare${spaceOrBlockComment}+global${spaceOrBlockComment}*\{|^${tailOfEarlierBlockComment}?${spaceOrBlockComment}*global${spaceOrBlockComment}*\{`,
       "g",
     ),
     why: "shipped source may not merge declarations into the global scope; a member the target lacks would then typecheck and ship",
@@ -506,6 +521,33 @@ const rules = [
     violation: 'const a = "x".localeCompare("y");',
   },
 ];
+
+// A declaration file is refused by its name, not by a line of its text. Every
+// top-level declaration in a declaration file with no import or export lands
+// in the global scope, so an interface written there merges into the
+// library's own and a later edition's member typechecks; and the compiler
+// reads such a file as a script whatever its module detection setting, which
+// covers only the files that are not declaration files. Nothing in a line
+// says where such an interface lands, so the whole file is the finding, at
+// its first line. Shipped source is written in implementation files and the
+// build writes the declarations itself, so no declaration file belongs under
+// an entry's directory at all. The names are the compiler's own: the three
+// standard declaration extensions, and any name ending in the TypeScript
+// extension whose base name carries a declaration marker before it, which is
+// how the compiler names a declaration file for an arbitrary extension. This
+// check sits outside the rule table above because the table's fixtures are
+// lines and this one is a file name; its own fixtures are in the suite.
+const declarationFile = {
+  id: "declaration-file",
+  why: "shipped source may not include a declaration file; its top-level declarations merge into the global scope, so a member the target lacks would then typecheck and ship",
+};
+
+function isDeclarationFile(name) {
+  return (
+    [".d.ts", ".d.mts", ".d.cts"].some((ext) => name.endsWith(ext)) ||
+    (name.endsWith(".ts") && name.includes(".d."))
+  );
+}
 
 const args = process.argv.slice(2);
 
@@ -605,6 +647,15 @@ function findingsIn(file, base) {
   const text = readFileSync(file, "utf8");
   const lines = text.split("\n");
   const found = [];
+  if (isDeclarationFile(basename(file))) {
+    found.push({
+      file: relative(base, file).split(sep).join("/"),
+      line: 1,
+      column: 1,
+      rule: declarationFile,
+      text: basename(file),
+    });
+  }
   for (const [index, line] of lines.entries()) {
     for (const rule of rules) {
       for (const match of line.matchAll(rule.pattern)) {

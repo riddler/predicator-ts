@@ -8,11 +8,14 @@
 // program holds `src/` and nothing else, so the only globals it sees are the
 // ones its `lib` declares, and the typecheck script runs it first.
 //
-// Two properties are pinned here, both through the TypeScript checker the
+// Three properties are pinned here, all through the TypeScript checker the
 // typecheck script uses. The program is exactly `src/`, and it typechecks
-// clean. And a Node global, or a runtime library member newer than the emit
+// clean. A Node global, or a runtime library member newer than the emit
 // target, written in a file under `src/` fails to typecheck, while the one
-// newer member the source relies on is admitted by name.
+// newer member the source relies on is admitted by name. And a file under
+// `src/` with no import or export is still read as a module, so an
+// interface written at its top level stays in that file rather than
+// merging into the library's interface of the same name.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -60,19 +63,22 @@ const probeText = `${probe.map((line) => line.code).join("\n")}\n`;
 
 const config = parsedConfig();
 
-function probedProgram(): ts.Program {
+/** The source program with the given files added under `src/`, each path with its text. */
+function probedProgram(probes: ReadonlyMap<string, string>): ts.Program {
   const host = ts.createCompilerHost(config.options);
   const { fileExists, readFile, getSourceFile } = host;
-  host.fileExists = (path) => path === probePath || fileExists.call(host, path);
-  host.readFile = (path) => (path === probePath ? probeText : readFile.call(host, path));
-  host.getSourceFile = (path, languageVersion, onError, shouldCreate) =>
-    path === probePath
-      ? ts.createSourceFile(path, probeText, languageVersion, true)
-      : getSourceFile.call(host, path, languageVersion, onError, shouldCreate);
-  return ts.createProgram([...config.fileNames, probePath], config.options, host);
+  host.fileExists = (path) => probes.has(path) || fileExists.call(host, path);
+  host.readFile = (path) => probes.get(path) ?? readFile.call(host, path);
+  host.getSourceFile = (path, languageVersion, onError, shouldCreate) => {
+    const text = probes.get(path);
+    return text === undefined
+      ? getSourceFile.call(host, path, languageVersion, onError, shouldCreate)
+      : ts.createSourceFile(path, text, languageVersion, true);
+  };
+  return ts.createProgram([...config.fileNames, ...probes.keys()], config.options, host);
 }
 
-const program = probedProgram();
+const program = probedProgram(new Map([[probePath, probeText]]));
 const diagnostics = ts.getPreEmitDiagnostics(program);
 
 function describeDiagnostic(d: ts.Diagnostic): string {
@@ -123,4 +129,36 @@ describe("the source program", () => {
       }
     },
   );
+});
+
+// A file with no import or export is a script to the compiler unless the
+// program says otherwise, and a script's top-level interface merges into the
+// library's interface of the same name: one such file under `src/` declaring
+// a later edition's array member made a call to that member typecheck in
+// every other file. The source program reads every file that is not a
+// declaration file as a module (`moduleDetection` in tsconfig.json, which
+// tsconfig.src.json extends), so the interface stays local to its file and
+// the call is refused where it is made. A declaration file is not covered by
+// that setting; the engine-neutrality stage refuses one under `src/`.
+const scriptPath = join(srcDir, "global-merge-script-probe.ts");
+const callerPath = join(srcDir, "global-merge-caller-probe.ts");
+const mergeDiagnostics = ts.getPreEmitDiagnostics(
+  probedProgram(
+    new Map([
+      [scriptPath, "interface Array<T> {\n  at(index: number): T | undefined;\n}\n"],
+      [callerPath, 'export const lastHold = ["hold", "loan"].at(-1);\n'],
+    ]),
+  ),
+);
+
+describe("a source file with no import or export", () => {
+  // Sabotage: deleting `moduleDetection` from tsconfig.json turns this red -
+  // the script's interface merges into the array interface and the call
+  // typechecks. Run through scripts/sabotage.mjs and reverted.
+  it("keeps a top-level interface out of the library's interface of that name", () => {
+    const atCaller = mergeDiagnostics
+      .filter((d) => d.file?.fileName === callerPath)
+      .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"));
+    expect(atCaller.some((message) => message.includes("Property 'at' does not exist"))).toBe(true);
+  });
 });
