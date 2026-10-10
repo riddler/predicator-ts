@@ -4491,3 +4491,56 @@ callers are the four above. "`toHost` ... count no places" still holds of
 `toHost` itself, which calls no `visitPlace`; the entry points count before
 they call it, as the note of 2026-10-04 says. "The serializer count no places"
 no longer holds: `serialize` counts every place it writes.
+
+## Note: two date or two datetime members under an ordering are settled at `v9.4.4` (2026-10-10)
+
+This note is appended, and removes no line above. It decides nothing, so it
+carries no Status line. Code in this package is cited as read at `d883acd`;
+the reference is cited at predicator-ex `v9.4.4` (`ecff778`), the tag the
+vendored corpus and the four transcripts now come from, read in a detached
+export of the tag under Elixir 1.18.3 and OTP 27.
+
+**The item.** The amendment above headed "more members compare as the
+reference's term order compares them" left one item open under its heading
+"What this does not decide": "Two date members, or two datetime members,
+under an ordering." The reference ordered two such members by term, so
+`[#2026-01-02#] < [#2025-12-31#]` answered true there and false here. That
+term ordering was not matched here; the reference was fixed instead, ruled by
+the operator, 2026-10-06.
+
+**Settled at `v9.4.4`.** From that tag the reference orders two date members,
+or two datetime members, inside two lists or two plain maps by the instant
+each names, and a pair at the same instant is level, so the next member
+decides (`order_members/2` in `lib/predicator/evaluator.ex`; its record is
+the reference's ADR-0019, "Chronological members of lists and maps order by
+instant", at proposed). Within two lists that is the answer `compareOrder` in
+`src/evaluator.ts` already gave, so no answer of this package changes, and
+`[#2026-01-02#] < [#2025-12-31#]` now answers false on both sides. The
+corpus at `v9.4.4` carries it as `dates/lt-date-list-members-by-instant`,
+beside four more cases on such members.
+
+**The precision table's ordering row.** In the section headed "Precision: a
+named divergence", the row on `[#2026-03-01T00:00:00Z#]` and
+`[#2026-03-01T00:00:00.000Z#]` under `<` reads "false" here and "true" in the
+reference. At `v9.4.4` the reference answers false too: two datetimes at the
+same instant are level for an ordering there, whatever precision each was
+written with. So the section's words "and in an ordering" no longer hold of
+the reference; it still keeps a datetime's precision under loose and strict
+equality and in membership, and every other row of that table still holds at
+`v9.4.4`.
+
+**What stays.** The section headed "Ordering two maps" still holds at
+`v9.4.4`: the reference's ADR-0019 does not decide a date member against a
+datetime member, which keeps its term order there, so the rows that section
+declares still differ. Two maps are still not ordered here, the decline
+`compareOrder` documents; where two maps have the same keys, the reference
+now orders two date members, or two datetime members, of the two by instant.
+
+**What pins it.** The rows `date-member/055` through `date-member/063` in
+`conformance/transcript/transcript.json`, regenerated at `v9.4.4`, ask the
+four ordering operators over two date members and two datetime members whose
+term order and instant order disagree, at depth, and behind a level pair;
+none is declared in `test/reference-transcript.test.ts`, so each must agree.
+The row `date-member/052`, the precision table's ordering row, is no longer
+declared there and must agree too. `test/date-member.test.ts` asks the same
+sources and holds the reference's answer for each.

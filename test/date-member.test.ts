@@ -1,11 +1,14 @@
-// A date member against a datetime member, against the reference's answers at
-// v9.4.2.
+// A date member against a datetime member, and two date or two datetime
+// members under an ordering, against the reference's answers at v9.4.4.
 //
 // The reference compares the members of two lists or two maps by term, so a
 // date member and a datetime member are different members even when they name
 // the same instant, and an ordering that walks two lists puts the date member
 // first whatever the two instants are. At the top level a date and a datetime
-// still compare chronologically, on both sides. Each row is a source and the
+// still compare chronologically, on both sides. Two date members, or two
+// datetime members, are ordered by the instant each names on both sides, and a
+// pair at the same instant is level, so the next member decides; a datetime
+// pair written to different precision is level too. Each row is a source and the
 // answer the reference gave for it; the same rows are in the reference
 // transcript under `date-member/`, with the reference's answers as it recorded
 // them.
@@ -29,7 +32,11 @@
 // and stepping past a level pair only when it is equal by term (`valuesEqual`)
 // rather than by instant turns the same two red, while dropping that check
 // turns nothing red, because no pair the walk orders level is unequal by
-// instant.
+// instant; ordering two date members of two lists by their day alone, as a
+// term order would read them first, turns red the rows on two date members
+// whose days and instants order them differently, and ordering two datetime
+// members of two lists against their instants turns red the rows on two
+// datetime members at different instants.
 
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/index.js";
@@ -80,6 +87,19 @@ const ROWS: readonly Row[] = [
   ["[[{opened_on: #2026-03-01#}], 1] < [[{opened_on: #2026-03-01T00:00:00Z#}], 2]", true],
   ["#2026-03-01T00:00:00Z# == #2026-03-01T00:00:00.000Z#", true],
   ["[#2026-03-01T00:00:00.000Z#] < [#2026-03-01T00:00:00Z#]", false],
+  ["[#2026-03-01T00:00:00Z#] < [#2026-03-01T00:00:00.000Z#]", false],
+  ["[#2025-12-31#] < [#2026-01-02#]", true],
+  ["[#2026-01-02#] <= [#2025-12-31#]", false],
+  ["[#2026-01-02#] >= [#2025-12-31#]", true],
+  ["[#2026-02-01T00:00:00Z#] > [#2025-12-31T00:00:00Z#]", true],
+  ["[#2026-02-01T00:00:00Z#] <= [#2025-12-31T00:00:00Z#]", false],
+  ["[[#2026-01-02#]] < [[#2025-12-31#]]", false],
+  ["[#2026-01-01#, #2026-01-02#] > [#2026-01-01#, #2025-12-31#]", true],
+  ["[#2026-01-01T00:00:00Z#, #2026-01-02#] <= [#2026-01-01T00:00:00.000Z#, #2025-12-31#]", false],
+  [
+    "[#2026-01-01T00:00:00.000Z#, #2026-02-01T00:00:00Z#] > [#2026-01-01T00:00:00Z#, #2025-12-31T00:00:00Z#]",
+    true,
+  ],
 ];
 
 type Divergent = readonly [source: string, ours: boolean, reference: boolean];
@@ -94,7 +114,6 @@ const DIVERGENT: readonly Divergent[] = [
   ["[#2026-03-01T00:00:00Z#] === [#2026-03-01T00:00:00.000Z#]", true, false],
   ["#2026-03-01T00:00:00Z# === #2026-03-01T00:00:00.000Z#", true, false],
   ["#2026-03-01T00:00:00.000Z# === #2026-03-01T00:00:00.000000Z#", true, false],
-  ["[#2026-03-01T00:00:00Z#] < [#2026-03-01T00:00:00.000Z#]", false, true],
   ["{opened_on: #2026-03-01T00:00:00Z#} in [{opened_on: #2026-03-01T00:00:00.000Z#}]", true, false],
 ];
 

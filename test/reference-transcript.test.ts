@@ -425,7 +425,6 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   ["date-member/048", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
   ["date-member/049", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
   ["date-member/050", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
-  ["date-member/052", { reference: true, ours: false, declaredBy: PRECISION_NOTE }],
   ["date-member/054", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
 ]);
 
