@@ -206,11 +206,18 @@ export type EvaluationOutcome =
   | { readonly ok: false; readonly error: PredicatorError };
 
 /**
- * What one evaluation produced, projected back to plain host values, where
- * nothing was compiled in front of it.
+ * What one evaluation produced, where nothing was compiled in front of it: the
+ * shape `evaluateTagged` on the `./tagged` subpath answers.
+ *
+ * What a passing arm's `value` holds depends on that call's `tagged` option.
+ * By default it is the result projected back to plain host values, exactly as
+ * the main entry point's `evaluate` answers it. Under `tagged: true` it is a
+ * string: the text of the corpus's tagged-value encoding of the result, so an
+ * absence comes back as its tag rather than as the language's own absence. The
+ * failing arm carries a `PredicatorError` under both.
  *
  * It is the shape an entry point taking only a program answers, and it is
- * separate from `EvaluateResult` below for exactly that reason: an entry point
+ * separate from `EvaluateResult` for exactly that reason: an entry point
  * that cannot be handed source text cannot answer a `ParseError`, and saying
  * so in its return type is what keeps a caller of that entry point from having
  * to narrow away a member it can never meet.
