@@ -14,6 +14,7 @@
  * every rule this module implements.
  */
 
+import { DATE_FIELDS, DATETIME_FIELDS, DURATION_FIELDS, hasNonFiniteField } from "./fields.js";
 import { floatMagnitude } from "./floats.js";
 import { hasPlainPrototype, ownData, setKey } from "./maps.js";
 import { enterContainer, type NestingReason, type PlaceCount, visitPlace } from "./nesting.js";
@@ -176,7 +177,7 @@ export class PDate {
   }
 }
 
-shareAcrossCopies(PDate, DATE_KEY, ["year", "month", "day"]);
+shareAcrossCopies(PDate, DATE_KEY, DATE_FIELDS);
 
 /**
  * An instant in UTC, held as a whole number of seconds since the epoch plus a
@@ -205,7 +206,7 @@ export class PDateTime {
   }
 }
 
-shareAcrossCopies(PDateTime, DATETIME_KEY, ["epochSeconds", "microsecond"]);
+shareAcrossCopies(PDateTime, DATETIME_KEY, DATETIME_FIELDS);
 
 /** The parts a `Duration` may be built from; every one defaults to zero. */
 export interface DurationParts {
@@ -247,16 +248,7 @@ export class Duration {
   }
 }
 
-shareAcrossCopies(Duration, DURATION_KEY, [
-  "years",
-  "months",
-  "weeks",
-  "days",
-  "hours",
-  "minutes",
-  "seconds",
-  "milliseconds",
-]);
+shareAcrossCopies(Duration, DURATION_KEY, DURATION_FIELDS);
 
 /** A predicator value: the closed union of the eleven members. */
 export type Value =
@@ -417,9 +409,14 @@ function normalize(
     if (!Number.isFinite(floatMagnitude(value))) throw new RefusalSignal("non_finite_number");
     return value;
   }
-  if (value instanceof PDate || value instanceof PDateTime || value instanceof Duration) {
-    return value;
-  }
+  // A date, an instant and a duration are tested the same way: no value this
+  // package builds from a finite input carries a field that is not finite,
+  // but the classes' test asks only that each field be a number, and their
+  // constructors check no part, so a host can hand one in carrying NaN or an
+  // infinity. It is refused as a float whose field is not finite is.
+  if (value instanceof PDate) return admitFields(value, DATE_FIELDS);
+  if (value instanceof PDateTime) return admitFields(value, DATETIME_FIELDS);
+  if (value instanceof Duration) return admitFields(value, DURATION_FIELDS);
   if (value instanceof Date) {
     const millis = value.getTime();
     if (!Number.isFinite(millis)) throw new RefusalSignal("non_finite_number");
@@ -452,6 +449,15 @@ function normalize(
     default:
       throw new RefusalSignal("unsupported_host_value");
   }
+}
+
+/** Admits a date, an instant or a duration as itself when every field is finite. */
+function admitFields<T extends PDate | PDateTime | Duration>(
+  value: T,
+  fields: readonly string[],
+): T {
+  if (hasNonFiniteField(value, fields)) throw new RefusalSignal("non_finite_number");
+  return value;
 }
 
 function normalizeNumber(value: number): Value {
@@ -498,7 +504,9 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  * that means a float writes `float(n)`. An integral number outside the safe
  * range is refused rather than rounded, and so is a non-finite one. So is a
  * float whose field is not finite: no float this package builds carries one,
- * and only an object a host built to the float class's shape can. A value
+ * and only an object a host built to the float class's shape can. So is a
+ * date, a datetime or a duration with a field that is not finite, which a host
+ * can build with the class's own constructor or to the class's shape. A value
  * with no row at all - a function, a symbol other than the absence singleton,
  * a `Map`, a `Set`, a class instance this package did not define - is refused
  * too.

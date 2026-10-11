@@ -3056,3 +3056,132 @@ describe("a float whose field is not finite, where a host's float enters", () =>
     ).toBe(true);
   });
 });
+
+describe("a date, a datetime or a duration whose field is not finite, where a host's value enters", () => {
+  // The three classes' instanceof test asks only that each field be a number,
+  // and their constructors check no part, so a host can build one carrying NaN
+  // or an infinity. Admitted, it made equality between it and itself answer
+  // false. The context and a literal operand each refuse one with the reason a
+  // float whose field is not finite already carries there.
+  const NON_FINITE = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+  const selfEquality: Program = [
+    ["load", "due"],
+    ["load", "due"],
+    ["compare", "EQ"],
+  ];
+
+  /**
+   * An object built to a value class's shape rather than through its
+   * constructor: the class's key and each named field as own data, frozen.
+   */
+  function shaped(key: string, fields: { [name: string]: number }): Value {
+    const claim = Object.create({}) as object;
+    Object.defineProperty(claim, Symbol.for(key), { value: true });
+    for (const [name, field] of Object.entries(fields)) {
+      Object.defineProperty(claim, name, { value: field, enumerable: true });
+    }
+    return Object.freeze(claim) as Value;
+  }
+
+  /** Asserts the context refuses `due`, at its top, nested, and through the published entry point. */
+  function expectContextRefuses(due: Value): void {
+    expect(readOver(selfEquality, { due })).toBe("refused: non_finite_number");
+    expect(readOver(selfEquality, { patron: { loans: [{ due }] } })).toBe(
+      "refused: non_finite_number",
+    );
+    const published = evaluate(selfEquality, { due });
+    expect(published.ok).toBe(false);
+    if (published.ok) return;
+    expect(published.error.type).toBe("EvaluationError");
+    expect(published.error.reason).toBe("non_finite_number");
+  }
+
+  // Sabotage: admitting a date as itself in `normalize` in `src/values.ts`
+  // without testing its fields turns this red, the context binding it and
+  // the comparison answering false. It was run and reverted.
+  it("refuses a date with a NaN field in a context", () => {
+    for (const field of NON_FINITE) {
+      expectContextRefuses(new PDate(field, 3, 14));
+      expectContextRefuses(new PDate(2026, 3, field));
+      const forged = shaped("predicator.date", { year: 2026, month: field, day: 14 });
+      expect(forged instanceof PDate).toBe(true);
+      expectContextRefuses(forged);
+    }
+  });
+
+  // Sabotage: admitting a datetime as itself in `normalize` in
+  // `src/values.ts` without testing its fields turns this red. It was run and
+  // reverted.
+  it("refuses a datetime with a NaN field in a context", () => {
+    for (const field of NON_FINITE) {
+      expectContextRefuses(new PDateTime(field, 0));
+      expectContextRefuses(new PDateTime(1_773_446_400, field));
+      const forged = shaped("predicator.datetime", { epochSeconds: field, microsecond: 0 });
+      expect(forged instanceof PDateTime).toBe(true);
+      expectContextRefuses(forged);
+    }
+  });
+
+  // Sabotage: admitting a duration as itself in `normalize` in
+  // `src/values.ts` without testing its fields turns this red. It was run and
+  // reverted.
+  it("refuses a duration with a NaN field in a context", () => {
+    for (const field of NON_FINITE) {
+      expectContextRefuses(new Duration({ days: field }));
+      expectContextRefuses(new Duration({ weeks: 2, milliseconds: field }));
+      const parts = { years: 0, months: 0, weeks: 0, days: 0, hours: field, minutes: 0 };
+      const forged = shaped("predicator.duration", { ...parts, seconds: 0, milliseconds: 0 });
+      expect(forged instanceof Duration).toBe(true);
+      expectContextRefuses(forged);
+    }
+  });
+
+  // Sabotage: removing the date, datetime and duration arm from
+  // `literalFault` in `src/evaluator.ts` turns this red, the operand pushed
+  // and the comparison answering false. It was run and reverted.
+  it("refuses one in a literal operand, wherever the operand carries it", () => {
+    const values = [
+      new PDate(Number.NaN, 3, 14),
+      new PDateTime(Number.POSITIVE_INFINITY, 0),
+      new Duration({ days: Number.NaN }),
+    ];
+    for (const due of values) {
+      for (const operand of [due, [2, due], { patron: { holds: [{ due }] } }]) {
+        const program = [
+          ["lit", operand],
+          ["lit", operand],
+          ["compare", "EQ"],
+        ] as Program;
+        for (const outcome of [evaluateToValue(program), evaluate(program, {})]) {
+          expect(outcome.ok).toBe(false);
+          if (outcome.ok) continue;
+          expect(outcome.error.type).toBe("EvaluationError");
+          expect(outcome.error.reason).toBe("non_finite_number");
+          expect(outcome.error.position).toBe(0);
+        }
+      }
+    }
+  });
+
+  // What the refusal does not reach: a date, a datetime and a duration whose
+  // fields are all finite are still admitted at both places.
+  it("still admits one whose fields are finite at both places", () => {
+    for (const due of [
+      new PDate(2026, 3, 14),
+      new PDateTime(1_773_446_400, 500_000),
+      new Duration({ weeks: 2, days: 1.5 }),
+    ]) {
+      expect(readOver(selfEquality, { due })).toBe(true);
+      expect(
+        readOver(
+          [
+            ["lit", due],
+            ["lit", due],
+            ["compare", "EQ"],
+          ] as Program,
+          {},
+        ),
+      ).toBe(true);
+    }
+  });
+});
