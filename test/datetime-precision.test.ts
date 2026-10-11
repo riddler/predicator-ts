@@ -128,6 +128,24 @@ describe("the precision each way into the domain gives a datetime", () => {
     expect((admitted.value as PDateTime).microsecond).toBe(250000);
   });
 
+  // A host `Date` at a whole second still enters at 3, so it is a different
+  // value from a whole-second literal to strict equality, and between members
+  // to loose equality; a loose comparison at the top level reads the instant.
+  //
+  // Sabotage: building a host `Date`'s datetime with the constructor's
+  // default precision in `dateTimeFromEpochMillis` in src/values.ts turns
+  // every row here but the last red. It was run and reverted.
+  it.each([
+    ["due_at === #2026-03-01T00:00:00Z#", false],
+    ["due_at === #2026-03-01T00:00:00.000Z#", true],
+    ["[due_at] == [#2026-03-01T00:00:00Z#]", false],
+    ["[due_at] == [#2026-03-01T00:00:00.000Z#]", true],
+    ["due_at == #2026-03-01T00:00:00Z#", true],
+  ] as const)("answers %s as %s for a host Date at a whole second", (source, answer) => {
+    const context = { due_at: new Date(Date.UTC(2026, 2, 1, 0, 0, 0, 0)) };
+    expect(evaluate(source, context)).toEqual({ ok: true, value: answer });
+  });
+
   // The system clock is set to a whole second, where the constructor's
   // default precision would be 0, so the 6 is the clock's own.
   //
