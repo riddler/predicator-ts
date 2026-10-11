@@ -24,7 +24,7 @@ code.
 ## Install
 
 ```bash
-pnpm add @riddler/predicator@^0.6.1
+pnpm add @riddler/predicator@^0.7.0
 ```
 
 The package has no runtime dependencies. The version is named on purpose:
