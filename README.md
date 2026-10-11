@@ -604,11 +604,12 @@ would.
 `docs/adr/0004-the-compiler-surface.md` is the record, and it says why the
 renderer takes the tree rather than a compiled program.
 
-One divergence from the reference is worth stating: an instant literal written
-with fewer than six fraction digits is rendered with six. The reference's
-datetime value carries the precision it was written with, and this package's
-carries a microsecond count, so the digit count is not in the tree to render.
-The instant is the same, and the rendering compiles back to the same program.
+An instant literal renders with the fraction digits it was written with, as
+the reference renders it: a datetime carries its `precision`, the number of
+fractional-second digits it was written with, so `#2026-08-09T10:30:00.500Z#`
+renders as written. The tagged encoding and the `::string` cast do not follow
+it; they write the canonical form, no fraction for a whole second and six
+digits otherwise.
 
 ### Evaluating a rule
 

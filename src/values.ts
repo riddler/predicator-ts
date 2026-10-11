@@ -22,7 +22,7 @@ import { enterContainer, type NestingReason, type PlaceCount, visitPlace } from 
 /** The registered keys that mark an instance of each value class. */
 const FLOAT_KEY = Symbol.for("predicator.float");
 const DATE_KEY = Symbol.for("predicator.date");
-const DATETIME_KEY = Symbol.for("predicator.datetime");
+const DATETIME_KEY = Symbol.for("predicator.datetime.precision");
 const DURATION_KEY = Symbol.for("predicator.duration");
 
 /**
@@ -187,7 +187,24 @@ shareAcrossCopies(PDate, DATE_KEY, DATE_FIELDS);
  * on it: an epoch value in microseconds would be a large integer, and this
  * package refuses integers past the safe range rather than rounding them.
  *
- * The constructor checks neither part. This package's own arithmetic can move
+ * It also carries a precision: the number of fractional-second digits it was
+ * written with, an integer from 0 to 6, as the reference keeps one beside
+ * every datetime. Two datetimes at the same instant written to different
+ * precision are different values to strict equality, and as members of a list
+ * or a map to loose equality and membership; a loose comparison of the two at
+ * the top level, and every ordering, still read the instant alone. A datetime
+ * literal keeps the digits it was written with, a seventh and later digit
+ * truncated; a host `Date` enters at 3, its milliseconds; the `::datetime`
+ * parse of a string and the clock answer 6, and the cast of a date answers 0,
+ * as the reference's do. The precision changes no text this package writes
+ * for the tagged encoding or the `::string` cast, which stay canonical; only
+ * the decompiler writes a datetime with its own digits.
+ *
+ * The third argument is optional. Left off, the precision is the one the
+ * canonical text implies: 0 for a whole second, 6 otherwise, so a caller that
+ * builds a datetime from its two parts alone keeps the answer it had.
+ *
+ * The constructor checks no part. This package's own arithmetic can move
  * an instant past any year the tagged encoding carries, and can move it by a
  * duration a host built with a fractional part, so a check here would turn
  * such an evaluation into a throw rather than an answer. The check is made
@@ -197,10 +214,12 @@ shareAcrossCopies(PDate, DATE_KEY, DATE_FIELDS);
 export class PDateTime {
   readonly epochSeconds: number;
   readonly microsecond: number;
+  readonly precision: number;
 
-  constructor(epochSeconds: number, microsecond: number) {
+  constructor(epochSeconds: number, microsecond: number, precision?: number) {
     this.epochSeconds = epochSeconds;
     this.microsecond = microsecond;
+    this.precision = precision ?? (microsecond === 0 ? 0 : 6);
     mark(this, DATETIME_KEY);
     Object.freeze(this);
   }
@@ -492,12 +511,13 @@ function normalizeObject(
 /**
  * Builds a `PDateTime` at the instant a JavaScript millisecond epoch names.
  * A negative epoch floors toward the past, so the microsecond of the second is
- * always in `0..999999`.
+ * always in `0..999999`. A host `Date` holds milliseconds, so the datetime it
+ * enters as carries a precision of 3.
  */
 function dateTimeFromEpochMillis(millis: number): PDateTime {
   const seconds = Math.floor(millis / 1000);
   const microsecond = Math.round((millis - seconds * 1000) * 1000);
-  return new PDateTime(seconds, microsecond);
+  return new PDateTime(seconds, microsecond, 3);
 }
 
 /**

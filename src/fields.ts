@@ -15,7 +15,7 @@ import { ownData } from "./maps.js";
 export const DATE_FIELDS: readonly string[] = ["year", "month", "day"];
 
 /** The fields an instant carries. */
-export const DATETIME_FIELDS: readonly string[] = ["epochSeconds", "microsecond"];
+export const DATETIME_FIELDS: readonly string[] = ["epochSeconds", "microsecond", "precision"];
 
 /** The fields a duration carries, all eight of them. */
 export const DURATION_FIELDS: readonly string[] = [

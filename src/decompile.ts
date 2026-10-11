@@ -59,7 +59,7 @@ import type {
   UnaryOperator,
 } from "./ast.js";
 import { ParseError } from "./errors.js";
-import { formatDate, formatDateTime } from "./iso.js";
+import { formatDate, formatDateTimeAsWritten } from "./iso.js";
 import { SOURCE_DEPTH_LIMIT } from "./nesting.js";
 
 /**
@@ -464,7 +464,7 @@ function literal(node: LiteralNode): string {
     case "date":
       return `#${formatDate(node.value)}#`;
     case "datetime":
-      return `#${formatDateTime(node.value)}#`;
+      return `#${formatDateTimeAsWritten(node.value)}#`;
   }
 }
 

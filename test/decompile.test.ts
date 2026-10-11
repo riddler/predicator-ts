@@ -485,24 +485,20 @@ describe("a hand-built node", () => {
   });
 });
 
-describe("the one rendering that is not the tag's", () => {
-  // An instant literal written with three fraction digits renders here with
-  // six. The reference's datetime carries the precision it was written with
-  // and reproduces it; this package's carries a microsecond count and no
-  // precision, so the digit count is not in the tree to render. The value is
-  // the same instant either way, which is why the round trip above covers
-  // this source and passes.
+describe("an instant literal's fraction digits", () => {
+  // An instant literal written with three fraction digits renders with three,
+  // as the reference renders it: the datetime carries the precision it was
+  // written with, and the decompiler writes that many digits. Until the
+  // datetime carried a precision this rendered six digits here, a stated
+  // divergence; `test/datetime-precision.test.ts` holds more renderings.
   //
-  // It is pinned here so the divergence is a stated fact rather than a gap:
-  // the tag's answer is quoted beside this package's, both from runs.
-  //
-  // Sabotage: making this expect the tag's answer turned it red, which is the
-  // check that the divergence is real and not an artifact of the note. It was
-  // run and reverted.
-  it("writes an instant's fraction to six digits where the tag keeps three", () => {
+  // Sabotage: rendering the literal through `formatDateTime` in
+  // src/decompile.ts, the canonical six digits, turns this red. It was run and
+  // reverted.
+  it("writes an instant's fraction with the digits it was written with", () => {
     const source = "#2026-08-09T10:30:00.500Z#::datetime";
     // The tag's answer, from a run at v9.4.1: "#2026-08-09T10:30:00.500Z#::datetime".
-    expect(rendering(treeOf(source))).toBe("#2026-08-09T10:30:00.500000Z#::datetime");
+    expect(rendering(treeOf(source))).toBe("#2026-08-09T10:30:00.500Z#::datetime");
     // The instant is unchanged, so the rendering still compiles back.
     const original = compile(source);
     const again = compile(rendering(treeOf(source)));

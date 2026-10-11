@@ -4654,3 +4654,143 @@ budget, for a source that does not compile, and for a context the value
 boundary refuses, and holds that each answer has the same keys, `ok` and
 `error`. The test "keeps a failed run's own error and leaves a context past
 the budget off", in the same file, pins `execute`'s arm on its own.
+
+## Amendment: a datetime carries the precision it was written with (2026-10-10)
+
+Status: proposed (2026-10-10)
+
+This amendment is appended, and removes no line above. Code on the default
+branch is cited as read at `21b5984`; what this same change adds is cited by
+name alone. Every answer of the reference below was run at predicator-ex
+`v9.4.4` (`ecff778`) in a detached export of the tag, under Elixir 1.18.3 and
+OTP 27, rather than read. That the datetime value carries a precision, in a
+minor release, was ruled by the operator, 2026-10-06; its shape, that it
+reaches the host on the instance, that the decompiler writes it, and that the
+class takes a new key, were ruled by the operator, 2026-10-10, and so was
+keeping the tagged text and the `::string` cast canonical.
+
+What this amends. The section headed "Precision: a named divergence", in the
+amendment headed "more members compare as the reference's term order compares
+them", declares that a datetime here carries no precision and that the rows
+of its table on which the two sides disagree are not matched. This amendment
+adds the precision and matches those rows. The note of 2026-10-10 on two date
+or two datetime members under an ordering already records that the table's
+ordering row agrees at `v9.4.4`.
+
+### The field
+
+**`PDateTime` carries a readonly `precision`: the number of fractional-second
+digits the datetime was written with, an integer from 0 to 6.** The reference
+keeps the same count beside every datetime, as the second element of its
+microsecond pair. The constructor's third argument is optional; left off, the
+precision is the one the canonical text implies, 0 for a whole second and 6
+otherwise, so a caller that builds a datetime from its two parts alone gets
+the answer it got before. The constructor checks it no more than it checks the
+other two parts. `toHost` in `src/values.ts` answers a datetime as the
+instance itself, so the field reaches the host on the instance.
+
+**Where a datetime comes from decides its precision**, as the reference's does
+at the tag:
+
+| Where it comes from | Precision here | The reference at `v9.4.4` |
+|---|---|---|
+| a literal, `#2026-03-01T00:00:00.000Z#` | the digits written, six at most (`readDateTime` in `src/iso.ts`) | the same: `parse_date_content/1` in `lib/predicator/lexer.ex` reads it with `DateTime.from_iso8601/1` |
+| a host `Date` | 3 (`dateTimeFromEpochMillis` in `src/values.ts`) | no counterpart; a host `Date` holds milliseconds |
+| the `::datetime` parse of a string | 6, whatever digits it was written with (`toDateTime` in `src/cast.ts`) | 6: `cast/2` in `lib/predicator/cast.ex` rebuilds the parsed instant through `normalize_to_utc/1` |
+| a date cast to a datetime | 0 (`toDateTime` in `src/cast.ts`) | 0: `cast/2` builds it at `~T[00:00:00]` |
+| the clock, `Date.now()` and a relative date | 6 (`systemNow` in `src/evaluator.ts`) | 6: `DateTime.utc_now/0`, in `call_date_now/2` in `lib/predicator/functions/date_functions.ex` and `calculate_relative_date/2` in `lib/predicator/evaluator.ex` |
+| a datetime moved by a duration whose milliseconds are positive | at least 3, a higher one kept (`instantPlusMicros` in `src/evaluator.ts`) | the same: `add_to_datetime/2` in `lib/predicator/duration.ex` moves it with `DateTime.add/3` in milliseconds |
+| a datetime moved by any other duration | its own (`shiftDateTime` in `src/evaluator.ts`) | the same: `DateTime.add/3` in seconds |
+| the tagged encoding, read | 0 for a whole second, 6 otherwise (the constructor's default) | the same: `from_json/1` in `lib/predicator/conformance/values.ex` canonicalizes |
+
+A `now` option a host supplies answers the datetime the host built, with its
+own precision.
+
+### What compares the precision
+
+**Strict equality compares it at any depth, and loose equality and membership
+compare it between two members of a list or a map.** `strictlyEqual` in
+`src/evaluator.ts` holds two datetimes equal only at the same instant and the
+same precision, and `membersEqual` holds two datetime members written to
+different precision unequal. A loose comparison of two datetimes at the top
+level, a datetime sought in a list of datetimes by `in` or `contains`, and
+every ordering read the instant alone, so `#2026-03-01T00:00:00Z# ==
+#2026-03-01T00:00:00.000Z#` is still true. That is the reference's split:
+`compare_values/3` in `lib/predicator/evaluator.ex` answers strict equality
+by term identity and two lists or two plain maps by term equality, which
+includes the precision, while its datetime clauses and `values_equal?/2`
+compare two datetimes with `DateTime.compare/2`, by instant; `order_members/2`
+orders two datetime members by instant too.
+
+| Pair | Operator | Before | Now | Reference |
+|---|---|---|---|---|
+| `[#2026-03-01T00:00:00Z#]` and `[#2026-03-01T00:00:00.000Z#]` | `==` | true | false | false |
+| `[#2026-03-01T00:00:00.000Z#]` and `[#2026-03-01T00:00:00.000000Z#]` | `==` | true | false | false |
+| `{opened_on: #2026-03-01T00:00:00Z#}` and `{opened_on: #2026-03-01T00:00:00.000Z#}` | `==` | true | false | false |
+| `[#2026-03-01T00:00:00Z#]` and `[#2026-03-01T00:00:00.000Z#]` | `===` | true | false | false |
+| `#2026-03-01T00:00:00Z#` and `#2026-03-01T00:00:00.000Z#` | `===` | true | false | false |
+| `#2026-03-01T00:00:00.000Z#` and `#2026-03-01T00:00:00.000000Z#` | `===` | true | false | false |
+| `{opened_on: #2026-03-01T00:00:00Z#}` in `[{opened_on: #2026-03-01T00:00:00.000Z#}]` | `in` | true | false | false |
+| `#2026-03-01T00:00:00Z#` and `#2026-03-01T00:00:00.000Z#` | `==` | true | true | true |
+| `#2026-03-01T00:00:00Z#` in `[#2026-03-01T00:00:00.000Z#]` | `in` | true | true | true |
+| `[#2026-03-01T00:00:00Z#]` and `[#2026-03-01T00:00:00.000Z#]` | `<` | false | false | false |
+| `"2026-03-01T00:00:00Z"::datetime` and `#2026-03-01T00:00:00Z#` | `===` | true | false | false |
+| `#2026-03-01T00:00:00Z# + 500ms` and `#2026-03-01T00:00:00.500Z#` | `===` | true | true | true |
+| `#2026-03-01T00:00:00Z# + 500ms` and `#2026-03-01T00:00:00.500000Z#` | `===` | true | false | false |
+
+An inequality answers the negation of the equality beside it in every row.
+
+### What writes it, and what does not
+
+**The decompiler writes a datetime literal with its own digits**, as the
+reference's does (`do_visit/2` in `lib/predicator/visitors/string_visitor.ex`
+writes `DateTime.to_iso8601/1`): `#2026-08-09T10:30:00.500Z#` renders as
+written, where it rendered `#2026-08-09T10:30:00.500000Z#`.
+`formatDateTimeAsWritten` in `src/iso.ts` writes it. This is a changed answer.
+
+**The tagged encoding and the `::string` cast stay canonical**: no fraction for
+a whole second and exactly six digits otherwise, whatever the precision
+(`formatDateTime` in `src/iso.ts`). That is the reference's rule too:
+`to_json/1` in `lib/predicator/conformance/values.ex` and `cast/2` in
+`lib/predicator/cast.ex` both canonicalize through `canonicalize_microsecond/1`,
+section 5 of its `docs/isa.md` calls the field normative, and the corpus case
+`casts/datetime-to-string-non-zero-fraction-is-six-digits` pins it. So an
+instruction list in the tagged encoding carries no precision, here as in the
+reference, and a datetime that crosses that wire reads back at the default.
+
+### The class's key
+
+**`PDateTime` takes a new registered key, `Symbol.for("predicator.datetime.precision")`,
+and its `instanceof` test asks for the `precision` field beside the other
+two.** The amendment headed "the value classes across copies, and what the
+codec writes" says a change to what a class holds takes a new key, and this
+is such a change. So a datetime built by a copy of this package from before
+the field, loaded on the same thread, is not a `PDateTime` to this one, and
+the value boundary refuses it as a value it has no row for. A field that is
+not finite, the precision included, is refused with `"non_finite_number"`, as
+the note headed "a value class whose field is not finite, at the
+normalization table" says of the other two (`DATETIME_FIELDS` in
+`src/fields.ts`).
+
+### What pins it
+
+`test/datetime-precision.test.ts` holds the reference's answer for each row
+above and more, each evaluated from its source, the decompiler's renderings,
+the precision each way in gives, and the key. `test/date-member.test.ts` now
+holds the rows the section headed "Precision: a named divergence" declared
+among its agreeing rows. In `test/reference-transcript.test.ts` those rows
+stay declared when run from the transcript's instruction lists, because the
+tagged encoding carries no precision, and the cases headed "the rows on
+precision, run from their source" compile each from its source and require
+the reference's answer. The program comparison there stays blind to the
+precision, since the reference's instruction lists write it canonically.
+Pinning the rows from their source, and keeping the program comparison blind
+to precision, were decided by the conductor under a standing consent,
+2026-10-10.
+
+Consequences. A host comparing two datetimes written to different precision
+gets false from `===` at any depth and from `==`, `in` and `contains` between
+members, where it got true. A rendering by `decompile` keeps the literal's
+digits. A datetime carries a new field, and the class a new key. No reason
+token is added, no opcode changes, and the tagged encoding and the `::string`
+cast write what they wrote before.
