@@ -4657,7 +4657,7 @@ the budget off", in the same file, pins `execute`'s arm on its own.
 
 ## Amendment: a datetime carries the precision it was written with (2026-10-10)
 
-Status: proposed (2026-10-10)
+Status: accepted (2026-10-10; proposed 2026-10-10)
 
 This amendment is appended, and removes no line above. Code on the default
 branch is cited as read at `21b5984`; what this same change adds is cited by
@@ -4819,3 +4819,55 @@ where it answered true, and true for `due_at === #2026-03-01T00:00:00.000Z#`
 and for `due_at == #2026-03-01T00:00:00Z#`. The cases headed "the precision
 each way into the domain gives a datetime" in
 `test/datetime-precision.test.ts` pin each from its source.
+
+## Note: the acceptance of the amendment on a datetime carrying the precision it was written with (2026-10-10)
+
+This note records that the amendment headed "a datetime carries the precision
+it was written with" moved from proposed to accepted. The conductor moved it
+under the flip standard of the campaign consent the operator adopted,
+2026-10-10. It decides nothing, so it carries no Status line, and it removes no
+line. With it, no entry in this record reads proposed.
+
+**It shipped in `@riddler/predicator` 0.7.0.** That version is on npm,
+published by the release workflow on the push of the tag `v0.7.0`, at the
+commit `64111e3`, by the run
+https://github.com/riddler/predicator-ts/actions/runs/38113882761. The
+amendment's own change, `f78683b` (request 228), is in the tag, and no commit
+after it touches `src/`. Every claim was re-checked at
+`64111e3`, re-located by anchor; every claim about this package's answers was
+run against the published 0.6.1 and 0.7.0 builds, and every claim about the
+reference in a detached export of predicator-ex `v9.4.4` (`ecff778`) under
+Elixir 1.18.3 and OTP 27, rather than read.
+
+**What was checked.** `PDateTime` in `src/values.ts` holds a readonly
+`precision`, takes it as an optional third argument that defaults to 0 for a
+whole second and 6 otherwise, and checks no part; `toHost` answers the
+instance itself. Each row of the table of where a datetime comes from answered
+its precision here, from `readDateTime` in `src/iso.ts`,
+`dateTimeFromEpochMillis` in `src/values.ts`, `toDateTime` in `src/cast.ts`,
+`systemNow`, `instantPlusMicros` and `shiftDateTime` in `src/evaluator.ts`,
+and the tagged decoder, and a `now` option answered the precision the host
+built; the reference answered the same precision for each row with a
+counterpart, at the anchors the table names. `strictlyEqual` in
+`src/evaluator.ts` compares the precision, and `membersEqual` holds two
+datetime members written to different precision unequal. Run against both
+builds, every row of the table of changed answers answered its Before and Now
+columns, and each inequality the negation; the reference answered its
+Reference column, through `compare_values/3`, `values_equal?/2` and
+`order_members/2` in its `lib/predicator/evaluator.ex`. `decompile` writes a
+datetime literal through `formatDateTimeAsWritten` in `src/iso.ts`, and
+`#2026-08-09T10:30:00.500Z#` rendered as written at 0.7.0 and with six digits
+at 0.6.1, as the reference's `do_visit/2` renders it. `formatDateTime` keeps
+the tagged text and the `::string` cast canonical, as the reference's
+`to_json/1`, `from_json/1` and `cast/2` canonicalize through
+`canonicalize_microsecond/1`; section 5 of its `docs/isa.md` calls the field
+normative, and the case `casts/datetime-to-string-non-zero-fraction-is-six-digits`
+is in its `conformance/cases/casts.json`. The class's key is
+`Symbol.for("predicator.datetime.precision")` and `DATETIME_FIELDS` in
+`src/fields.ts` names `precision`: a datetime built under the earlier key is
+refused at the value boundary as `"unsupported_host_value"`, and one whose
+precision is not finite as `"non_finite_number"`. The tests the section headed
+"What pins it" names are in `test/datetime-precision.test.ts`,
+`test/date-member.test.ts` and `test/reference-transcript.test.ts`, and the
+transcript's source names `v9.4.4`. The amendment's change to `src/` adds no
+reason token and changes no opcode.
