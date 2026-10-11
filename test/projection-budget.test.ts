@@ -118,6 +118,33 @@ describe("the place budget of the projection", () => {
     expect(within.ok === false && within.context).toEqual({ shelf: sharedShelf(2) });
   });
 
+  // The failing arm that leaves a context past the budget off carries no
+  // marker: it is the same shape as the two other failing arms with no
+  // context, a source that did not compile and a context the value boundary
+  // refused, at execute and at executeValue alike. Sabotage: answering the
+  // projected context in contextWithin whatever its places hands it back at
+  // both entry points; projecting the context on executeValue's failing arm
+  // in place of contextWithin hands it back there. Each was run and reverted.
+  it("leaves a failed run's context past the budget off as the other no-context arms do", () => {
+    const past = `${restocks(19)}; total = shelf + 1`;
+    const shapes = (run: typeof execute | typeof executeValue) => {
+      const overBudget = run(past, { shelf: "hold-2207" });
+      const notCompiled = run("total = ", { shelf: "hold-2207" });
+      const refused = run("total = 1", { shelf: Number.NaN });
+      expect(reasonOf(overBudget)).toBe("add");
+      expect(reasonOf(refused)).toBe("non_finite_number");
+      expect(notCompiled.ok).toBe(false);
+      return [overBudget, notCompiled, refused].map((result) => Object.keys(result).sort());
+    };
+    for (const run of [execute, executeValue]) {
+      expect(shapes(run)).toEqual([
+        ["error", "ok"],
+        ["error", "ok"],
+        ["error", "ok"],
+      ]);
+    }
+  });
+
   // Sabotage: dropping the place check on the value from executeValue
   // projects it. It was run and reverted.
   it("refuses a value past the budget at executeValue, the context within it kept", () => {
