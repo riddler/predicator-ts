@@ -1850,7 +1850,9 @@ describe("date arithmetic, which is a day count and not a calendar rule", () => 
   // The reference splits on a POSITIVE milliseconds: that duration moves an
   // instant in milliseconds, and every other one moves it in whole seconds, by
   // a conversion carrying no milliseconds at all. The last assertion is that
-  // split, which is why a negative milliseconds is simply not carried.
+  // split, which is why a negative milliseconds is simply not carried. A move
+  // in milliseconds answers a precision of at least 3, as the reference's
+  // does.
   //
   // Sabotage: carrying the borrow the wrong way, so that a sub-second
   // subtraction does not decrement the second, turns the second assertion red.
@@ -1858,10 +1860,10 @@ describe("date arithmetic, which is a day count and not a calendar rule", () => 
   it("moves an instant in milliseconds only when the milliseconds are positive", () => {
     expect(
       answerOf([["lit", new PDateTime(100, 0)], ["duration", [[500, "ms"]]], ["add"]]),
-    ).toStrictEqual(new PDateTime(100, 500000));
+    ).toStrictEqual(new PDateTime(100, 500000, 3));
     expect(
       answerOf([["lit", new PDateTime(100, 0)], ["duration", [[500, "ms"]]], ["subtract"]]),
-    ).toStrictEqual(new PDateTime(99, 500000));
+    ).toStrictEqual(new PDateTime(99, 500000, 3));
     expect(
       answerOf([["lit", new PDateTime(100, 700000)], ["duration", [[500, "ms"]]], ["add"]]),
     ).toStrictEqual(new PDateTime(101, 200000));
@@ -1877,7 +1879,7 @@ describe("date arithmetic, which is a day count and not a calendar rule", () => 
         ],
         ["add"],
       ]),
-    ).toStrictEqual(new PDateTime(101, 500000));
+    ).toStrictEqual(new PDateTime(101, 500000, 3));
     expect(
       answerOf([
         ["lit", new PDateTime(100, 0)],
@@ -3116,7 +3118,12 @@ describe("a date, a datetime or a duration whose field is not finite, where a ho
     for (const field of NON_FINITE) {
       expectContextRefuses(new PDateTime(field, 0));
       expectContextRefuses(new PDateTime(1_773_446_400, field));
-      const forged = shaped("predicator.datetime", { epochSeconds: field, microsecond: 0 });
+      expectContextRefuses(new PDateTime(1_773_446_400, 0, field));
+      const forged = shaped("predicator.datetime.precision", {
+        epochSeconds: field,
+        microsecond: 0,
+        precision: 0,
+      });
       expect(forged instanceof PDateTime).toBe(true);
       expectContextRefuses(forged);
     }

@@ -151,11 +151,14 @@ export interface EvaluationSettings {
   readonly protectedRoots: readonly string[];
 }
 
-/** The system clock, as the datetime member of the domain. */
+/**
+ * The system clock, as the datetime member of the domain. It carries a
+ * precision of 6, as the reference's clock does.
+ */
 function systemNow(): PDateTime {
   const millis = Date.now();
   const seconds = Math.floor(millis / 1000);
-  return new PDateTime(seconds, Math.round((millis - seconds * 1000) * 1000));
+  return new PDateTime(seconds, Math.round((millis - seconds * 1000) * 1000), 6);
 }
 
 /**
@@ -469,14 +472,23 @@ function heldMember(member: Value | undefined): Value {
  * are not equal at all, and a date member and a datetime member are different
  * members there whatever instants they name. Every other pair of members is
  * decided as `looseEqual` decides it, so two date members, or two datetime
- * members, still compare by instant. A datetime here carries no precision, so
- * two datetime members written to different precision at the same instant are
- * equal here, where the reference tells them apart.
+ * members, still compare by instant, except that two datetime members written
+ * to different precision are different members, as they are to the
+ * reference's term equality. `byInstant` true reads the instant alone, the
+ * precision included in what it ignores.
  */
 function membersEqual(left: Value, right: Value, byInstant: boolean): boolean {
   if (left === Undefined || right === Undefined) return left === right;
   if (!byInstant && isDateAgainstDateTime(left, right)) return false;
+  if (!byInstant && isPrecisionAgainstPrecision(left, right)) return false;
   return looseEqual(left, right, byInstant);
+}
+
+/** Whether the two are datetimes written to different precision. */
+function isPrecisionAgainstPrecision(left: Value, right: Value): boolean {
+  return (
+    left instanceof PDateTime && right instanceof PDateTime && left.precision !== right.precision
+  );
 }
 
 /** Whether one of the two is a date and the other a datetime. */
@@ -495,6 +507,8 @@ function isDateAgainstDateTime(left: Value, right: Value): boolean {
  * datetime even at the same instant, because those are distinct members of the
  * domain and strict equality asks about the member as well as the magnitude.
  * That is the one place the two equality families disagree about numbers.
+ * Two datetimes are strictly equal only when they name the same instant at the
+ * same precision, as the reference's term identity holds them.
  */
 export function strictlyEqual(left: Value, right: Value): boolean {
   if (left === Undefined || right === Undefined) return left === right;
@@ -514,7 +528,11 @@ export function strictlyEqual(left: Value, right: Value): boolean {
   }
   if (left instanceof PDateTime || right instanceof PDateTime) {
     if (!(left instanceof PDateTime && right instanceof PDateTime)) return false;
-    return left.epochSeconds === right.epochSeconds && left.microsecond === right.microsecond;
+    return (
+      left.epochSeconds === right.epochSeconds &&
+      left.microsecond === right.microsecond &&
+      left.precision === right.precision
+    );
   }
   if (left instanceof Duration || right instanceof Duration) {
     if (!(left instanceof Duration && right instanceof Duration)) return false;
@@ -1045,7 +1063,11 @@ function durationMillis(duration: Duration): number {
   return duration.milliseconds + durationSeconds(duration) * MILLIS_PER_SECOND;
 }
 
-/** An instant moved by a signed count of microseconds, carrying the borrow. */
+/**
+ * An instant moved by a signed count of microseconds, carrying the borrow. It
+ * moves by milliseconds, so it carries at least a precision of 3, as the
+ * reference's move by milliseconds does, and keeps a higher one.
+ */
 function instantPlusMicros(anchor: PDateTime, micros: number): PDateTime {
   let seconds = anchor.epochSeconds + Math.trunc(micros / MICROS_PER_SECOND);
   let micro = anchor.microsecond + (micros % MICROS_PER_SECOND);
@@ -1056,7 +1078,7 @@ function instantPlusMicros(anchor: PDateTime, micros: number): PDateTime {
     micro -= MICROS_PER_SECOND;
     seconds += 1;
   }
-  return new PDateTime(seconds, micro);
+  return new PDateTime(seconds, micro, Math.max(anchor.precision, 3));
 }
 
 /**
@@ -1067,14 +1089,19 @@ function instantPlusMicros(anchor: PDateTime, micros: number): PDateTime {
  * moves it in whole seconds, by a conversion that carries no milliseconds at
  * all. So a duration whose only sub-second part is negative moves the instant
  * by its other parts alone. That split is the reference's and it is reproduced
- * rather than tidied, because the corpus is what conformance means here.
+ * rather than tidied, because the corpus is what conformance means here. A
+ * move in whole seconds keeps the instant's precision.
  */
 function shiftDateTime(anchor: PDateTime, duration: Duration, sign: 1 | -1): PDateTime {
   if (duration.milliseconds > 0) {
     const micros = sign * durationMillis(duration) * (MICROS_PER_SECOND / MILLIS_PER_SECOND);
     return instantPlusMicros(anchor, micros);
   }
-  return new PDateTime(anchor.epochSeconds + sign * durationSeconds(duration), anchor.microsecond);
+  return new PDateTime(
+    anchor.epochSeconds + sign * durationSeconds(duration),
+    anchor.microsecond,
+    anchor.precision,
+  );
 }
 
 /**

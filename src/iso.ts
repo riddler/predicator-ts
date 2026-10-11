@@ -142,6 +142,20 @@ export function formatDateTime(value: PDateTime): string {
 }
 
 /**
+ * Writes an instant with the fractional-second digits it carries, as the
+ * reference's decompiler writes a datetime literal: as many digits as its
+ * precision, the first of the six a microsecond fills, and no fraction at a
+ * precision of 0. This is not the normative shape `formatDateTime` writes, and
+ * neither the tagged encoding nor the `::string` cast uses it.
+ */
+export function formatDateTimeAsWritten(value: PDateTime): string {
+  const canonical = formatDateTime(new PDateTime(value.epochSeconds, 0));
+  const digits = Math.min(Math.max(Math.trunc(value.precision), 0), 6);
+  if (digits === 0) return canonical;
+  return `${canonical.slice(0, -1)}.${pad(value.microsecond, 6).slice(0, digits)}Z`;
+}
+
+/**
  * Reads an ISO 8601 calendar date, or answers nothing when the text is not
  * one.
  *
@@ -184,7 +198,9 @@ export function readDate(text: string): PDate | undefined {
  * carries no zone, so two texts naming the same instant read back equal. Digits
  * past the sixth are truncated, which is the precision the domain holds, and
  * that truncation is why writing a parsed instant back out is a
- * canonicalization rather than a string identity.
+ * canonicalization rather than a string identity. The instant carries the
+ * number of fractional digits the text was written with, six at most, as its
+ * precision: that is what a datetime literal keeps.
  */
 export function readDateTime(text: string): PDateTime | undefined {
   const match = DATETIME_TEXT.exec(text);
@@ -204,12 +220,13 @@ export function readDateTime(text: string): PDateTime | undefined {
   const offset = readOffset(written);
   if (offset === undefined) return undefined;
   const microsecond = Number(`${match[7] ?? ""}000000`.slice(0, 6));
+  const precision = Math.min((match[7] ?? "").length, 6);
   const seconds =
     daysFromCivil(year, month, day) * SECONDS_PER_DAY +
     hour * SECONDS_PER_HOUR +
     minute * SECONDS_PER_MINUTE +
     second;
-  return new PDateTime(seconds - offset, microsecond);
+  return new PDateTime(seconds - offset, microsecond, precision);
 }
 
 /**

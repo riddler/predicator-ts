@@ -46,7 +46,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { compile } from "../src/index.js";
+import { compile, evaluate } from "../src/index.js";
 import type { Program } from "../src/instructions.js";
 import { decodeTagged, evaluateTagged } from "../src/tagged.js";
 import { PDate, PDateTime, Undefined, type Value } from "../src/values.js";
@@ -95,12 +95,15 @@ const DURATION_REMAINING_NOTE =
 
 /**
  * Where the `date-member/` rows on two datetimes written to different
- * precision are declared: the amendment on a date member against a datetime
- * member, in the record. A datetime here carries no precision, so the
- * reference tells the two apart and this package cannot.
+ * precision are declared: the amendment on a datetime's precision, in the
+ * record. The instruction list a row carries writes every datetime in the
+ * tagged encoding, which keeps no precision on either side, so run from those
+ * instructions the two datetimes are one value here; the reference answered
+ * from the source. Run from the source, each of these rows agrees (see the
+ * cases below that evaluate them so).
  */
 const PRECISION_NOTE =
-  "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the amendment on a date member against a datetime member, the section on precision";
+  "docs/adr/0002-the-value-domain-and-the-host-boundary.md, the amendment on a datetime's precision";
 
 /**
  * Where the `date-member/` rows on an ordering that meets two maps are
@@ -417,8 +420,9 @@ const DECLARED: ReadonlyMap<string, Declared> = new Map<string, Declared>([
   ["date-member/044", { reference: false, ours: true, declaredBy: MAP_ORDER_NOTE }],
   // Two datetimes written to different precision. The reference keeps a
   // datetime's precision and compares it as part of the value, as a member and
-  // under strict equality at the top level; a datetime here carries no
-  // precision, so the two are one value.
+  // under strict equality at the top level, and so does this package; but the
+  // row's instruction list writes each datetime in the tagged encoding, which
+  // carries no precision, so run from it the two are one value here.
   ["date-member/045", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
   ["date-member/046", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
   ["date-member/047", { reference: false, ours: true, declaredBy: PRECISION_NOTE }],
@@ -670,6 +674,41 @@ describe("what the reference compiled, this package compiles", () => {
     expect(
       sameValue(ours, row.instructions),
       `${id}: this package and the reference emit different programs`,
+    ).toBe(true);
+  });
+});
+
+describe("the rows on precision, run from their source", () => {
+  // The rows declared under `PRECISION_NOTE` differ only because the tagged
+  // encoding of their instruction lists carries no precision. Compiled here
+  // from the source the reference ran, each keeps the precision its literals
+  // were written with and must answer what the reference answered.
+  //
+  // Sabotage: dropping the precision test from `membersEqual` in
+  // src/evaluator.ts turns red the member rows; dropping the precision from
+  // `strictlyEqual` turns red the strict rows. Each was run and reverted.
+  const precisionRows = ROWS.filter((row) => DECLARED.get(row.id)?.declaredBy === PRECISION_NOTE);
+
+  it("covers every row declared for precision", () => {
+    expect(precisionRows.map((row) => row.id).sort()).toEqual(
+      [...DECLARED]
+        .filter(([, entry]) => entry.declaredBy === PRECISION_NOTE)
+        .map(([id]) => id)
+        .sort(),
+    );
+    expect(precisionRows.length).toBeGreaterThan(0);
+  });
+
+  it.each(precisionRows.map((row) => [row.id, row] as const))("%s", (id, row) => {
+    const source = SOURCES.get(id);
+    expect(source, `${id}: the row carries no source`).toBeTypeOf("string");
+    if (source === undefined) return;
+    const outcome = evaluate(source, {});
+    expect(outcome.ok, `${id}: this package refused the source`).toBe(true);
+    if (!outcome.ok) return;
+    expect(
+      sameAnswer(id, outcome.value as Value, referenceAnswer(row)),
+      `${id}: run from its source, this package and the reference disagree`,
     ).toBe(true);
   });
 });

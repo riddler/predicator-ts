@@ -174,13 +174,22 @@ function toDate(value: Value): Value {
  * apply to a mixed date and instant pair. A date-shaped string has no offset
  * to read, so it does not parse here; the spelling for that conversion is a
  * cast to a date followed by a cast to a datetime.
+ *
+ * The precision each answers is the reference's: an instant keeps its own, a
+ * date answers 0, as midnight is written with no fraction, and a parsed string
+ * answers 6 whatever digits it was written with, because the reference
+ * rebuilds the parsed instant from its microseconds.
  */
 function toDateTime(value: Value): Value {
   if (value instanceof PDateTime) return value;
   if (value instanceof PDate) {
-    return new PDateTime(daysFromCivil(value.year, value.month, value.day) * SECONDS_PER_DAY, 0);
+    return new PDateTime(daysFromCivil(value.year, value.month, value.day) * SECONDS_PER_DAY, 0, 0);
   }
-  if (typeof value === "string") return readDateTime(value) ?? Undefined;
+  if (typeof value === "string") {
+    const instant = readDateTime(value);
+    if (instant === undefined) return Undefined;
+    return new PDateTime(instant.epochSeconds, instant.microsecond, 6);
+  }
   return Undefined;
 }
 

@@ -13,12 +13,16 @@
 // transcript under `date-member/`, with the reference's answers as it recorded
 // them.
 //
+// Two datetimes written to different precision answer as the reference
+// answers them too: a datetime here carries the precision it was written
+// with, and the members of two lists or two maps compare it, as strict
+// equality does at the top level. `test/datetime-precision.test.ts` holds more
+// rows on precision.
+//
 // The second table holds the rows this package answers otherwise, each with
-// both answers: two datetimes written to different precision, which the
-// reference tells apart and this package cannot, because a datetime here
-// carries no precision; and an ordering that meets two maps whose only
-// difference is a date member against a datetime member, which this package
-// does not order and steps past as it did before.
+// both answers: an ordering that meets two maps whose only difference is a
+// date member against a datetime member, which this package does not order
+// and steps past as it did before.
 //
 // Sabotage, each run and reverted: answering `valuesEqual` for a date member
 // against a datetime member in `membersEqual` (src/evaluator.ts) turns the
@@ -36,7 +40,9 @@
 // term order would read them first, turns red the rows on two date members
 // whose days and instants order them differently, and ordering two datetime
 // members of two lists against their instants turns red the rows on two
-// datetime members at different instants.
+// datetime members at different instants; and dropping the precision test
+// from `membersEqual`, or the precision from `strictlyEqual`, turns red the
+// rows on two datetimes written to different precision that answer false.
 
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../src/index.js";
@@ -86,6 +92,13 @@ const ROWS: readonly Row[] = [
   ["[{opened_on: #2026-03-01#}, 1] <= [{opened_on: #2026-03-01T00:00:00Z#}, 1]", true],
   ["[[{opened_on: #2026-03-01#}], 1] < [[{opened_on: #2026-03-01T00:00:00Z#}], 2]", true],
   ["#2026-03-01T00:00:00Z# == #2026-03-01T00:00:00.000Z#", true],
+  ["[#2026-03-01T00:00:00Z#] == [#2026-03-01T00:00:00.000Z#]", false],
+  ["[#2026-03-01T00:00:00.000Z#] == [#2026-03-01T00:00:00.000000Z#]", false],
+  ["{opened_on: #2026-03-01T00:00:00Z#} == {opened_on: #2026-03-01T00:00:00.000Z#}", false],
+  ["[#2026-03-01T00:00:00Z#] === [#2026-03-01T00:00:00.000Z#]", false],
+  ["#2026-03-01T00:00:00Z# === #2026-03-01T00:00:00.000Z#", false],
+  ["#2026-03-01T00:00:00.000Z# === #2026-03-01T00:00:00.000000Z#", false],
+  ["{opened_on: #2026-03-01T00:00:00Z#} in [{opened_on: #2026-03-01T00:00:00.000Z#}]", false],
   ["[#2026-03-01T00:00:00.000Z#] < [#2026-03-01T00:00:00Z#]", false],
   ["[#2026-03-01T00:00:00Z#] < [#2026-03-01T00:00:00.000Z#]", false],
   ["[#2025-12-31#] < [#2026-01-02#]", true],
@@ -108,13 +121,6 @@ const DIVERGENT: readonly Divergent[] = [
   ["[{opened_on: #2026-03-01T00:00:00Z#}, 1] < [{opened_on: #2026-03-01#}, 2]", true, false],
   ["[{opened_on: #2026-03-01#}, 1] >= [{opened_on: #2026-03-01T00:00:00Z#}, 1]", true, false],
   ["[[{opened_on: #2026-03-01T00:00:00Z#}], 1] < [[{opened_on: #2026-03-01#}], 2]", true, false],
-  ["[#2026-03-01T00:00:00Z#] == [#2026-03-01T00:00:00.000Z#]", true, false],
-  ["[#2026-03-01T00:00:00.000Z#] == [#2026-03-01T00:00:00.000000Z#]", true, false],
-  ["{opened_on: #2026-03-01T00:00:00Z#} == {opened_on: #2026-03-01T00:00:00.000Z#}", true, false],
-  ["[#2026-03-01T00:00:00Z#] === [#2026-03-01T00:00:00.000Z#]", true, false],
-  ["#2026-03-01T00:00:00Z# === #2026-03-01T00:00:00.000Z#", true, false],
-  ["#2026-03-01T00:00:00.000Z# === #2026-03-01T00:00:00.000000Z#", true, false],
-  ["{opened_on: #2026-03-01T00:00:00Z#} in [{opened_on: #2026-03-01T00:00:00.000Z#}]", true, false],
 ];
 
 describe("a date member against a datetime member", () => {
