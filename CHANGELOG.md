@@ -14,6 +14,39 @@ A version section here is written when that release is prepared, which is before
 it is published. A section records what its version carries; whether that version
 is on the registry is a question for the registry.
 
+## [0.7.0] 2026-10-10
+
+A minor release. `PDateTime` carries a readonly `precision`, the
+fractional-second digits a datetime was written with, as the reference keeps
+one, and the class takes a new registered key. The divergence 0.6.0 declared,
+that two datetimes written to different precision stay one value here, is
+settled: those rows now answer as the reference does at `v9.4.4`, the corpus
+this release vendors. Some answers change: two datetimes at the same instant
+written to different precision, a host `Date` against a whole-second literal
+among them, are different values to strict equality and between members of a
+list or a map; `decompile` writes a datetime literal with its own digits and a
+duration component past the safe-integer bound as written; a date, a datetime
+or a duration a host built with a field that is not finite is refused where it
+enters; and a revoked proxy handed in at the host boundary is refused, or
+answers a `LocationError`, where it threw. No public name is removed or
+renamed.
+
+### Added
+
+- `PDateTime` carries a readonly `precision`, an integer from 0 to 6: the fractional-second digits the datetime was written with, as the reference keeps one. A literal keeps its own digits (a seventh and later digit truncated), a host `Date` enters at 3, the `::datetime` parse of a string and `Date.now()` answer 6, a date cast to a datetime answers 0, and a move by a duration with positive milliseconds raises it to at least 3. The constructor's third argument is optional and defaults to 0 for a whole second and 6 otherwise. A projected datetime is the instance itself, so the field reaches the host on it.
+
+### Changed
+
+- Two datetimes at the same instant written to different precision are different values to strict equality (`===`, `!==`) at any depth, and to loose equality and membership between two members of a list or a map, as the reference holds them: `[#2026-03-01T00:00:00Z#] == [#2026-03-01T00:00:00.000Z#]` and `#2026-03-01T00:00:00Z# === #2026-03-01T00:00:00.000Z#` now answer false. A loose comparison of two datetimes at the top level, a datetime sought in a list of datetimes, and every ordering still read the instant alone. A host `Date` enters at precision 3, so one at a whole second is a different value from a whole-second literal in the same places: a `Date` at 2026-03-01T00:00:00Z bound to `due_at` answers false for `due_at === #2026-03-01T00:00:00Z#` and for `[due_at] == [#2026-03-01T00:00:00Z#]`, where it answered true, and true for `due_at === #2026-03-01T00:00:00.000Z#` and `due_at == #2026-03-01T00:00:00Z#`.
+- `decompile` writes a datetime literal with the fractional-second digits it was written with, as the reference renders it, where it wrote six: `#2026-08-09T10:30:00.500Z#` renders as written rather than as `#2026-08-09T10:30:00.500000Z#`. The tagged encoding and the `::string` cast are unchanged and stay canonical.
+- `PDateTime`'s `instanceof` test asks for a new registered key and the `precision` field, so a datetime built by an earlier copy of this package (0.6.x or before) loaded beside this one is not recognized as a `PDateTime`.
+- `decompile` writes a duration component past the largest safe integer with the digits it was written with, leading zeros dropped, as the reference renders it, where it wrote the rounded number: `holds == 99999999999999999999d` renders as written rather than as `holds == 100000000000000000000d`; compiling and evaluating such a duration answer as before.
+- A date, a datetime or a duration a host built with a field that is NaN or an infinity (through the class's own constructor, or an object built to the class's shape) is refused with `non_finite_number` wherever a host's value enters (a context, a `contextPut` value, a value a host function answers) and in a literal operand, where it was admitted and compared unequal to itself; a value whose fields are all finite, and every value the package builds from finite input, is never affected.
+
+### Fixed
+
+- A revoked proxy, or a proxy over one, handed in as a context, as a `contextPut` or `contextAssign` value, as a value a host function answers, or nested anywhere inside one, is refused with `unsupported_host_value`, and one handed to `contextPut` as the path, or nested inside a list or map path segment, answers a `LocationError` (`not_assignable` for the path, the segment refusal otherwise), where each threw the engine's `TypeError`; a live proxy whose trap throws still propagates the trap's own error.
+
 ## [0.6.1] 2026-10-05
 
 A documentation release, carrying 0.6.0's code unchanged. The README the
