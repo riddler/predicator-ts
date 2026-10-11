@@ -16,6 +16,7 @@ import {
   float,
   isaVersion,
   PDateTime,
+  type Value,
 } from "../src/index.js";
 import { compileTranscriptLines } from "./conformance/compile-transcript.js";
 import { decodeCase } from "./conformance/runner.js";
@@ -530,5 +531,43 @@ describe("a source string at execute and executeValue is a statement program", (
       compared += 1;
     }
     expect(compared).toBeGreaterThan(200);
+  });
+});
+
+describe("a revoked proxy handed to an entry point", () => {
+  const revoked = (target: object): unknown => {
+    const { proxy, revoke } = Proxy.revocable(target, {});
+    revoke();
+    return proxy;
+  };
+
+  // Sabotage, through scripts/sabotage.mjs, run and restored: the revoked
+  // test taken out of the value boundary's normalization turns this red at
+  // its first case - the float class test reads the prototype and throws.
+  it("answers the boundary's refusal as a value, as the context, inside it, or as a function's answer", () => {
+    const runs: readonly (readonly [string, () => { readonly ok: boolean }])[] = [
+      ["evaluate, a revoked context", () => evaluate("patron", revoked({}))],
+      ["evaluate, a revoked member", () => evaluate("patron", { patron: revoked({}) })],
+      ["execute, a revoked context", () => execute("loan = 1", revoked({}))],
+      ["execute, a revoked member", () => execute("loan = 1", { holds: [revoked([])] })],
+      ["executeValue, a revoked context", () => executeValue("loan = 1", revoked({}))],
+      [
+        "a host function answering one",
+        () => evaluate("branch()", {}, { functions: { branch: () => revoked({}) as Value } }),
+      ],
+    ];
+    for (const [what, run] of runs) {
+      let result: { readonly ok: boolean } | "threw";
+      try {
+        result = run();
+      } catch {
+        result = "threw";
+      }
+      expect(result, what).not.toBe("threw");
+      expect(result, what).toMatchObject({
+        ok: false,
+        error: { reason: "unsupported_host_value" },
+      });
+    }
   });
 });

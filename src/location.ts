@@ -40,6 +40,7 @@ import { EvaluationError, LocationError, ParseError } from "./errors.js";
 import { isPlainMap, nestingError } from "./evaluator.js";
 import { floatText } from "./floats.js";
 import { tokenize } from "./lexer.js";
+import { isRevoked } from "./maps.js";
 import { DEPTH_LIMIT, nestingFault } from "./nesting.js";
 import { parse } from "./parser.js";
 import { Duration, Float, fromHost, isInteger, typeName, Undefined, type Value } from "./values.js";
@@ -299,22 +300,6 @@ function resolve(node: Node, context: Context): LocationResult {
 }
 
 /**
- * Whether a segment is a revoked proxy, or a proxy over one: an object every
- * read of which throws, the prototype included. The test is `Array.isArray`
- * because it runs no host code - it follows a proxy to its target and calls
- * no trap - and throws for exactly such an object, so this catch swallows
- * nothing a host's code threw.
- */
-function isRevoked(segment: unknown): boolean {
-  try {
-    Array.isArray(segment);
-    return false;
-  } catch {
-    return true;
-  }
-}
-
-/**
  * How a location error spells one segment of the path it names: a key after
  * a dot, or at the root bare, and an integer in brackets. A segment that is
  * neither is spelled after a dot: a float with its point, any other primitive
@@ -400,7 +385,10 @@ function writeError(
  * takes none.
  */
 function putInto(context: Context, path: unknown, value: unknown): PutResult {
-  if (!Array.isArray(path)) {
+  // A revoked proxy is no list the write can read, and the list test would
+  // throw on it, so it is asked first and answered as any other path that is
+  // not a list.
+  if (isRevoked(path) || !Array.isArray(path)) {
     return {
       ok: false,
       error: new LocationError("not_assignable", "a location path is a list of segments", {

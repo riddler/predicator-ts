@@ -438,6 +438,63 @@ describe("a float whose field is not finite, at the value boundary", () => {
   });
 });
 
+describe("a revoked proxy at the value boundary", () => {
+  const revoked = (target: object): unknown => {
+    const { proxy, revoke } = Proxy.revocable(target, {});
+    revoke();
+    return proxy;
+  };
+
+  /** What `fromHost` did: its answer, or the message of what it threw. */
+  const attempt = (input: unknown): ReturnType<typeof fromHost> | string => {
+    try {
+      return fromHost(input);
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
+
+  // Sabotage, through scripts/sabotage.mjs, each run and restored: the
+  // revoked test taken out of the normalization, or made to answer false,
+  // turns this red on the first case - the float class test reads the
+  // prototype and throws.
+  it("refuses one, at the top or nested, as a value it has no row for", () => {
+    const cases: readonly (readonly [string, unknown])[] = [
+      ["over a map", revoked({ patron: "ada" })],
+      ["over a list", revoked(["atlas"])],
+      ["over a function", revoked(() => "atlas")],
+      ["over a date", revoked(new Date(0))],
+      ["a proxy over a revoked proxy", new Proxy(revoked({}) as object, {})],
+      ["inside a map", { patron: revoked({}) }],
+      ["inside a list", ["atlas", revoked([])]],
+      ["deep in a hold", { holds: [{ copy: revoked({ title: "atlas" }) }] }],
+    ];
+    for (const [what, input] of cases) {
+      expect(attempt(input), what).toEqual({
+        ok: false,
+        errorType: "EvaluationError",
+        reason: "unsupported_host_value",
+      });
+    }
+  });
+
+  // Sabotage, through scripts/sabotage.mjs, run and restored: catching every
+  // error in the normalization and answering it as a refusal turns this red -
+  // the trap's own error is swallowed.
+  it("lets a live proxy's trap error through unchanged", () => {
+    const loan = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error("the branch's trap failed");
+        },
+      },
+    );
+    expect(attempt(loan)).toBe("the branch's trap failed");
+    expect(attempt({ loan })).toBe("the branch's trap failed");
+  });
+});
+
 describe("toHost", () => {
   // Sabotage: projecting a Float as itself turns this red.
   it("loses the brand on a float and nothing else", () => {

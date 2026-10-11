@@ -521,3 +521,34 @@ bracket key reads its string spelling" by its heading text. It is ADR-0002's
 [amendment on an integer bracket key reading its string spelling](0002-the-value-domain-and-the-host-boundary.md#amendment-an-integer-bracket-key-reads-its-string-spelling-2026-09-17).
 
 The note changes no answer.
+
+## Note: a revoked proxy as the path, inside a segment, or as the context or the value (2026-10-10)
+
+It removes no line and carries no Status line. The change it describes lands
+with this note, so its code is cited by anchor alone. It follows ADR-0002's
+[note on a revoked proxy at the host boundary](0002-the-value-domain-and-the-host-boundary.md#note-a-revoked-proxy-at-the-host-boundary-2026-10-10),
+of the same date.
+
+**The path.** The paragraph opening "Three inputs get answers of this
+package's own" says a path that is not a list is `not_assignable` with
+`expressionType` `"location path"`. A revoked proxy as the path is answered
+the same way: `putInto` in `src/location.ts` asks `isRevoked` in `src/maps.ts`
+before its list test, which would throw on one.
+
+**A segment that holds one.** A revoked proxy as a segment was already
+answered, by `segmentText` and `segmentValue` in `src/location.ts`. A list or
+a map segment that holds one, at any depth, is now answered as well: it is
+refused as any segment that is neither a string nor a safe integer is, and the
+detail that carries it holds the absence, because the host boundary refuses
+such a segment rather than throwing.
+
+**The context and the value.** The section headed "Results are values, never
+a throw" says a context, or a value to write, that the host boundary refuses
+is answered. A revoked proxy as either, or inside either, is now such a value,
+refused with `"unsupported_host_value"` for the reason ADR-0002's note gives.
+That section's carve-out for host code that throws does not reach it, since a
+revoked proxy runs none.
+
+**What pins it.** The test "answers, and never throws, for a revoked proxy as
+the context, the value, the path, or inside a segment" in
+`test/location.test.ts`.
