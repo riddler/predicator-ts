@@ -4794,3 +4794,28 @@ members, where it got true. A rendering by `decompile` keeps the literal's
 digits. A datetime carries a new field, and the class a new key. No reason
 token is added, no opcode changes, and the tagged encoding and the `::string`
 cast write what they wrote before.
+
+## Note: a host `Date` at a whole second against a whole-second literal (2026-10-10)
+
+This note is appended, and removes no line above. It carries no Status line.
+Code on the default branch is cited as read at `f78683b`; the test this same
+change adds is cited by name alone.
+
+**A host `Date` enters at precision 3** (`dateTimeFromEpochMillis` in
+`src/values.ts`), as the amendment headed "a datetime carries the precision
+it was written with" says, and that amendment's table of changed answers
+holds literals alone. So a host `Date` at a whole second is a different value
+from a whole-second literal wherever the precision is compared: under strict
+equality at any depth, and under loose equality and membership between two
+members of a list or a map. One row beside that table, for a host `Date` at
+2026-03-01T00:00:00Z bound to `due_at` in the context:
+
+| Pair | Operator | Before | Now | Reference |
+|---|---|---|---|---|
+| `due_at` and `#2026-03-01T00:00:00Z#` | `===` | true | false | no counterpart; a host `Date` holds milliseconds |
+
+The same `Date` answers false for `[due_at] == [#2026-03-01T00:00:00Z#]`,
+where it answered true, and true for `due_at === #2026-03-01T00:00:00.000Z#`
+and for `due_at == #2026-03-01T00:00:00Z#`. The cases headed "the precision
+each way into the domain gives a datetime" in
+`test/datetime-precision.test.ts` pin each from its source.
