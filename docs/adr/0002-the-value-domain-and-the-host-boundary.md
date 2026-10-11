@@ -4544,3 +4544,34 @@ none is declared in `test/reference-transcript.test.ts`, so each must agree.
 The row `date-member/052`, the precision table's ordering row, is no longer
 declared there and must agree too. `test/date-member.test.ts` asks the same
 sources and holds the reference's answer for each.
+
+## Note: a value class whose field is not finite, at the normalization table (2026-10-10)
+
+This note is appended, and removes no line above. It carries no Status line.
+The float's refusal is cited as merged in `6fc34ab`; the refusal of the
+other three classes lands with this note and is cited by anchor alone.
+
+**The two rows.** The table in the section headed "The host boundary:
+normalization" has a row "a `Float` | float, unchanged" and a row "a `PDate`,
+`PDateTime` or `Duration` | itself, unchanged". Each class's `instanceof`
+test asks only that each field be a number, and `NaN` and an infinity are
+numbers. So a host can hand in an instance whose field is not finite. For the
+three classes it can do that through the class's own constructor, which checks
+no part; for a float it needs an object built to the class's shape. Neither
+row says what happens to such an instance.
+
+**What happens to it.** An instance of any of the four classes with a field
+that is not finite is refused with `"non_finite_number"` where a host's value
+enters. That is the reason the table's row for `NaN`, `Infinity` and
+`-Infinity` carries in the code. Both rows above still hold for an instance
+whose fields are all finite, and for every value this package builds from
+finite input.
+
+| Class | Refused by | Since |
+|---|---|---|
+| `Float` | `normalize` in `src/values.ts` and `literalFault` in `src/evaluator.ts` | `6fc34ab` |
+| `PDate`, `PDateTime`, `Duration` | `normalize` in `src/values.ts` and `literalFault` in `src/evaluator.ts`, which read each class's fields from `src/fields.ts` | this note's change |
+
+`normalize` covers a context, a `contextPut` value and a value a host
+function answers, at the top level or nested. `literalFault` covers a literal
+operand, wherever the operand carries the value.
