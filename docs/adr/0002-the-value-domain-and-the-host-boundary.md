@@ -4615,3 +4615,42 @@ context, inside it, or as a function's answer" in `test/index.test.ts`.
 `src/tagged.ts`, takes a value of the domain rather than a host's value, and
 handed a revoked proxy it still throws. A literal operand of a hand-built
 instruction list and the options argument are not the host boundary either.
+
+## Note: a failed run's context past the place budget, and the two walks of a projection (2026-10-10)
+
+This note is appended, and removes no line above. It carries no Status line.
+Code on the default branch is cited as read at `9b69f4a`; the test this note
+adds is cited by name alone. It keeps two things the note on the projection
+and the JSON serializer bounded by the place budget, of 2026-10-04, put in
+place, and it changes no answer (decided by the conductor under a standing
+consent, 2026-10-10).
+
+**A failed run's context past the budget is left off with no marker.** On a
+failing arm of `execute` or `executeValue` in `src/index.ts`, `contextWithin`
+hands the context back only when `contextFault` finds it within the budget.
+Past it, the answer is the run's own error and nothing else. That is the shape
+of the two other failing arms that carry no context, which `execute`'s
+documentation names: a source that did not compile, and a context the value
+boundary refused. No field says why the context is missing, so only the error
+tells the three apart. `executeTagged` in `src/tagged.ts` leaves off a context
+it cannot encode the same way. Naming the budget in the answer, with a field or
+a marker on the failing arm, would be a new shape a host reads, and is not
+taken.
+
+**The count and the copy walk a value twice, by design.** An entry point that
+projects counts the value's places first, with `projectionFault` in
+`src/evaluator.ts`, and only then copies it, with `toHost` in `src/values.ts`;
+a context is copied through `projectContext` in `src/evaluator.ts`. A value
+within the budget is walked once to count and once to copy. A value past it is
+counted to one place past the budget and never copied. The two walks stay
+apart because the note of 2026-10-04 leaves `toHost` with no guard and no
+change of return type. The second walk costs time only, at most the budget's
+places again, and changes no answer.
+
+**What pins it.** The test "leaves a failed run's context past the budget off
+as the other no-context arms do", in `test/projection-budget.test.ts`, asks
+`execute` and `executeValue` for a run that fails with a context past the
+budget, for a source that does not compile, and for a context the value
+boundary refuses, and holds that each answer has the same keys, `ok` and
+`error`. The test "keeps a failed run's own error and leaves a context past
+the budget off", in the same file, pins `execute`'s arm on its own.
