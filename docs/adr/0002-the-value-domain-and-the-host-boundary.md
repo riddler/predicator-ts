@@ -4575,3 +4575,43 @@ finite input.
 `normalize` covers a context, a `contextPut` value and a value a host
 function answers, at the top level or nested. `literalFault` covers a literal
 operand, wherever the operand carries the value.
+
+## Note: a revoked proxy at the host boundary (2026-10-10)
+
+This note is appended, and removes no line above. It carries no Status line.
+The change it describes lands with this note, so its code is cited by anchor
+alone.
+
+**The section headed "A throwing getter or proxy trap, or the `now` option
+read for a relative date, is outside the promise" does not reach a revoked
+proxy.** That section lets a getter's or a trap's error through because the
+error is the host's code failing. A revoked proxy runs no code of the host's:
+its handler is gone, and every read of it, the prototype read the value
+classes' `instanceof` test makes among them, throws the engine's own
+`TypeError`. Before this note's change that error left `fromHost` unchanged,
+so a revoked proxy as a context, inside one, as a `contextPut` value or as a
+host function's answer threw, where every other value the domain has no member
+for is refused.
+
+**What happens to it.** A revoked proxy, or a proxy over one, is refused with
+`"unsupported_host_value"`, at the top level or nested, wherever a host's
+value enters: the reason the section headed "The host boundary:
+normalization" gives a value it has no row for, as the note headed "the
+reason each normalization refusal carries" names it. `normalize` in
+`src/values.ts` asks first, through `isRevoked` in `src/maps.ts`, which calls
+`Array.isArray`. That test follows a proxy to its target and calls no trap,
+and it throws for exactly such an object, so asking runs no host code and the
+catch around it swallows nothing a host's code threw. A live proxy whose trap
+throws still propagates the trap's error unchanged. Refusing a revoked proxy,
+rather than widening that section's exception to cover it, was decided by the
+conductor under a standing consent, 2026-10-10.
+
+**What pins it.** The tests "refuses one, at the top or nested, as a value it
+has no row for" and "lets a live proxy's trap error through unchanged" in
+`test/values.test.ts`, and "answers the boundary's refusal as a value, as the
+context, inside it, or as a function's answer" in `test/index.test.ts`.
+
+**What this note does not reach.** The tagged encoder, `encodeTagged` in
+`src/tagged.ts`, takes a value of the domain rather than a host's value, and
+handed a revoked proxy it still throws. A literal operand of a hand-built
+instruction list and the options argument are not the host boundary either.

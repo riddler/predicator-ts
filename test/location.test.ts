@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  type AssignResult,
   contextAssign,
   contextLocation,
   contextPut,
@@ -29,6 +30,8 @@ import {
   Float,
   float,
   LocationError,
+  type LocationPath,
+  type LocationResult,
   ParseError,
   type PutResult,
   Undefined,
@@ -677,6 +680,91 @@ describe("the run-time fence on a path a host builds", () => {
         expect(error.details.location, what).toBe(`holds.${text}`);
         expect(error.details.segment, what).toBe(Undefined);
         expect(error.details.pathIndex, what).toBe(1);
+      }
+    }
+  });
+
+  // Sabotage, through scripts/sabotage.mjs, each run and restored: the
+  // revoked test taken out of the value boundary's normalization turns this
+  // red at the first not-threw assertion (the context); taken out of the path
+  // check, at the revoked path.
+  it("answers, and never throws, for a revoked proxy as the context, the value, the path, or inside a segment", () => {
+    const revoked = (target: object): unknown => {
+      const { proxy, revoke } = Proxy.revocable(target, {});
+      revoke();
+      return proxy;
+    };
+    const attempt = <T>(run: () => T): T | "threw" => {
+      try {
+        return run();
+      } catch {
+        return "threw";
+      }
+    };
+    const refusedByBoundary: readonly (readonly [
+      string,
+      () => PutResult | LocationResult | AssignResult,
+    ])[] = [
+      ["a revoked context at contextPut", () => contextPut(revoked({}), ["patron"], 1)],
+      ["a revoked context at contextLocation", () => contextLocation("patron", revoked({}))],
+      ["a revoked context at contextAssign", () => contextAssign(revoked({}), "patron", 1)],
+      [
+        "a revoked member of the context",
+        () => contextPut({ patron: revoked({ name: "Ada" }) }, ["loan"], 1),
+      ],
+      ["a revoked value at contextPut", () => contextPut({}, ["patron"], revoked({}))],
+      ["a revoked value at contextAssign", () => contextAssign({}, "patron", revoked([]))],
+      ["a revoked member of the value", () => contextPut({}, ["holds"], [{ copy: revoked({}) }])],
+    ];
+    for (const [what, run] of refusedByBoundary) {
+      const result = attempt(run);
+      expect(result, what).not.toBe("threw");
+      if (result === "threw") continue;
+      expect(result.ok, what).toBe(false);
+      if (result.ok) continue;
+      expect(result.error, what).toBeInstanceOf(EvaluationError);
+      expect(result.error.reason, what).toBe("unsupported_host_value");
+    }
+
+    const onPath = attempt(() => contextPut({}, revoked(["patron"]) as LocationPath, 1));
+    expect(onPath).not.toBe("threw");
+    expect(onPath !== "threw" && onPath.ok).toBe(false);
+    if (onPath !== "threw" && !onPath.ok) {
+      const error = onPath.error as LocationError;
+      expect(error).toBeInstanceOf(LocationError);
+      expect(error.reason).toBe("not_assignable");
+      expect(error.details.expressionType).toBe("location path");
+    }
+
+    for (const [what, context, path, reason, text, pathIndex] of [
+      ["a list holding one, at the root", {}, [[revoked({})]], "invalid_index", "(a list)", 0],
+      [
+        "a map holding one, at the root",
+        {},
+        [{ copy: revoked({}) }],
+        "invalid_index",
+        "(an object)",
+        0,
+      ],
+      [
+        "a list holding one, against a list",
+        { holds: ["atlas"] },
+        ["holds", [revoked([])]],
+        "not_a_container",
+        "holds.(a list)",
+        1,
+      ],
+    ] as const) {
+      const result = attempt(() => contextPut(context, path as unknown as LocationPath, 1));
+      expect(result, what).not.toBe("threw");
+      expect(result !== "threw" && result.ok, what).toBe(false);
+      if (result !== "threw" && !result.ok) {
+        const error = result.error as LocationError;
+        expect(error.reason, what).toBe(reason);
+        expect(error.details.location, what).toBe(text);
+        expect(error.details.pathIndex, what).toBe(pathIndex);
+        const carried = reason === "invalid_index" ? error.details.index : error.details.segment;
+        expect(carried, what).toBe(Undefined);
       }
     }
   });

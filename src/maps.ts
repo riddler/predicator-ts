@@ -1,14 +1,14 @@
 /**
- * Three small primitives that several modules need: the test for a plain map,
- * the write of one key into a map being built, and the read of one own data
- * property.
+ * Four small primitives that several modules need: the test for a plain map,
+ * the write of one key into a map being built, the read of one own data
+ * property, and the test for a revoked proxy.
  *
  * This module is internal: neither entry point re-exports it. The value
- * boundary, the context's write path, the tagged codec, the JSON functions and
- * the machine's object opcode import what they use of it from here rather than
- * each keeping a copy, so that the package answers one way to what a plain map
- * is, how a key is written into one, and how a property is read without running
- * host code.
+ * boundary, the context's write path, the tagged codec, the JSON functions,
+ * the machine's object opcode and the location surface import what they use of
+ * it from here rather than each keeping a copy, so that the package answers one
+ * way to what a plain map is, how a key is written into one, how a property is
+ * read without running host code, and what a revoked proxy is.
  */
 
 import type { Value } from "./values.js";
@@ -73,4 +73,25 @@ const NOT_DATA = Symbol("not a data property");
 export function ownData(candidate: object, key: PropertyKey): unknown {
   const descriptor = Object.getOwnPropertyDescriptor(candidate, key);
   return descriptor !== undefined && "value" in descriptor ? descriptor.value : NOT_DATA;
+}
+
+/**
+ * Whether a value is a revoked proxy, or a proxy over one: an object every
+ * read of which throws, the prototype included. The test is `Array.isArray`
+ * because it runs no host code - it follows a proxy to its target and calls
+ * no trap - and throws for exactly such an object, so this catch swallows
+ * nothing a host's code threw. A value that is not a proxy answers false.
+ *
+ * A revoked proxy is no host code at all, so the exception for a getter or
+ * a trap that throws does not reach it: the value boundary refuses one as a
+ * value the domain has no member for, and the location surface describes
+ * one in a path rather than reading it.
+ */
+export function isRevoked(value: unknown): boolean {
+  try {
+    Array.isArray(value);
+    return false;
+  } catch {
+    return true;
+  }
 }

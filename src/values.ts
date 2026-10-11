@@ -16,7 +16,7 @@
 
 import { DATE_FIELDS, DATETIME_FIELDS, DURATION_FIELDS, hasNonFiniteField } from "./fields.js";
 import { floatMagnitude } from "./floats.js";
-import { hasPlainPrototype, ownData, setKey } from "./maps.js";
+import { hasPlainPrototype, isRevoked, ownData, setKey } from "./maps.js";
 import { enterContainer, type NestingReason, type PlaceCount, visitPlace } from "./nesting.js";
 
 /** The registered keys that mark an instance of each value class. */
@@ -401,6 +401,10 @@ function normalize(
   if (visitPlace(places)) throw new RefusalSignal("place_budget_exceeded");
   if (value === undefined) return Undefined;
   if (value === Undefined) return Undefined;
+  // A revoked proxy runs no host code: every read of it throws, the class
+  // tests below included, so it is asked first, by a test that runs no trap,
+  // and refused as a value the domain has no member for.
+  if (isRevoked(value)) throw new RefusalSignal("unsupported_host_value");
 
   if (value instanceof Float) {
     // Every float this package builds is finite, but the class's test asks
@@ -509,7 +513,8 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  * can build with the class's own constructor or to the class's shape. A value
  * with no row at all - a function, a symbol other than the absence singleton,
  * a `Map`, a `Set`, a class instance this package did not define - is refused
- * too.
+ * too, and so is a revoked proxy, at the top or nested, which no read can see
+ * into.
  *
  * The shape of the structure is refused the same way. A value that contains
  * itself is refused as `"cyclic_value"`, and one whose lists and maps nest
@@ -526,7 +531,8 @@ function dateTimeFromEpochMillis(millis: number): PDateTime {
  * What the walk cannot turn into a refusal is host code running inside it: a
  * getter or a proxy trap on the value that throws propagates its own error out
  * of this function unchanged, because the error is the host's rather than an
- * outcome of the value.
+ * outcome of the value. A revoked proxy runs no such code, which is why it is
+ * refused rather than let through.
  */
 export function fromHost(value: unknown): Normalization {
   try {
