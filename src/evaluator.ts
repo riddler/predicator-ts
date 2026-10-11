@@ -64,6 +64,7 @@ import {
   TypeMismatchError,
   UndefinedVariableError,
 } from "./errors.js";
+import { DATE_FIELDS, DATETIME_FIELDS, DURATION_FIELDS, hasNonFiniteField } from "./fields.js";
 import { floatMagnitude } from "./floats.js";
 import { BUILTINS, perEvaluationBuiltins } from "./functions/index.js";
 import {
@@ -734,7 +735,10 @@ const LITERAL_CONTAINER_LIMIT = 65536;
  * class the machine holds, so only a raw number reaches the safe-range test;
  * a float's field is tested for being finite, because the class's test asks
  * only that it be a number and an object a host built to that shape can carry
- * NaN or an infinity there, which no float this package builds does. The walk
+ * NaN or an infinity there, which no float this package builds does. A date,
+ * a datetime and a duration are leaves too, and their fields are tested for
+ * being finite the same way, because their test also asks only for numbers and
+ * their constructors check no part. The walk
  * descends every list and every object `isPlainMap` reads as a map, and treats
  * every other member as a leaf. It
  * follows each own string-keyed DATA property of a container, enumerable or
@@ -771,6 +775,10 @@ function literalFault(
   if (value instanceof Float) {
     return Number.isFinite(floatMagnitude(value)) ? undefined : "non_finite_number";
   }
+  const fields = temporalFields(value);
+  if (fields !== undefined) {
+    return hasNonFiniteField(value as object, fields) ? "non_finite_number" : undefined;
+  }
   if (value === null || typeof value !== "object") return undefined;
   if (!Array.isArray(value) && !isPlainMap(value)) return undefined;
   if (visited.has(value)) return undefined;
@@ -786,6 +794,14 @@ function literalFault(
     const fault = literalFault(property.value, depth + 1, visited);
     if (fault !== undefined) return fault;
   }
+  return undefined;
+}
+
+/** The fields a date, an instant or a duration carries, or `undefined` for any other value. */
+function temporalFields(value: unknown): readonly string[] | undefined {
+  if (value instanceof PDate) return DATE_FIELDS;
+  if (value instanceof PDateTime) return DATETIME_FIELDS;
+  if (value instanceof Duration) return DURATION_FIELDS;
   return undefined;
 }
 
@@ -1477,7 +1493,8 @@ class Machine {
    * error out of an entry point, where errors are values. A float whose field
    * is not finite, which only an object a host built to the float class's shape
    * can carry, is refused the same way and with the same reason, as the context
-   * refuses one. A finite number that is not integral is neither of those and
+   * refuses one; so is a date, a datetime or a duration with a field that is not
+   * finite. A finite number that is not integral is neither of those and
    * is still admitted; the record says
    * why, and the store's segment check is where the machine refuses it. The
    * shape is checked first, so an operand that fails both answers the shape's
