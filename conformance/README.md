@@ -226,6 +226,26 @@ The README records this run beside the earlier ones: the 2026-09-20 and
 2026-10-02 runs of the two corpus surfaces, and the first run of all four
 reports, at `c901cc0`. Every one of them diffed clean.
 
+### The run before 0.7.0 (2026-10-10)
+
+Run on 2026-10-10 on a branch head whose bundle inputs (the source, the vendored
+corpus, the location transcript and the statement programs) are byte for byte
+those of `f78683b`, the source as it stood just before the version moved to
+0.7.0, with the VM at Hermes release 0.12.0, bytecode version 89, and the
+server runtime at Node v24.21.0. The corpus was the reference's `v9.4.4`, still
+tier 9, its case count grown from 262 to 267; beside it ran the 112 location
+transcript rows and the 64 statement programs. It printed:
+
+| Report | Server runtime | The VM | Differences |
+|---|---|---|---|
+| evaluator | 262 rows | 262 rows | 0 |
+| compiler | 220 rows | 220 rows | 0 |
+| location | 112 rows | 112 rows | 0 |
+| statement | 64 rows | 64 rows | 0 |
+
+The README records this run beside the earlier ones, the run before 0.6.0
+above among them. Every one of them diffed clean.
+
 ### A loop gives every closure one binding on that engine (2026-10-04)
 
 The standalone build does not give each iteration of a loop its own binding

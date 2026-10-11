@@ -206,6 +206,20 @@ three location functions with each transcript row's inputs, and the statement
 programs through `executeTagged`. Like every run here, it is a run on the
 standalone build named above, not on the engine an application ships.
 
+Run again on 2026-10-10, on this source as it stood just before the version
+moved to 0.7.0: the source of the run above plus every change made after it,
+the corpus among them, re-vendored at the reference's `v9.4.4`. The run was
+made on a branch head whose bundle inputs (the source, the vendored corpus,
+the location transcript and the statement programs) are byte for byte those
+of `f78683b`, so it is recorded against `f78683b`. The tier stays 9, and the
+case count grew from 262 to 267. The same four reports on the same engine build
+(release `0.12.0`, bytecode version `89`): the evaluator surface answered 262
+rows on the server runtime and 262 on the engine, the compiler surface 220 and
+220, the location run 112 and 112 and the statement run 64 and 64, all four
+with zero differences. What it covers is what the four reports run, as the
+paragraph above says, over the larger corpus. Like every run here, it is a run
+on the standalone build named above, not on the engine an application ships.
+
 `engines.node` in `package.json` is `>=20`, and that is the floor a
 consumer's runtime has to clear. It is not the toolchain: what builds and
 gates this repository is the one node and the one pnpm `mise.toml` pins, and
